@@ -43,11 +43,10 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
         <Sidebar className="war-room-sidebar flex flex-col" />
       </section>
 
-      {/* === 右副牆:實驗室簡介 === */}
+      {/* === 右副牆:實驗室概要 + page slots === */}
       <section className="war-room-right">
-        <h3 className="war-room-wing-title">實驗室簡介</h3>
         <div className="war-room-lab-info">
-          {/* 上排:3 個紫色小格,實驗室概要類 */}
+          {/* 上排:3 個紫色小格,各占一個 TV 螢幕(1920×1080) */}
           <div className="war-room-lab-top">實驗室簡介</div>
           <div className="war-room-lab-top">測試目標</div>
           <div className="war-room-lab-top">合作夥伴</div>

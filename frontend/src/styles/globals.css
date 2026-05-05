@@ -401,12 +401,16 @@ html.wall-mode [role="dialog"] {
 }
 
 /* 加上 .wall-dialog--left-wing class 的 dialog → 改成置中在左副牆。
-   左副牆 x=0~5760, y=3240~6480 → 中心 (2880, 4860)。 */
+   左副牆 x=0~5760, y=3240~6480。原本中心 y=4860 + max-height 3000 會讓
+   dialog 上緣最高來到 y=3360,使「設備名稱」第一格 input(label+gap+input
+   ~ 350px 高)恰好騎在 y=4314~4326 的水平 bezel 上。把中心下移到 y=5100
+   並收緊 max-height,確保第一格完整落在第二排螢幕(y=4326~5394)裡,
+   同時 dialog 下緣 6450 仍在副牆 6480 內。 */
 html.wall-mode [role="dialog"].wall-dialog--left-wing {
   width: 5400px !important;
   max-width: 5400px !important;
-  max-height: 3000px !important;
-  top: 4860px !important;
+  max-height: 2700px !important;
+  top: 5100px !important;
   left: 2880px !important;
 }
 /* 副牆 dialog 比較窄,DutForm 4-col grid 改 1-col 直向堆疊 */
@@ -898,43 +902,47 @@ html.wall-mode .war-room-left .war-room-nav-row .war-room-nav-row-icon {
   flex-shrink: 0;
 }
 
-/* 右副牆:y=3240~6480, x=5760~11520 — 實驗室簡介 7-cell 網格 */
+/* 右副牆:y=3240~6480, x=5760~11520
+   3×3 TV 網格(每格 1920×1080)。上排 3 格各占 1 螢幕,下排 3 格各跨 2 row
+   = 占 2 螢幕。grid 不留 padding/gap,bezel overlay 直接落在 cell 邊緣。
+   每格內部 padding 把實際內容推離 bezel 一點,並水平置中。 */
 html.wall-mode .war-room-right {
   position: absolute;
   top: 3240px;
   left: 5760px;
   width: 5760px;
   height: 3240px;
-  padding: 2rem 3rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
+  padding: 0;
 }
 html.wall-mode .war-room-lab-info {
-  flex: 1;
+  width: 100%;
+  height: 100%;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: 1fr 1fr 1fr;     /* 3 列等高;下排兩格高度由 row-span 撐開 */
-  gap: 1rem;
+  grid-template-columns: repeat(3, 1920px);
+  grid-template-rows: 1080px 1080px 1080px;
+  gap: 0;
 }
-/* 上排 3 格(紫色):實驗室簡介 / 測試目標 / 合作夥伴 */
+/* 上排 3 格(紫色):實驗室簡介 / 測試目標 / 合作夥伴 — 各占 1 TV cell */
 html.wall-mode .war-room-lab-top {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2.5rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(167, 139, 250, 0.32);
-  border: 2px solid rgba(167, 139, 250, 0.45);
+  font-size: 3rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(167, 139, 250, 0.28);
+  border: 2px solid rgba(167, 139, 250, 0.42);
   border-radius: 1.5rem;
+  margin: 1rem;
 }
-/* 下排 3 格高長條(各跨 2 row):待測物 / 測試設備 / 測試方法 */
+/* 下排 3 格高長條(各跨 2 row = 2 TV cells):待測物 / 測試設備 / 測試方法 */
 html.wall-mode .war-room-lab-tall {
   grid-row: span 2;
   display: flex;
   flex-direction: column;
-  padding: 1.5rem;
+  align-items: center;            /* 水平置中於螢幕 */
+  padding: 2rem 2.5rem;
+  margin: 1rem;
   border-radius: 1.5rem;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.95);
