@@ -4,7 +4,9 @@ import { useEffect } from "react";
 import { useIsWallMode, useWallModeStore } from "@/stores/wallModeStore";
 
 const WALL_W = 11520;
-const WALL_H = 3240;
+// Canvas now includes the wing area folded under the main 6×3 wall:
+// 11520 × 6480 = 16:9, fits a 1080p preview at exactly 1/6 scale.
+const WALL_H = 6480;
 
 /**
  * Applies the `wall-mode` class to <html> and computes the fit-to-viewport
@@ -28,6 +30,9 @@ export function WallModeApplier() {
     root.classList.add("wall-mode");
 
     const apply = () => {
+      // Fit the whole canvas (main wall + wings) inside the viewport. On
+      // shorter viewports this shrinks the wall horizontally, but nothing
+      // gets clipped.
       const scale = Math.min(
         window.innerWidth / WALL_W,
         window.innerHeight / WALL_H,

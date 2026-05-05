@@ -57,15 +57,44 @@ html.wall-mode .rounded-item {
 }
 
 html.wall-mode body {
-  /* Logical canvas is the full wall size, regardless of actual viewport.
-     `transform: scale(...)` is applied imperatively via WallModeApplier
-     (JS-computed), so we only declare the canvas size here. */
+  /* Logical canvas — main 6×3 wall (11520×3240) on top, plus a "wing" row
+     below it that represents the extra 3-col-wide screens that physically
+     sit on the LEFT and RIGHT of the main wall. Since we're previewing on a
+     16:9 monitor, we fold those wings down underneath:
+
+       y=0 .. 3240 :  main wall (6 cols × 3 rows)
+       y=3240 .. 6480, x=0..5760    :  LEFT wing  (3 cols × 3 rows, teal tint)
+       y=3240 .. 6480, x=5760..11520:  RIGHT wing (3 cols × 3 rows, warning tint)
+
+     Total canvas 11520 × 6480 is exactly 16:9, fits a 1920×1080 preview
+     perfectly. `transform: scale(...)` is applied imperatively via
+     WallModeApplier. */
   width: 11520px;
-  height: 3240px;
+  height: 6480px;
   min-width: 0;
   min-height: 0;
   transform-origin: top left;
+  /* Wing tints — solid blocks layered over the navy gradient. */
+  background-image:
+    /* LEFT wing — teal */
+    linear-gradient(rgba(114, 182, 201, 0.16), rgba(114, 182, 201, 0.16)),
+    /* RIGHT wing — warning orange */
+    linear-gradient(rgba(255, 197, 107, 0.16), rgba(255, 197, 107, 0.16)),
+    /* Original navy gradient covering the whole canvas */
+    linear-gradient(92deg,
+      rgba(73, 119, 132, 0.40) 14%,
+      rgba(10, 23, 47, 0.40) 83%);
+  background-size:
+    5760px 3240px,
+    5760px 3240px,
+    100% 100%;
+  background-position:
+    0 3240px,
+    5760px 3240px,
+    0 0;
+  background-repeat: no-repeat;
 }
+
 
 /* AppShell uses `flex h-screen` (height: 100vh).  In wall mode the actual
    viewport is the laptop (~1080px) but body is 3240px — overriding h-screen
@@ -363,6 +392,49 @@ html.wall-mode [role="dialog"] {
   max-width: 7680px !important;
   max-height: 2700px !important;
   padding: 4rem !important;
+  /* canvas 是 11520×6480(主牆 + 折疊在下面的兩個副牆),Radix 預設 top:50%
+     會把 dialog 釘在 y=3240(主副牆交界)→ 跨牆顯示。改用絕對 y=1620
+     讓 dialog 中心錨在主牆中央,完整落在主牆上。 */
+  top: 1620px !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
+
+/* 加上 .wall-dialog--left-wing class 的 dialog → 改成置中在左副牆。
+   左副牆 x=0~5760, y=3240~6480 → 中心 (2880, 4860)。 */
+html.wall-mode [role="dialog"].wall-dialog--left-wing {
+  width: 5400px !important;
+  max-width: 5400px !important;
+  max-height: 3000px !important;
+  top: 4860px !important;
+  left: 2880px !important;
+}
+/* 副牆 dialog 比較窄,DutForm 4-col grid 改 1-col 直向堆疊 */
+html.wall-mode [role="dialog"].wall-dialog--left-wing .dut-form-grid {
+  grid-template-columns: 1fr !important;
+}
+
+/* === 副牆 slot panel 字體 / 按鈕放大 === */
+html.wall-mode .slot-panel-title {
+  font-size: 3rem !important;           /* 144px */
+  font-weight: 700;
+}
+html.wall-mode .slot-panel-subtitle {
+  font-size: 1.75rem !important;        /* 84px */
+}
+/* 副牆內所有 button(非 nav row Link)放大 — 刷新 / 新增 / 執行測試 之類 */
+html.wall-mode .war-room-left button,
+html.wall-mode .war-room-right button {
+  font-size: 1.75rem !important;        /* 84px */
+  padding: 1rem 1.75rem !important;
+  min-height: 4.5rem !important;        /* 216px */
+  height: auto !important;
+  border-radius: 0.875rem !important;
+}
+html.wall-mode .war-room-left button svg,
+html.wall-mode .war-room-right button svg {
+  width: 2rem !important;
+  height: 2rem !important;
 }
 
 /* DutFormDialog 4-col grid: 對話框中心置中於 wall canvas,寬度 7680(對齊
@@ -440,6 +512,444 @@ html.wall-mode textarea {
   line-height: 1.2 !important;
 }
 
+/* ====================================================================
+   War-room layout(電視牆模式):主牆 + 左副牆 + 右副牆 三區
+   實體配置上是「左副牆 / 主牆 / 右副牆」橫排,在電腦上預覽把兩個副牆
+   折到主牆下面並排,所以這份 CSS 把它們放在 11520×6480 canvas 上。
+   ==================================================================== */
+
+html.wall-mode .war-room-root {
+  position: relative;
+  width: 11520px;
+  height: 6480px;
+}
+
+/* 連接介面驗證主牆:三條並排,每條跨 2 個 TV cell。
+   配色用主題 palette:teal(觀察)/ mint(進行中)/ warning(結果),
+   底色都是深 navy + 該色低透明度 fill,維持戰情室一致的暗色風格。 */
+html.wall-mode .dut-wall-bands {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  height: calc(3240px - 11rem);
+  min-height: 2400px;
+}
+html.wall-mode .dut-wall-band {
+  display: flex;
+  flex-direction: column;
+  border-radius: 1.5rem;
+  padding: 2rem;
+  overflow: hidden;
+  background: rgba(10, 23, 47, 0.6);     /* navy base */
+}
+html.wall-mode .dut-wall-band-title {
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  letter-spacing: 0.05em;
+}
+html.wall-mode .dut-wall-band-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+/* 折線圖時 body 不要置中,直接撐滿讓 ResponsiveContainer 量到尺寸 */
+html.wall-mode .dut-wall-band-body--chart {
+  display: block;
+  align-items: stretch;
+  justify-content: stretch;
+  min-height: 0;
+}
+/* 即時環境影像 — teal 系(觀察用) */
+html.wall-mode .dut-wall-band--env {
+  background: linear-gradient(135deg, rgba(73, 119, 132, 0.35), rgba(10, 23, 47, 0.7));
+  border: 2px solid rgba(114, 182, 201, 0.5);
+}
+html.wall-mode .dut-wall-band--env .dut-wall-band-title { color: #72B6C9; }
+/* 即時測試狀態 — mint 系(進行中) */
+html.wall-mode .dut-wall-band--status {
+  background: linear-gradient(135deg, rgba(128, 255, 232, 0.18), rgba(10, 23, 47, 0.7));
+  border: 2px solid rgba(128, 255, 232, 0.5);
+}
+html.wall-mode .dut-wall-band--status .dut-wall-band-title { color: #80FFE8; }
+/* 即時測試結果 — xApp 紫(主題裡的 accent,跟 mint / teal 區分) */
+html.wall-mode .dut-wall-band--result {
+  background: linear-gradient(135deg, rgba(180, 144, 255, 0.2), rgba(10, 23, 47, 0.7));
+  border: 2px solid rgba(180, 144, 255, 0.5);
+}
+html.wall-mode .dut-wall-band--result .dut-wall-band-title { color: #B490FF; }
+
+/* 主牆色帶內的小表格 + status / result 標籤 */
+html.wall-mode .dut-wall-band-body {
+  align-items: stretch;                  /* 改成讓 table 撐開,不再置中 */
+}
+html.wall-mode .dut-wall-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1.5rem;
+  color: rgba(255, 255, 255, 0.88);
+}
+html.wall-mode .dut-wall-table thead th {
+  text-align: left;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  padding: 0.5rem 0.75rem;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  font-size: 1.25rem;
+  letter-spacing: 0.05em;
+}
+html.wall-mode .dut-wall-table tbody td {
+  padding: 0.875rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+html.wall-mode .dut-wall-table tbody tr:last-child td {
+  border-bottom: none;
+}
+html.wall-mode .dut-wall-table .tabular {
+  font-family: ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+html.wall-mode .status-pill,
+html.wall-mode .result-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  border: 1px solid;
+}
+html.wall-mode .status-pill--ok {
+  background: rgba(128, 255, 232, 0.15);
+  color: #80FFE8;
+  border-color: rgba(128, 255, 232, 0.5);
+}
+html.wall-mode .status-pill--idle {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.55);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+html.wall-mode .status-pill--done {
+  background: rgba(114, 182, 201, 0.18);
+  color: #72B6C9;
+  border-color: rgba(114, 182, 201, 0.5);
+}
+html.wall-mode .result-pill--pass {
+  background: rgba(128, 255, 232, 0.15);
+  color: #80FFE8;
+  border-color: rgba(128, 255, 232, 0.5);
+}
+html.wall-mode .result-pill--fail {
+  background: rgba(255, 95, 90, 0.18);
+  color: #FF5F5A;
+  border-color: rgba(255, 95, 90, 0.5);
+}
+
+html.wall-mode .progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+html.wall-mode .progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(to right, rgba(114, 182, 201, 0.7), rgba(128, 255, 232, 0.95));
+  border-radius: 9999px;
+}
+
+/* 即時環境影像內的播放器 placeholder */
+html.wall-mode .video-placeholder {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  border-radius: 1rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+html.wall-mode .video-screen {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: radial-gradient(ellipse at center, rgba(73, 119, 132, 0.18), rgba(0, 0, 0, 0.85));
+}
+html.wall-mode .video-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 1.75rem;
+}
+html.wall-mode .video-empty svg {
+  width: 5rem !important;
+  height: 5rem !important;
+}
+html.wall-mode .video-live-badge {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 95, 90, 0.85);   /* danger / live red */
+  border-radius: 9999px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: white;
+  letter-spacing: 0.1em;
+}
+html.wall-mode .video-live-dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  background: white;
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+html.wall-mode .video-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  background: rgba(0, 0, 0, 0.6);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+html.wall-mode .video-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem !important;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  border-radius: 0.5rem;
+}
+html.wall-mode .video-controls button:hover { background: rgba(255, 255, 255, 0.1); }
+html.wall-mode .video-controls button svg {
+  width: 1.5rem !important;
+  height: 1.5rem !important;
+}
+html.wall-mode .video-time {
+  font-family: ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.125rem;
+  color: rgba(255, 255, 255, 0.6);
+  flex-shrink: 0;
+}
+html.wall-mode .video-timeline {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+  position: relative;
+  overflow: hidden;
+}
+html.wall-mode .video-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 35%;
+  height: 100%;
+  background: linear-gradient(to right, rgba(114, 182, 201, 0.7), rgba(128, 255, 232, 0.9));
+  border-radius: 9999px;
+}
+
+/* 主牆:y=0~3240,11520 寬全展開 — 放原本的 IVT app(Header + 頁面內容) */
+html.wall-mode .war-room-main {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3240px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+html.wall-mode .war-room-main-topbar {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 2rem;
+  background: linear-gradient(
+    to right,
+    rgba(100, 116, 139, 0.45),
+    rgba(71, 85, 105, 0.25)
+  );
+  border-bottom: 2px solid rgba(255, 255, 255, 0.08);
+}
+html.wall-mode .war-room-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 2rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+html.wall-mode .war-room-back:hover { color: white; }
+html.wall-mode .war-room-back svg {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+html.wall-mode .war-room-main-body {
+  flex: 1;
+  overflow: auto;
+  padding: 2rem 3rem 3rem;
+}
+
+/* 左副牆:y=3240~6480, x=0~5760 — Sidebar 切換選單 */
+html.wall-mode .war-room-left {
+  position: absolute;
+  top: 3240px;
+  left: 0;
+  width: 5760px;
+  height: 3240px;
+  display: flex;
+  overflow: hidden;
+}
+/* 副牆裡的 sidebar 撐滿,覆寫主牆的 1920px 寬度規則,並關閉自動捲動。 */
+html.wall-mode .war-room-left .war-room-sidebar {
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+/* 副牆 sidebar:左右排版 — 左半 nav,右半 page-context slot。
+   wing 寬 5760,bezel 在 wing x=1920 / 3840。
+   nav 用 1908px(1 cell 寬,bezel 落在 col 之間 gap),slot 用剩餘 ~3840px。 */
+html.wall-mode .war-room-left .war-room-aside-body {
+  display: grid;
+  grid-template-columns: 1908px 1fr;     /* nav | slot */
+  gap: 24px;                              /* 蓋掉 bezel 1(x=1914-1926) */
+  height: 100%;
+  overflow: hidden;
+  padding: 0 0 1rem;
+  box-sizing: border-box;
+}
+html.wall-mode .war-room-left .war-room-nav-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  overflow: hidden;
+}
+html.wall-mode .war-room-left .war-room-page-slot {
+  overflow: hidden;
+  padding: 2.5rem 1rem 0 2rem;      /* 上 2.5rem / 左 2rem,跟副牆邊框有空隙 */
+}
+/* 群組標題(連接介面驗證 / 場域管理) */
+html.wall-mode .war-room-left .war-room-nav-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 0.75rem 0.5rem;
+  font-size: 1.75rem !important;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+}
+html.wall-mode .war-room-left .war-room-nav-group-title svg {
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+}
+/* nav row:icon + label 橫排,整 row 點擊跳頁 */
+html.wall-mode .war-room-left .war-room-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.25rem 1.5rem !important;
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  font-size: 2.5rem !important;          /* 120px */
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  text-decoration: none !important;
+  transition: background-color 150ms, border-color 150ms;
+  flex: 1 1 0;                           /* 平均分配剩餘高度,把 nav 撐滿 */
+  min-height: 0;
+}
+html.wall-mode .war-room-left .war-room-nav-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+html.wall-mode .war-room-left .war-room-nav-row--compact {
+  margin-left: 1.5rem;
+  padding: 1rem 1.5rem !important;
+  font-size: 2rem !important;            /* 96px */
+}
+html.wall-mode .war-room-left .war-room-nav-row--active {
+  background: rgba(128, 255, 232, 0.14) !important;
+  border-color: rgba(128, 255, 232, 0.55) !important;
+  color: rgb(128, 255, 232);
+}
+html.wall-mode .war-room-left .war-room-nav-row .war-room-nav-row-icon {
+  width: 2.75rem !important;
+  height: 2.75rem !important;
+  flex-shrink: 0;
+}
+
+/* 右副牆:y=3240~6480, x=5760~11520 — 實驗室簡介 7-cell 網格 */
+html.wall-mode .war-room-right {
+  position: absolute;
+  top: 3240px;
+  left: 5760px;
+  width: 5760px;
+  height: 3240px;
+  padding: 2rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+html.wall-mode .war-room-lab-info {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: 1fr 1fr 1fr;     /* 3 列等高;下排兩格高度由 row-span 撐開 */
+  gap: 1rem;
+}
+/* 上排 3 格(紫色):實驗室簡介 / 測試目標 / 合作夥伴 */
+html.wall-mode .war-room-lab-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(167, 139, 250, 0.32);
+  border: 2px solid rgba(167, 139, 250, 0.45);
+  border-radius: 1.5rem;
+}
+/* 下排 3 格高長條(各跨 2 row):待測物 / 測試設備 / 測試方法 */
+html.wall-mode .war-room-lab-tall {
+  grid-row: span 2;
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  border-radius: 1.5rem;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.95);
+}
+/* 沒被頁面覆寫時的預設標題 placeholder */
+html.wall-mode .war-room-slot-placeholder {
+  margin-top: auto;
+  align-self: center;
+  font-size: 3rem;
+  font-weight: 700;
+}
+html.wall-mode .war-room-lab-tall--dut    { background: rgba(20, 100, 120, 0.55); }   /* 深 teal */
+html.wall-mode .war-room-lab-tall--equip  { background: rgba(56, 178, 200, 0.55); }   /* 亮 cyan */
+html.wall-mode .war-room-lab-tall--method { background: rgba(244, 196, 199, 0.55); }  /* 粉 */
+
 /* Toggle bezel guides off via Header button — set on <html> by WallModeApplier
    when showBezels is false. Used to preview the layout without the dev guides. */
 html.bezels-hidden body::before {
@@ -454,20 +964,29 @@ html.wall-mode body::before {
   position: absolute;
   top: 0; left: 0;
   width: 11520px;
-  height: 3240px;
+  height: 6480px;
   pointer-events: none;
   z-index: 9999;
   background-image:
-    /* Vertical bezels at x = 1920, 3840, 5760, 7680, 9600 (12px wide) */
+    /* Vertical bezels at x = 1920, 3840, 5760, 7680, 9600 (12px wide, full
+       canvas height — main + wings share the same column boundaries) plus
+       the right edge at x = 11520. */
     linear-gradient(to right, transparent 1914px, rgba(255,255,255,0.85) 1914px, rgba(255,255,255,0.85) 1926px, transparent 1926px),
     linear-gradient(to right, transparent 3834px, rgba(255,255,255,0.85) 3834px, rgba(255,255,255,0.85) 3846px, transparent 3846px),
     linear-gradient(to right, transparent 5754px, rgba(255,255,255,0.85) 5754px, rgba(255,255,255,0.85) 5766px, transparent 5766px),
     linear-gradient(to right, transparent 7674px, rgba(255,255,255,0.85) 7674px, rgba(255,255,255,0.85) 7686px, transparent 7686px),
     linear-gradient(to right, transparent 9594px, rgba(255,255,255,0.85) 9594px, rgba(255,255,255,0.85) 9606px, transparent 9606px),
-    /* Horizontal bezels at y = 1080, 2160; bottom edge at y = 3240 */
+    linear-gradient(to right, transparent 11508px, rgba(255,255,255,0.85) 11508px, rgba(255,255,255,0.85) 11520px, transparent 11520px),
+    /* Main wall horizontal bezels: y = 1080, 2160 */
     linear-gradient(to bottom, transparent 1074px, rgba(255,255,255,0.85) 1074px, rgba(255,255,255,0.85) 1086px, transparent 1086px),
     linear-gradient(to bottom, transparent 2154px, rgba(255,255,255,0.85) 2154px, rgba(255,255,255,0.85) 2166px, transparent 2166px),
-    linear-gradient(to bottom, transparent 3228px, rgba(255,255,255,0.85) 3228px, rgba(255,255,255,0.85) 3240px, transparent 3240px);
+    /* Boundary between main and wings: y = 3240 */
+    linear-gradient(to bottom, transparent 3234px, rgba(255,255,255,0.85) 3234px, rgba(255,255,255,0.85) 3246px, transparent 3246px),
+    /* Wing horizontal bezels: y = 4320, 5400 (= 3240 + 1080, 3240 + 2160) */
+    linear-gradient(to bottom, transparent 4314px, rgba(255,255,255,0.85) 4314px, rgba(255,255,255,0.85) 4326px, transparent 4326px),
+    linear-gradient(to bottom, transparent 5394px, rgba(255,255,255,0.85) 5394px, rgba(255,255,255,0.85) 5406px, transparent 5406px),
+    /* Bottom edge at y = 6480 */
+    linear-gradient(to bottom, transparent 6468px, rgba(255,255,255,0.85) 6468px, rgba(255,255,255,0.85) 6480px, transparent 6480px);
   background-repeat: no-repeat;
 }
 

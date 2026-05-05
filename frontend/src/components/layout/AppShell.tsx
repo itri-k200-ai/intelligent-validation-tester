@@ -2,13 +2,25 @@
 import type { ReactNode } from "react";
 
 import { useUiStore } from "@/stores/uiStore";
+import { useIsWallMode } from "@/stores/wallModeStore";
 
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
 import { WallModeApplier } from "./WallModeApplier";
+import { WallWarRoomLayout } from "./WallWarRoomLayout";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
+  const isWall = useIsWallMode();
+
+  if (isWall) {
+    return (
+      <>
+        <WallModeApplier />
+        <WallWarRoomLayout>{children}</WallWarRoomLayout>
+      </>
+    );
+  }
 
   return (
     <div className="flex h-screen">

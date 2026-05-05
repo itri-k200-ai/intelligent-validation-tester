@@ -15,6 +15,7 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 import { cn } from "@/lib/cn";
+import { useLeftWingSlotStore } from "@/stores/leftWingSlotStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useIsWallMode } from "@/stores/wallModeStore";
 
@@ -112,12 +113,16 @@ function NavTree({
   depth,
   expandedNavIds,
   toggle,
+  flat = false,
 }: {
   nodes: NavNode[];
   pathname: string;
   depth: number;
   expandedNavIds: string[];
   toggle: (id: string) => void;
+  /** flat=true:展開全部 branch、隱藏 toggle 按鈕、branch 變成靜態節標題,
+      避免動態折疊在電視牆下產生 bezel 切割風險。 */
+  flat?: boolean;
 }) {
   const indent = depth === 0 ? "" : depth === 1 ? "ml-4" : "ml-6";
   return (
@@ -146,11 +151,38 @@ function NavTree({
           );
         }
         const branchActive = hasActiveDescendant(node, pathname);
+        const BranchIcon = node.icon;
+
+        if (flat) {
+          // 靜態節標題 — 不可點、不會收合,子項一律渲染。
+          return (
+            <div key={node.id}>
+              <div
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 text-sm",
+                  branchActive ? "text-mint-300 font-medium" : "text-white/80",
+                )}
+              >
+                {BranchIcon && <BranchIcon className="w-4 h-4" strokeWidth={1.5} />}
+                <span>{node.label}</span>
+              </div>
+              <NavTree
+                nodes={node.children}
+                pathname={pathname}
+                depth={depth + 1}
+                expandedNavIds={expandedNavIds}
+                toggle={toggle}
+                flat
+              />
+            </div>
+          );
+        }
+
+        // 一般模式:可折疊
         // Only the explicit list controls expansion now — auto-expand on
         // navigation is handled once via `ensureExpanded` below, so the user
         // can collapse a currently-active branch without it springing back.
         const expanded = expandedNavIds.includes(node.id);
-        const BranchIcon = node.icon;
         return (
           <div key={node.id}>
             <button
@@ -216,6 +248,7 @@ export function Sidebar({ className }: { className?: string }) {
   const ensureExpanded = useUiStore((s) => s.ensureExpanded);
   const isWall = useIsWallMode();
   const nav = isWall ? NAV.filter((n) => !WALL_HIDDEN_IDS.has(n.id)) : NAV;
+  const leftWingSlot = useLeftWingSlotStore((s) => s.content);
 
   // On every navigation, make sure the branches leading to the current page
   // are expanded — but only ADD ids, never remove. This way a manually
@@ -230,19 +263,94 @@ export function Sidebar({ className }: { className?: string }) {
 
   return (
     <aside className={cn("border-r border-white/10 bg-navy-600/70 backdrop-blur-sm w-64 flex-shrink-0 overflow-y-auto", className)}>
-      <div className="p-4 border-b border-white/10">
-        <p className="text-lg font-semibold text-white">智慧驗證 tester</p>
-        <p className="text-xs text-white/40 mt-1">v1.0.0</p>
-      </div>
-      <nav className="p-2">
-        <NavTree
-          nodes={nav}
-          pathname={pathname}
-          depth={0}
-          expandedNavIds={expandedNavIds}
-          toggle={toggleNavItem}
-        />
-      </nav>
+      {/* 一般模式才顯示「智慧驗證 tester」標題;電視牆下浪費 320px 高度,
+          把空間還給 nav / slot,讓內容貼到副牆最頂端。 */}
+      {!isWall && (
+        <div className="p-4 border-b border-white/10">
+          <p className="text-lg font-semibold text-white">智慧驗證 tester</p>
+          <p className="text-xs text-white/40 mt-1">v1.0.0</p>
+        </div>
+      )}
+      {isWall ? (
+        // 電視牆模式:左右排版,左半部 nav 直向堆疊,右半部是
+        // page-context slot(各頁面透過 <LeftWingSlot> 註冊內容)。
+        <div className="war-room-aside-body">
+          <nav className="war-room-nav-vertical">
+            <WallNavRow
+              href="/overview"
+              label="總覽"
+              icon={LayoutDashboard}
+              pathname={pathname}
+            />
+            <div className="war-room-nav-group-title">
+              <Cable />
+              連接介面驗證
+            </div>
+            <WallNavRow href="/interface-validation/smo" label="SMO" pathname={pathname} compact />
+            <WallNavRow href="/interface-validation/ric" label="RIC" pathname={pathname} compact />
+            <WallNavRow href="/interface-validation/xapp" label="xApp" pathname={pathname} compact />
+            <WallNavRow href="/interface-validation/rapp" label="rApp" pathname={pathname} compact />
+            <WallNavRow
+              href="/test-scenarios"
+              label="端對端測試情境"
+              icon={Target}
+              pathname={pathname}
+            />
+            <div className="war-room-nav-group-title">
+              <Globe />
+              場域管理
+            </div>
+            <WallNavRow href="/site-management/domestic" label="國內場域" pathname={pathname} compact />
+            <WallNavRow href="/site-management/international" label="國外場域" pathname={pathname} compact />
+          </nav>
+          <div className="war-room-page-slot">
+            {leftWingSlot ?? (
+              <p className="text-sm text-white/40 px-2">此頁面尚未提供清單區內容</p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <nav className="p-2">
+          <NavTree
+            nodes={nav}
+            pathname={pathname}
+            depth={0}
+            expandedNavIds={expandedNavIds}
+            toggle={toggleNavItem}
+          />
+        </nav>
+      )}
     </aside>
+  );
+}
+
+// 電視牆模式 row-style 導航按鈕(直向堆疊用)。
+// compact = 縮排 + 較小字,用在群組底下的子項目。
+function WallNavRow({
+  href,
+  label,
+  icon: Icon,
+  pathname,
+  compact = false,
+}: {
+  href: string;
+  label: string;
+  icon?: LucideIcon;
+  pathname: string;
+  compact?: boolean;
+}) {
+  const active = pathname === href || pathname.startsWith(href + "/");
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "war-room-nav-row",
+        compact && "war-room-nav-row--compact",
+        active && "war-room-nav-row--active",
+      )}
+    >
+      {Icon && <Icon className="war-room-nav-row-icon" strokeWidth={1.5} />}
+      <span>{label}</span>
+    </Link>
   );
 }

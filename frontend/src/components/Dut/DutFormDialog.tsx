@@ -91,7 +91,7 @@ export function DutFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl wall-dialog--left-wing">
         <DialogHeader>
           <DialogTitle>新增 {dutType} 設備</DialogTitle>
           <DialogDescription>填寫 {dutType} 設備的連接資訊</DialogDescription>
@@ -124,9 +124,6 @@ export function DutFormDialog({
                   label: `${s.name}（${ENV_LABEL[s.environment] ?? s.environment}）`,
                 }))}
               />
-              <p className="text-xs text-white/60">
-                DUT 部署在哪個場域。環境類別由場域決定,若無合適場域請先到「場域管理」建立。
-              </p>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="dut-endpoint">API Endpoint</label>
@@ -137,9 +134,6 @@ export function DutFormDialog({
                 onChange={(e) => setEndpoint(e.target.value)}
                 required
               />
-              <p className="text-xs text-white/60">
-                可填 IP、主機名或完整 URL。建立時不會測試連線,按「執行介面測試」才會實際連線。
-              </p>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">測試介面</label>

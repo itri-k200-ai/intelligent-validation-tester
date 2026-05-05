@@ -3,6 +3,7 @@ import { Settings2 } from "lucide-react";
 import { useState } from "react";
 
 import { CollapsibleCard } from "@/components/common/CollapsibleCard";
+import { RightWingSlots } from "@/components/layout/RightWingSlots";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +34,32 @@ export function SiteDetail({ site }: { site: Site }) {
 
   return (
     <div className="space-y-4">
+      {/* 電視牆模式:把網元 / 攝影機 / 拓樸 從主牆移到右副牆下半三格 slot,
+          主牆只留場域基本資訊 + 實體地圖,內容不需捲動或折疊。 */}
+      {isWall && (
+        <RightWingSlots
+          dut={
+            <SlotPanel title="網元" subtitle={`${stations.length} 個`}>
+              <StationList siteId={site.id} stations={stations} />
+            </SlotPanel>
+          }
+          equip={
+            <SlotPanel title="攝影機">
+              <CameraList siteId={site.id} />
+            </SlotPanel>
+          }
+          method={
+            <SlotPanel title="邏輯拓樸" subtitle="SMO → RIC → gNB">
+              {isLoading ? (
+                <div className="text-white/40 text-sm">載入中…</div>
+              ) : (
+                <TopologyCanvas stations={stations} links={links} />
+              )}
+            </SlotPanel>
+          }
+        />
+      )}
+
       <Card className={isWall ? "site-info-card" : undefined}>
         <CardContent className="py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -64,84 +91,87 @@ export function SiteDetail({ site }: { site: Site }) {
         site={site}
       />
 
-      {/* 電視牆:地圖 / 網元 / 攝影機 三欄並排;一般模式:地圖一張 + 拓樸圖 + 網元/攝影機 grid。 */}
-      <div className={isWall ? "flex gap-4 items-stretch" : "space-y-4"}>
-        <Card className={isWall ? "site-map-card flex-shrink-0" : undefined}>
-          <CardHeader className="pb-2">
-            <div className="flex items-baseline justify-between">
-              <CardTitle>實體地圖</CardTitle>
-              <p className="text-xs text-white/60">
-                gNB {gnbStations.length} · 點攝影機圖示播放
-              </p>
-            </div>
-          </CardHeader>
-          <CardContent className={isWall ? "p-0" : undefined}>
-            <SiteLayoutCanvas
-              siteId={site.id}
-              floorPlanUrl={site.floor_plan_url || undefined}
-              stations={stations}
-            />
-          </CardContent>
-        </Card>
+      <Card className={isWall ? "site-map-card" : undefined}>
+        <CardHeader className="pb-2">
+          <div className="flex items-baseline justify-between">
+            <CardTitle>實體地圖</CardTitle>
+            <p className="text-xs text-white/60">
+              gNB {gnbStations.length} · 點攝影機圖示播放
+            </p>
+          </div>
+        </CardHeader>
+        <CardContent className={isWall ? "p-0" : undefined}>
+          <SiteLayoutCanvas
+            siteId={site.id}
+            floorPlanUrl={site.floor_plan_url || undefined}
+            stations={stations}
+          />
+        </CardContent>
+      </Card>
 
-        {isWall && (
-          <>
-            <div className="site-stations-pane min-w-0">
+      {/* 一般模式才顯示這些(電視牆下都到右副牆 slot 了) */}
+      {!isWall && (
+        <>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <CollapsibleCard
+              title="邏輯拓樸"
+              subtitle="SMO → RIC → gNB"
+            >
+              {isLoading ? (
+                <div className="text-white/40 text-sm">載入中…</div>
+              ) : (
+                <TopologyCanvas stations={stations} links={links} />
+              )}
+            </CollapsibleCard>
+
+            <div className="min-w-0 space-y-4">
               <CollapsibleCard
                 title="網元"
                 subtitle={`${stations.length} 個`}
               >
                 <StationList siteId={site.id} stations={stations} />
               </CollapsibleCard>
-            </div>
-            <div className="site-cameras-pane min-w-0">
+
               <CollapsibleCard title="攝影機">
                 <CameraList siteId={site.id} />
               </CollapsibleCard>
             </div>
-          </>
-        )}
-      </div>
-
-      {!isWall && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <CollapsibleCard
-            title="邏輯拓樸"
-            subtitle="SMO → RIC → gNB"
-          >
-            {isLoading ? (
-              <div className="text-white/40 text-sm">載入中…</div>
-            ) : (
-              <TopologyCanvas stations={stations} links={links} />
-            )}
-          </CollapsibleCard>
-
-          <div className="min-w-0 space-y-4">
-            <CollapsibleCard
-              title="網元"
-              subtitle={`${stations.length} 個`}
-            >
-              <StationList siteId={site.id} stations={stations} />
-            </CollapsibleCard>
-
-            <CollapsibleCard title="攝影機">
-              <CameraList siteId={site.id} />
-            </CollapsibleCard>
           </div>
-        </div>
-      )}
 
-      <CollapsibleCard
-        title="拓樸連線"
-        subtitle={`${links.length} 條`}
-        defaultOpen={false}
-      >
-        <TopologyLinkEditor
-          siteId={site.id}
-          stations={stations}
-          links={links}
-        />
-      </CollapsibleCard>
+          <CollapsibleCard
+            title="拓樸連線"
+            subtitle={`${links.length} 條`}
+            defaultOpen={false}
+          >
+            <TopologyLinkEditor
+              siteId={site.id}
+              stations={stations}
+              links={links}
+            />
+          </CollapsibleCard>
+        </>
+      )}
+    </div>
+  );
+}
+
+// 右副牆 slot 內部的小排版:標題列 + 內容捲動區
+function SlotPanel({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex items-baseline gap-3">
+        <span className="text-2xl font-semibold">{title}</span>
+        {subtitle && <span className="text-base text-white/60">{subtitle}</span>}
+      </div>
+      <div className="flex-1 min-h-0 overflow-auto">{children}</div>
     </div>
   );
 }
