@@ -19,6 +19,14 @@ type Props = {
   siteId: string;
   floorPlanUrl?: string;
   stations: BaseStation[];
+  /**
+   * 點攝影機圖示時的處理 — 提供時 parent 自己拿狀態渲染播放器(電視牆模式
+   * 把播放器放在地圖右邊),這個 component 內部就不開 Dialog;沒提供時保留
+   * 原本的 Dialog 行為(一般網頁模式)。
+   */
+  onCameraSelect?: (camera: SiteCamera) => void;
+  /** parent 控制的選中攝影機 id,用來在地圖上高亮對應 pin。 */
+  selectedCameraId?: string | null;
 };
 
 type DragTarget =
@@ -31,7 +39,13 @@ function clampPct(v: number) {
 
 const DRAG_THRESHOLD_PX = 4;
 
-export function SiteLayoutCanvas({ siteId, floorPlanUrl, stations }: Props) {
+export function SiteLayoutCanvas({
+  siteId,
+  floorPlanUrl,
+  stations,
+  onCameraSelect,
+  selectedCameraId,
+}: Props) {
   const updateStation = useUpdateStation(siteId);
   const { cameras, update: updateCamera } = useSiteCameras(siteId);
   const isEditing = useIsEditing();
@@ -77,7 +91,13 @@ export function SiteLayoutCanvas({ siteId, floorPlanUrl, stations }: Props) {
   const handleCameraClick = (c: SiteCamera) => {
     // Click (no drag movement) plays the camera; drag moved the pin.
     if (movedRef.current) return;
-    if (c.hls_url) setPlaying(c);
+    if (!c.hls_url) return;
+    if (onCameraSelect) {
+      // parent 自己渲染播放器(電視牆模式),內部 Dialog 跳過
+      onCameraSelect(c);
+    } else {
+      setPlaying(c);
+    }
   };
 
   const onDrop = async (e: React.PointerEvent) => {
@@ -187,7 +207,9 @@ export function SiteLayoutCanvas({ siteId, floorPlanUrl, stations }: Props) {
               title={`${c.name}${clickable ? " · 點擊播放" : ""}`}
             >
               <div
-                className="w-14 h-14 rounded-item bg-navy-500 border-2 flex items-center justify-center text-2xl shadow-sm"
+                className={`w-14 h-14 rounded-item bg-navy-500 border-2 flex items-center justify-center text-2xl shadow-sm ${
+                  selectedCameraId === c.id ? "site-camera-pin--active" : ""
+                }`}
                 style={{ borderColor: c.status === "online" ? "#80FFE8" : "#576378" }}
               >
                 📹
@@ -211,14 +233,17 @@ export function SiteLayoutCanvas({ siteId, floorPlanUrl, stations }: Props) {
         )}
       </div>
 
-      <Dialog open={!!playing} onOpenChange={(v) => !v && setPlaying(null)}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{playing?.name}</DialogTitle>
-          </DialogHeader>
-          {playing?.hls_url && <HlsPlayer src={playing.hls_url} />}
-        </DialogContent>
-      </Dialog>
+      {/* 一般模式才用 Dialog;電視牆模式由 parent 提供 onCameraSelect 接走 */}
+      {!onCameraSelect && (
+        <Dialog open={!!playing} onOpenChange={(v) => !v && setPlaying(null)}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>{playing?.name}</DialogTitle>
+            </DialogHeader>
+            {playing?.hls_url && <HlsPlayer src={playing.hls_url} />}
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }

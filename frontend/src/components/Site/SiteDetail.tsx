@@ -1,6 +1,6 @@
 "use client";
-import { Settings2 } from "lucide-react";
-import { useState } from "react";
+import { Settings2, Video, X } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { CollapsibleCard } from "@/components/common/CollapsibleCard";
 import { RightWingSlots } from "@/components/layout/RightWingSlots";
@@ -10,10 +10,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSiteTopology } from "@/hooks/Site/useSiteTopology";
 import { useIsEditing } from "@/stores/editModeStore";
 import { useIsWallMode } from "@/stores/wallModeStore";
-import type { Site } from "@/types/site";
+import type { Site, SiteCamera } from "@/types/site";
 
 import { CameraList } from "./CameraList";
 import { EditModeToggle } from "./EditModeToggle";
+import { HlsPlayer } from "./HlsPlayer";
 import { SiteSettingsDialog } from "./SiteSettingsDialog";
 import { SiteLayoutCanvas } from "./SiteLayoutCanvas";
 import { StationList } from "./StationList";
@@ -29,11 +30,20 @@ export function SiteDetail({ site }: { site: Site }) {
   const links = data?.links ?? [];
   const gnbStations = stations.filter((s) => s.node_type === "gnb");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 電視牆模式:點地圖上的攝影機 → state 升到這裡,右邊 panel 直接 render 播放器
+  // (取代原本的 Dialog)。一般模式 selectedCamera 永遠 null,SiteLayoutCanvas
+  // 內部 fallback 到 Dialog 行為。
+  const [selectedCamera, setSelectedCamera] = useState<SiteCamera | null>(null);
   const isEditing = useIsEditing();
   const isWall = useIsWallMode();
 
+  // 切換場域時清空選中的攝影機,避免上一個 site 的串流停留在 panel 上
+  useEffect(() => {
+    setSelectedCamera(null);
+  }, [site.id]);
+
   return (
-    <div className="space-y-4">
+    <div className={isWall ? "site-wall-root" : "space-y-4"}>
       {/* 電視牆模式:把網元 / 攝影機 / 拓樸 從主牆移到右副牆下半三格 slot,
           主牆只留場域基本資訊 + 實體地圖,內容不需捲動或折疊。 */}
       {isWall && (
@@ -91,23 +101,67 @@ export function SiteDetail({ site }: { site: Site }) {
         site={site}
       />
 
-      <Card className={isWall ? "site-map-card" : undefined}>
-        <CardHeader className="pb-2">
-          <div className="flex items-baseline justify-between">
-            <CardTitle>實體地圖</CardTitle>
-            <p className="text-xs text-white/60">
-              gNB {gnbStations.length} · 點攝影機圖示播放
-            </p>
-          </div>
-        </CardHeader>
-        <CardContent className={isWall ? "p-0" : undefined}>
-          <SiteLayoutCanvas
-            siteId={site.id}
-            floorPlanUrl={site.floor_plan_url || undefined}
-            stations={stations}
-          />
-        </CardContent>
-      </Card>
+      {/* 電視牆模式:地圖 + 攝影機播放器並排;一般模式只有地圖一張卡 */}
+      <div className={isWall ? "site-wall-main-row" : undefined}>
+        <Card className={isWall ? "site-map-card" : undefined}>
+          <CardHeader className="pb-2">
+            <div className="flex items-baseline justify-between">
+              <CardTitle>實體地圖</CardTitle>
+              <p className="text-xs text-white/60">
+                gNB {gnbStations.length} · 點攝影機圖示播放
+              </p>
+            </div>
+          </CardHeader>
+          <CardContent className={isWall ? "site-map-card-body p-0" : undefined}>
+            <SiteLayoutCanvas
+              siteId={site.id}
+              floorPlanUrl={site.floor_plan_url || undefined}
+              stations={stations}
+              onCameraSelect={isWall ? setSelectedCamera : undefined}
+              selectedCameraId={isWall ? (selectedCamera?.id ?? null) : null}
+            />
+          </CardContent>
+        </Card>
+
+        {isWall && (
+          <Card className="site-camera-card">
+            <CardHeader className="pb-2">
+              <div className="flex items-baseline justify-between gap-3">
+                <CardTitle>
+                  攝影機即時影像
+                  {selectedCamera && (
+                    <span className="ml-3 text-base text-white/70 font-normal">
+                      {selectedCamera.name}
+                    </span>
+                  )}
+                </CardTitle>
+                {selectedCamera && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedCamera(null)}
+                  >
+                    <X className="w-4 h-4 mr-1" /> 取消選取
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="site-camera-card-body p-0">
+              {selectedCamera?.hls_url ? (
+                <HlsPlayer src={selectedCamera.hls_url} />
+              ) : (
+                <div className="site-camera-placeholder">
+                  <Video className="w-24 h-24 text-white/30" strokeWidth={1.25} />
+                  <p className="site-camera-placeholder-title">尚未選擇攝影機</p>
+                  <p className="site-camera-placeholder-hint">
+                    點地圖上任一攝影機圖示開始播放即時串流
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* 一般模式才顯示這些(電視牆下都到右副牆 slot 了) */}
       {!isWall && (

@@ -257,14 +257,98 @@ html.wall-mode main * {
 html.wall-mode .site-mgmt-grid {
   grid-template-columns: 1700px 1fr !important;
 }
-/* Wall-mode map canvas: 2 TV cells wide × 1500px tall (≈ 2.56:1).
-   Without these overrides aspect-video on a 7700px column gives a 4300px-tall
-   canvas that overflows vertically and a footprint the user doesn't need. */
+/* === 場域管理(電視牆)主牆排版 ===
+   主牆有效區 ≈ 11136 (寬,扣 padding) × 2400 (高,扣 topbar + Header)。
+   排版:site-info bar 細條在上,下面是「地圖 + 攝影機播放」二欄並排,
+   各占主牆寬一半。
+
+   關鍵:地圖 canvas 跟 HLS video 都帶 Tailwind 的 aspect-video (16:9),
+   父寬 ~5500 時會被算成 3094 高把卡撐爆;所以 wall mode 下用「flex chain
+   下傳已知高度 + 子內容 absolute inset:0」強制內容貼齊容器,aspect-ratio
+   被覆蓋成 auto。 */
+html.wall-mode .site-wall-root {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+/* row 用硬高度而不是 flex: 1。
+   外層(site-mgmt-grid → war-room-main-body)是 grid + block 混合,沒有
+   把 flex:1 高度乾淨往下傳;直接固定 2160px(= 2 TV cells)避免百分比
+   解析失敗、也保證 ≥ 2×2 螢幕的需求。 */
+html.wall-mode .site-wall-main-row {
+  display: flex;
+  gap: 24px;
+  height: 2160px;
+}
+html.wall-mode .site-wall-main-row > .site-map-card,
+html.wall-mode .site-wall-main-row > .site-camera-card {
+  flex: 1 1 50%;
+  min-width: 0;
+  height: 100%;                     /* 父有定長度,百分比可解析 */
+  display: flex;
+  flex-direction: column;
+}
+/* card body 用 relative + overflow:hidden,內容用 absolute 塞滿,不會回頭
+   推父容器變更尺寸 — 不論 video 或 canvas 帶什麼 aspect-ratio 都被框住 */
+html.wall-mode .site-map-card-body,
+html.wall-mode .site-camera-card-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+html.wall-mode .site-map-card-body > *,
+html.wall-mode .site-camera-card-body > * {
+  position: absolute;
+  inset: 0;
+}
+/* 地圖 canvas — 撐滿父框,蓋掉 Tailwind 的 aspect-video / w-full 影響 */
 html.wall-mode .site-layout-canvas {
   aspect-ratio: auto !important;
-  width: 3840px !important;
-  height: 1500px !important;
+  width: 100% !important;
+  height: 100% !important;
   max-width: 100% !important;
+  min-height: 0 !important;
+}
+/* 攝影機 pin 被選中時的高亮 — 加 mint 光暈讓使用者一眼看到「正在看哪台」 */
+html.wall-mode .site-camera-pin--active {
+  box-shadow: 0 0 0 4px rgba(128, 255, 232, 0.5),
+              0 0 24px rgba(128, 255, 232, 0.7);
+  transform: scale(1.15);
+}
+/* HlsPlayer 內部 — 蓋掉 .relative 預設行為跟 video 的 aspect-video */
+html.wall-mode .site-camera-card-body > .relative {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  border-radius: 0.5rem;
+}
+html.wall-mode .site-camera-card-body video {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: auto !important;
+  object-fit: contain !important;
+  background: #000;
+  border-radius: 0.5rem;
+}
+html.wall-mode .site-camera-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 0.5rem;
+}
+html.wall-mode .site-camera-placeholder-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+}
+html.wall-mode .site-camera-placeholder-hint {
+  font-size: 1.5rem;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 /* Cap the site-info bar (場域名稱 + badges + 編輯切換) to ~2 TV cells wide
@@ -665,6 +749,349 @@ html.wall-mode .progress-bar-fill {
   height: 100%;
   background: linear-gradient(to right, rgba(114, 182, 201, 0.7), rgba(128, 255, 232, 0.95));
   border-radius: 9999px;
+}
+
+/* === 沒選 DUT 時的聚合視圖樣式 === */
+html.wall-mode .aggregate-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  width: 100%;
+  height: 100%;
+  padding: 2rem;
+  text-align: center;
+}
+html.wall-mode .aggregate-empty-title {
+  font-size: 2.75rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+}
+html.wall-mode .aggregate-empty-hint {
+  font-size: 1.75rem;
+  color: rgba(255, 255, 255, 0.55);
+  max-width: 1600px;
+  line-height: 1.5;
+}
+html.wall-mode .aggregate-stat-row {
+  display: flex;
+  gap: 3rem;
+  margin-top: 1rem;
+}
+html.wall-mode .aggregate-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+html.wall-mode .aggregate-stat-value {
+  font-size: 4rem;
+  font-weight: 800;
+  color: #80FFE8;
+  line-height: 1;
+}
+html.wall-mode .aggregate-stat-label {
+  font-size: 1.5rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+html.wall-mode .truncate-cell {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 右副牆 aggregate slot 共用排版 */
+html.wall-mode .aggregate-slot-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  height: 100%;
+}
+/* 待測物 — 大數字 + 狀態三格 + 在線率 bar */
+html.wall-mode .aggregate-big-number {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem 0;
+}
+html.wall-mode .aggregate-big-value {
+  font-size: 6rem;
+  font-weight: 800;
+  color: #80FFE8;
+  line-height: 1;
+}
+html.wall-mode .aggregate-big-label {
+  font-size: 1.5rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 0.5rem;
+}
+html.wall-mode .aggregate-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+html.wall-mode .aggregate-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem 0.5rem;
+  border-radius: 0.75rem;
+  border: 2px solid;
+}
+html.wall-mode .aggregate-status-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+html.wall-mode .aggregate-status-label {
+  font-size: 1.25rem;
+  margin-top: 0.5rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+html.wall-mode .aggregate-status--online {
+  background: rgba(128, 255, 232, 0.12);
+  border-color: rgba(128, 255, 232, 0.4);
+}
+html.wall-mode .aggregate-status--online .aggregate-status-value { color: #80FFE8; }
+html.wall-mode .aggregate-status--offline {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+html.wall-mode .aggregate-status--offline .aggregate-status-value { color: rgba(255,255,255,0.7); }
+html.wall-mode .aggregate-status--error {
+  background: rgba(244, 196, 199, 0.15);
+  border-color: rgba(244, 196, 199, 0.4);
+}
+html.wall-mode .aggregate-status--error .aggregate-status-value { color: #F4C4C7; }
+
+/* 在線率 bar(也用在介面覆蓋率) */
+html.wall-mode .aggregate-rate {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+html.wall-mode .aggregate-rate-label {
+  font-size: 1.5rem;
+  color: rgba(255, 255, 255, 0.7);
+  flex-shrink: 0;
+}
+html.wall-mode .aggregate-rate-bar {
+  flex: 1;
+  height: 1.25rem;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+html.wall-mode .aggregate-rate-fill {
+  height: 100%;
+  background: linear-gradient(to right, #72B6C9, #80FFE8);
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+html.wall-mode .aggregate-rate-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #80FFE8;
+  flex-shrink: 0;
+  min-width: 5rem;
+  text-align: right;
+}
+
+/* 連線健康度 metric list */
+html.wall-mode .aggregate-metric-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+html.wall-mode .aggregate-metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 1rem 1.25rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.75rem;
+}
+html.wall-mode .aggregate-metric-label {
+  font-size: 1.5rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+html.wall-mode .aggregate-metric-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #80FFE8;
+}
+
+/* 介面覆蓋率 */
+html.wall-mode .aggregate-iface-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+html.wall-mode .aggregate-iface {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+html.wall-mode .aggregate-iface-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+html.wall-mode .aggregate-iface-name {
+  font-size: 2rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+}
+html.wall-mode .aggregate-iface-count {
+  font-size: 1.5rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* === 測試進行中的進度列表(取代「即時測試狀態」折線圖) ===
+   全域 useTestSessionsStore 推 session 進來,每個 session 一列。1 個 session 時
+   list 自動撐滿 band 高度;2+ 時每列等比縮。 */
+html.wall-mode .test-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  height: 100%;
+  padding: 1rem 1.25rem;
+  overflow: hidden;
+}
+html.wall-mode .test-progress-row {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  border: 2px solid rgba(128, 255, 232, 0.35);
+  background: rgba(128, 255, 232, 0.06);
+  border-radius: 1rem;
+  min-height: 0;
+}
+html.wall-mode .test-progress-row--done {
+  border-color: rgba(114, 182, 201, 0.4);
+  background: rgba(114, 182, 201, 0.08);
+}
+html.wall-mode .test-progress-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+html.wall-mode .test-progress-row-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  min-width: 0;
+}
+html.wall-mode .test-progress-row-name {
+  font-size: 2rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html.wall-mode .test-progress-row-type {
+  font-size: 1.25rem;
+  font-weight: 600;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid rgba(128, 255, 232, 0.5);
+  color: #80FFE8;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+html.wall-mode .test-progress-row-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+html.wall-mode .test-progress-row-stepname {
+  font-size: 1.5rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+html.wall-mode .test-progress-row-elapsed {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #80FFE8;
+  min-width: 4.5rem;
+  text-align: right;
+}
+html.wall-mode .test-progress-row-result {
+  font-size: 1.5rem;
+  font-weight: 700;
+  padding: 0.15rem 0.6rem;
+  border-radius: 9999px;
+}
+html.wall-mode .test-progress-row-result--pass {
+  background: rgba(128, 255, 232, 0.15);
+  color: #80FFE8;
+  border: 1px solid rgba(128, 255, 232, 0.5);
+}
+html.wall-mode .test-progress-row-result--fail {
+  background: rgba(244, 196, 199, 0.15);
+  color: #F4C4C7;
+  border: 1px solid rgba(244, 196, 199, 0.5);
+}
+
+html.wall-mode .test-progress-bar {
+  height: 0.85rem;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+html.wall-mode .test-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(to right, #72B6C9, #80FFE8);
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+/* 每列下方的介面 pills(O1 / A1 / E2 等)— 橫向排列、迷你版步驟指示 */
+html.wall-mode .test-progress-row-steps {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+html.wall-mode .test-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 1.5rem;
+  font-weight: 600;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.7);
+}
+html.wall-mode .test-pill--pending {
+  opacity: 0.55;
+}
+html.wall-mode .test-pill--running {
+  border-color: rgba(128, 255, 232, 0.6);
+  background: rgba(128, 255, 232, 0.12);
+  color: #80FFE8;
+}
+html.wall-mode .test-pill--done,
+html.wall-mode .test-pill--pass {
+  border-color: rgba(114, 182, 201, 0.5);
+  background: rgba(114, 182, 201, 0.12);
+  color: #72B6C9;
+}
+html.wall-mode .test-pill--fail {
+  border-color: rgba(244, 196, 199, 0.5);
+  background: rgba(244, 196, 199, 0.12);
+  color: #F4C4C7;
 }
 
 /* 即時環境影像內的播放器 placeholder */

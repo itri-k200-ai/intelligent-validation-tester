@@ -1,5 +1,5 @@
 "use client";
-import { CheckCircle2, Circle, Maximize2, Pause, Pencil, Play, Plus, RefreshCw, Video, Volume2, XCircle } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, Maximize2, Pause, Pencil, Play, Plus, RefreshCw, Video, Volume2, XCircle } from "lucide-react";
 import {
   CartesianGrid,
   Legend,
@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
@@ -24,8 +24,13 @@ import { useDutInterfaceTest } from "@/hooks/Dut/useDutInterfaceTest";
 import { useDutList } from "@/hooks/Dut/useDutList";
 import { useSites } from "@/hooks/Site/useSites";
 import { formatDate } from "@/lib/formatters";
+import {
+  useTestSessionsStore,
+  type TestSession,
+} from "@/stores/testSessionsStore";
 import { useIsWallMode } from "@/stores/wallModeStore";
 import type { DutType } from "@/types/common";
+import { AVAILABLE_INTERFACES } from "@/types/dut";
 import type { Dut, InterfaceTestResult } from "@/types/dut";
 
 import { DutDetailCard } from "./DutDetailCard";
@@ -50,6 +55,9 @@ export function DutManagementContainer({ dutType }: { dutType: DutType }) {
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const isWall = useIsWallMode();
+  const startSession = useTestSessionsStore((s) => s.start);
+  const completeSession = useTestSessionsStore((s) => s.complete);
+  const removeSession = useTestSessionsStore((s) => s.remove);
 
   const deleteOne = async (d: Dut) => {
     if (!confirm(`確定刪除 DUT「${d.name}」?`)) return;
@@ -90,13 +98,43 @@ export function DutManagementContainer({ dutType }: { dutType: DutType }) {
 
   const runTest = async () => {
     if (!selected) return;
-    const result = await testInterface({
-      id: selected.id,
-      interfaces: selected.interfaces,
-    });
-    setTestResult(result);
+    // 先把「執行測試」dialog 關掉,不要遮住主牆進度面板
     setTestDialogOpen(false);
-    await refresh();
+    const sessionId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const dut = selected;
+    startSession({
+      id: sessionId,
+      kind: "interface-validation",
+      dutId: dut.id,
+      dutName: dut.name,
+      dutType: dut.type,
+      interfaces: dut.interfaces,
+      stepDurationMs: STEP_DURATION_MS,
+    });
+    const startedAt = Date.now();
+    const minDuration = Math.max(1, dut.interfaces.length) * STEP_DURATION_MS;
+    try {
+      const result = await testInterface({
+        id: dut.id,
+        interfaces: dut.interfaces,
+      });
+      // 後端可能瞬間就回(mock 500ms),強制等步驟動畫至少跑完一輪
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < minDuration) {
+        await new Promise((r) => setTimeout(r, minDuration - elapsed));
+      }
+      setTestResult(result);
+      completeSession(sessionId, result);
+      await refresh();
+      // session 顯示「完成」狀態 2 秒後移除,讓使用者看到結果再消失
+      setTimeout(() => removeSession(sessionId), 2000);
+    } catch (err) {
+      removeSession(sessionId);
+      throw err;
+    }
   };
 
   const onSelect = (d: Dut) => {
@@ -107,8 +145,12 @@ export function DutManagementContainer({ dutType }: { dutType: DutType }) {
   if (isWall) {
     return (
       <>
-        {/* 主牆:三條色帶 — 即時環境影像 / 即時測試狀態 / 即時測試結果 */}
-        <DutWallBands dut={selected} testResult={testResult} />
+        {/* 主牆:選了 DUT → 該 DUT 的三條色帶;沒選 → 該 dutType 全部設備聚合視圖 */}
+        {selected ? (
+          <DutWallBands dut={selected} testResult={testResult} />
+        ) : (
+          <DutWallBandsAggregate duts={duts} dutType={dutType} />
+        )}
 
         {/* 左副牆 page-context slot:DUT 列表 */}
         <LeftWingSlot>
@@ -126,13 +168,22 @@ export function DutManagementContainer({ dutType }: { dutType: DutType }) {
           />
         </LeftWingSlot>
 
-        {/* 右副牆 slot:選了 DUT 之後三格各自顯示細節(基本/連接/介面) */}
+        {/* 右副牆 slot:選了 DUT → 三格各自顯示細節(基本/連接/介面);
+            沒選 → 三格顯示聚合統計(總覽/連線健康度/介面覆蓋率) */}
         <RightWingSlots
           dut={
-            selected ? <DutSlotBasic dut={selected} /> : <SlotEmpty label="待測物" />
+            selected ? (
+              <DutSlotBasic dut={selected} />
+            ) : (
+              <DutSlotAggregateOverview duts={duts} dutType={dutType} />
+            )
           }
           equip={
-            selected ? <DutSlotConnection dut={selected} /> : <SlotEmpty label="測試設備" />
+            selected ? (
+              <DutSlotConnection dut={selected} />
+            ) : (
+              <DutSlotAggregateConnection duts={duts} />
+            )
           }
           method={
             selected ? (
@@ -142,7 +193,7 @@ export function DutManagementContainer({ dutType }: { dutType: DutType }) {
                 onRunTest={() => setTestDialogOpen(true)}
               />
             ) : (
-              <SlotEmpty label="測試方法" />
+              <DutSlotAggregateInterfaces duts={duts} dutType={dutType} />
             )
           }
         />
@@ -368,11 +419,257 @@ function DutSlotList({
   );
 }
 
-// 沒有選 DUT 時的空 slot placeholder
-function SlotEmpty({ label }: { label: string }) {
+// === 沒選 DUT 時的聚合視圖(全部 dutType 設備) ===
+
+// 主牆 aggregate 三條色帶
+function DutWallBandsAggregate({
+  duts,
+  dutType,
+}: {
+  duts: Dut[];
+  dutType: DutType;
+}) {
+  const total = duts.length;
+  const online = duts.filter((d) => d.status === "online").length;
+  const offline = duts.filter((d) => d.status === "offline").length;
+  const errored = duts.filter((d) => d.status === "error").length;
+  const onlineRate = total ? Math.round((online / total) * 100) : 0;
+
   return (
-    <SlotPanel title={label}>
-      <p className="text-sm text-white/40">先選擇 DUT</p>
+    <div className="dut-wall-bands">
+      {/* 環境影像 — 沒選 DUT 時改成 onboarding/說明 */}
+      <div className="dut-wall-band dut-wall-band--env">
+        <div className="dut-wall-band-title">即時環境影像</div>
+        <div className="dut-wall-band-body">
+          <div className="aggregate-empty">
+            <Video className="w-32 h-32 text-white/30" strokeWidth={1.25} />
+            <p className="aggregate-empty-title">尚未選擇設備</p>
+            <p className="aggregate-empty-hint">
+              從左側 DUT 列表選擇任一 {dutType} 設備檢視該場域的環境串流
+            </p>
+            <div className="aggregate-stat-row">
+              <div className="aggregate-stat">
+                <div className="aggregate-stat-value">{total}</div>
+                <div className="aggregate-stat-label">{dutType} 設備總數</div>
+              </div>
+              <div className="aggregate-stat">
+                <div className="aggregate-stat-value">{onlineRate}%</div>
+                <div className="aggregate-stat-label">在線率</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 測試狀態 — 全部 DUT 平均回應時間趨勢(各 interface 類型) */}
+      <div className="dut-wall-band dut-wall-band--status">
+        <div className="dut-wall-band-title">
+          即時測試狀態 — 全部 {dutType}
+        </div>
+        <div className="dut-wall-band-body dut-wall-band-body--chart">
+          <DutStatusChart />
+        </div>
+      </div>
+
+      {/* 測試結果 — 全部 DUT 狀態總覽 */}
+      <div className="dut-wall-band dut-wall-band--result">
+        <div className="dut-wall-band-title">
+          全部設備狀態 — 共 {total} 台 / 在線 {online} / 離線 {offline} / 異常 {errored}
+        </div>
+        <div className="dut-wall-band-body">
+          {total === 0 ? (
+            <div className="aggregate-empty">
+              <p className="aggregate-empty-title">尚無 {dutType} 設備</p>
+              <p className="aggregate-empty-hint">點左側「新增」建立第一台</p>
+            </div>
+          ) : (
+            <table className="dut-wall-table">
+              <thead>
+                <tr>
+                  <th>設備</th>
+                  <th>狀態</th>
+                  <th>回應時間</th>
+                  <th>最後檢查</th>
+                </tr>
+              </thead>
+              <tbody>
+                {duts.slice(0, 6).map((d) => (
+                  <tr key={d.id}>
+                    <td className="truncate-cell">{d.name}</td>
+                    <td>
+                      <span
+                        className={`result-pill result-pill--${
+                          d.status === "online"
+                            ? "pass"
+                            : d.status === "error"
+                              ? "fail"
+                              : "fail"
+                        }`}
+                      >
+                        {d.status === "online"
+                          ? "在線"
+                          : d.status === "error"
+                            ? "異常"
+                            : "離線"}
+                      </span>
+                    </td>
+                    <td className="tabular">
+                      {d.response_time_ms != null ? `${d.response_time_ms}ms` : "—"}
+                    </td>
+                    <td className="tabular">{formatDate(d.last_check) ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 右副牆「待測物」格 aggregate — 設備總覽(總數 / 各狀態統計)
+function DutSlotAggregateOverview({
+  duts,
+  dutType,
+}: {
+  duts: Dut[];
+  dutType: DutType;
+}) {
+  const total = duts.length;
+  const online = duts.filter((d) => d.status === "online").length;
+  const offline = duts.filter((d) => d.status === "offline").length;
+  const errored = duts.filter((d) => d.status === "error").length;
+  const onlineRate = total ? Math.round((online / total) * 100) : 0;
+
+  return (
+    <SlotPanel title="待測物" subtitle={`${dutType} 全部設備`}>
+      <div className="aggregate-slot-body">
+        <div className="aggregate-big-number">
+          <div className="aggregate-big-value">{total}</div>
+          <div className="aggregate-big-label">總設備數</div>
+        </div>
+        <div className="aggregate-status-grid">
+          <div className="aggregate-status aggregate-status--online">
+            <div className="aggregate-status-value">{online}</div>
+            <div className="aggregate-status-label">在線</div>
+          </div>
+          <div className="aggregate-status aggregate-status--offline">
+            <div className="aggregate-status-value">{offline}</div>
+            <div className="aggregate-status-label">離線</div>
+          </div>
+          <div className="aggregate-status aggregate-status--error">
+            <div className="aggregate-status-value">{errored}</div>
+            <div className="aggregate-status-label">異常</div>
+          </div>
+        </div>
+        <div className="aggregate-rate">
+          <div className="aggregate-rate-label">整體在線率</div>
+          <div className="aggregate-rate-bar">
+            <div
+              className="aggregate-rate-fill"
+              style={{ width: `${onlineRate}%` }}
+            />
+          </div>
+          <div className="aggregate-rate-value">{onlineRate}%</div>
+        </div>
+      </div>
+    </SlotPanel>
+  );
+}
+
+// 右副牆「測試設備」格 aggregate — 連線健康度
+function DutSlotAggregateConnection({ duts }: { duts: Dut[] }) {
+  const responseTimes = duts
+    .map((d) => d.response_time_ms)
+    .filter((x): x is number => x != null);
+  const avgResponse = responseTimes.length
+    ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
+    : null;
+  const minResponse = responseTimes.length ? Math.min(...responseTimes) : null;
+  const maxResponse = responseTimes.length ? Math.max(...responseTimes) : null;
+  const checked = duts.filter((d) => d.last_check != null).length;
+
+  return (
+    <SlotPanel title="測試設備" subtitle="連線健康度">
+      <div className="aggregate-slot-body">
+        <div className="aggregate-metric-list">
+          <div className="aggregate-metric">
+            <span className="aggregate-metric-label">平均回應時間</span>
+            <span className="aggregate-metric-value">
+              {avgResponse != null ? `${avgResponse} ms` : "—"}
+            </span>
+          </div>
+          <div className="aggregate-metric">
+            <span className="aggregate-metric-label">最快</span>
+            <span className="aggregate-metric-value">
+              {minResponse != null ? `${minResponse} ms` : "—"}
+            </span>
+          </div>
+          <div className="aggregate-metric">
+            <span className="aggregate-metric-label">最慢</span>
+            <span className="aggregate-metric-value">
+              {maxResponse != null ? `${maxResponse} ms` : "—"}
+            </span>
+          </div>
+          <div className="aggregate-metric">
+            <span className="aggregate-metric-label">已檢查</span>
+            <span className="aggregate-metric-value">
+              {checked} / {duts.length}
+            </span>
+          </div>
+        </div>
+      </div>
+    </SlotPanel>
+  );
+}
+
+// 右副牆「測試方法」格 aggregate — 介面覆蓋率
+function DutSlotAggregateInterfaces({
+  duts,
+  dutType,
+}: {
+  duts: Dut[];
+  dutType: DutType;
+}) {
+  const allIfaces = AVAILABLE_INTERFACES[dutType];
+  const counts = allIfaces.map((iface) => ({
+    iface,
+    count: duts.filter((d) => d.interfaces.includes(iface)).length,
+    rate: duts.length
+      ? Math.round(
+          (duts.filter((d) => d.interfaces.includes(iface)).length / duts.length) *
+            100,
+        )
+      : 0,
+  }));
+
+  return (
+    <SlotPanel title="測試方法" subtitle="介面覆蓋率">
+      <div className="aggregate-slot-body">
+        {counts.length === 0 ? (
+          <p className="text-sm text-white/40">此設備類型未定義介面</p>
+        ) : (
+          <div className="aggregate-iface-list">
+            {counts.map((c) => (
+              <div key={c.iface} className="aggregate-iface">
+                <div className="aggregate-iface-header">
+                  <span className="aggregate-iface-name">{c.iface}</span>
+                  <span className="aggregate-iface-count">
+                    {c.count} / {duts.length}
+                  </span>
+                </div>
+                <div className="aggregate-rate-bar">
+                  <div
+                    className="aggregate-rate-fill"
+                    style={{ width: `${c.rate}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </SlotPanel>
   );
 }
@@ -385,6 +682,8 @@ function DutWallBands({
   dut: Dut | null;
   testResult: InterfaceTestResult | null;
 }) {
+  const sessions = useTestSessionsStore((s) => s.sessions);
+  const hasSessions = sessions.length > 0;
   return (
     <div className="dut-wall-bands">
       <div className="dut-wall-band dut-wall-band--env">
@@ -423,10 +722,20 @@ function DutWallBands({
         </div>
       </div>
       <div className="dut-wall-band dut-wall-band--status">
-        <div className="dut-wall-band-title">即時測試狀態</div>
-        <div className="dut-wall-band-body dut-wall-band-body--chart">
-          <DutStatusChart />
+        <div className="dut-wall-band-title">
+          {hasSessions
+            ? `即時測試狀態 — ${sessions.length} 個進行中`
+            : "即時測試狀態"}
         </div>
+        {hasSessions ? (
+          <div className="dut-wall-band-body">
+            <TestProgressList sessions={sessions} />
+          </div>
+        ) : (
+          <div className="dut-wall-band-body dut-wall-band-body--chart">
+            <DutStatusChart />
+          </div>
+        )}
       </div>
       <div className="dut-wall-band dut-wall-band--result">
         <div className="dut-wall-band-title">即時測試結果</div>
@@ -468,6 +777,119 @@ function DutWallBands({
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// 主牆「即時測試狀態」執行中 — 進度列表。每個 session 一列,顯示 DUT 名稱 +
+// 當前步驟 + 進度 bar + 已耗時。後端目前是一次回所有結果(沒有 per-interface
+// streaming),所以「當前步驟」用 elapsed/stepDurationMs 做合成切換 — 視覺上
+// 有逐步推進感,完成時實際結果由 runTest 落到右副牆「測試方法」格。
+const STEP_DURATION_MS = 1500;
+
+function TestProgressList({ sessions }: { sessions: TestSession[] }) {
+  // 用一個 100ms 的 ticker 強制全部 row 一起 re-render(共用 elapsed 計算)
+  const [, tick] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => {
+    const id = setInterval(tick, 100);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div className="test-progress-list">
+      {sessions.map((s) => (
+        <TestProgressRow key={s.id} session={s} />
+      ))}
+    </div>
+  );
+}
+
+function TestProgressRow({ session }: { session: TestSession }) {
+  const total = session.interfaces.length;
+  const isDone = session.status === "done";
+  const elapsed = isDone
+    ? total * session.stepDurationMs
+    : Date.now() - session.startedAt;
+  const totalDuration = total * session.stepDurationMs;
+  const currentIdx = isDone
+    ? total
+    : Math.min(Math.floor(elapsed / session.stepDurationMs), total - 1);
+  const progressPct = isDone
+    ? 100
+    : totalDuration
+      ? Math.min(100, (elapsed / totalDuration) * 100)
+      : 0;
+  const allOk = isDone && session.result?.ok;
+
+  return (
+    <div
+      className={`test-progress-row ${isDone ? "test-progress-row--done" : ""}`}
+    >
+      <div className="test-progress-row-head">
+        <div className="test-progress-row-title">
+          <span className="test-progress-row-name">{session.dutName}</span>
+          <span className="test-progress-row-type">{session.dutType}</span>
+        </div>
+        <div className="test-progress-row-meta">
+          {isDone ? (
+            <span
+              className={
+                allOk
+                  ? "test-progress-row-result test-progress-row-result--pass"
+                  : "test-progress-row-result test-progress-row-result--fail"
+              }
+            >
+              {allOk ? "全部通過" : "有失敗"}
+            </span>
+          ) : (
+            <span className="test-progress-row-stepname">
+              {session.interfaces[currentIdx] ?? ""} · {currentIdx + 1}/{total}
+            </span>
+          )}
+          <span className="test-progress-row-elapsed">
+            {(elapsed / 1000).toFixed(1)}s
+          </span>
+        </div>
+      </div>
+      <div className="test-progress-bar">
+        <div
+          className="test-progress-bar-fill"
+          style={{ width: `${progressPct}%` }}
+        />
+      </div>
+      <div className="test-progress-row-steps">
+        {session.interfaces.map((iface, i) => {
+          const status: "done" | "running" | "pending" = isDone
+            ? "done"
+            : i < currentIdx
+              ? "done"
+              : i === currentIdx
+                ? "running"
+                : "pending";
+          // 完成後若 result 有 per-interface 詳情,以實際結果取代合成
+          const ifaceResult = isDone ? session.result?.results[iface] : null;
+          const finalOk = ifaceResult ? ifaceResult.ok : status === "done";
+          return (
+            <div
+              key={iface}
+              className={`test-pill test-pill--${
+                isDone ? (finalOk ? "pass" : "fail") : status
+              }`}
+            >
+              {status === "running" && (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              )}
+              {status === "done" &&
+                (finalOk ? (
+                  <CheckCircle2 className="w-5 h-5" />
+                ) : (
+                  <XCircle className="w-5 h-5" />
+                ))}
+              {status === "pending" && <Circle className="w-5 h-5" />}
+              <span>{iface}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
