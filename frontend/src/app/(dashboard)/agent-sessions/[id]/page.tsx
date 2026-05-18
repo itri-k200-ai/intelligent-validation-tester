@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { use } from "react";
 
+import { authDownload } from "@/lib/authDownload";
 import { apiClient } from "@/services/api/client";
 
 type Trace = {
@@ -219,8 +220,10 @@ export default function AgentSessionTracePage({ params }: { params: Promise<{ id
                     <td className="px-3 py-2 text-xs">{e.description}</td>
                     <td className="px-3 py-2 text-xs">
                       {e.download_url && (
-                        <a href={e.download_url} target="_blank" rel="noreferrer"
-                           className="text-teal hover:underline">↓ 下載</a>
+                        <button
+                          onClick={() => authDownload(e.download_url!, e.name)}
+                          className="text-teal hover:underline"
+                        >↓ 下載</button>
                       )}
                     </td>
                   </tr>
@@ -258,8 +261,10 @@ export default function AgentSessionTracePage({ params }: { params: Promise<{ id
                     <td className="px-3 py-2 text-xs">{a.description}</td>
                     <td className="px-3 py-2 text-xs">
                       {a.download_url && (
-                        <a href={a.download_url} target="_blank" rel="noreferrer"
-                           className="text-teal hover:underline">↓ 下載</a>
+                        <button
+                          onClick={() => authDownload(a.download_url!, a.relpath.split("/").pop())}
+                          className="text-teal hover:underline"
+                        >↓ 下載</button>
                       )}
                     </td>
                   </tr>

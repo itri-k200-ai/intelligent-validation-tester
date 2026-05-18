@@ -175,14 +175,16 @@ export function ScenarioDetailContainer({ id }: { id: string }) {
                 </Field>
               </div>
               {(scenario as any).source_document_download_url && (
-                <a
-                  href={(scenario as any).source_document_download_url}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  onClick={() => import("@/lib/authDownload").then((m) =>
+                    m.authDownload(
+                      (scenario as any).source_document_download_url,
+                      (scenario as any).source_document_name
+                    ))}
                   className="mt-3 inline-flex items-center gap-1 text-teal text-xs hover:underline"
                 >
                   ↓ 下載證據 PDF / 文件
-                </a>
+                </button>
               )}
             </CardContent>
           </Card>

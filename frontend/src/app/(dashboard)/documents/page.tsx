@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
+import { authDownload } from "@/lib/authDownload";
 import { apiClient } from "@/services/api/client";
 
 type Doc = {
@@ -102,14 +104,13 @@ export default function DocumentsPage() {
                   <td className="px-3 py-2 text-right text-xs text-white/70">{fmtKB(d.size_bytes)}</td>
                   <td className="px-3 py-2">
                     {d.download_url && (
-                      <a
-                        href={d.download_url}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        onClick={() => authDownload(d.download_url!,
+                          `${d.doc_number || d.name}${d.version ? "-" + d.version : ""}`)}
                         className="text-teal hover:underline text-xs"
                       >
                         ↓ 下載
-                      </a>
+                      </button>
                     )}
                   </td>
                 </tr>
