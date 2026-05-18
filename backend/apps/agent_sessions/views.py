@@ -1,6 +1,15 @@
+from urllib.parse import quote
+
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from rest_framework import viewsets
+
+
+def _attachment_header(filename: str) -> str:
+    """RFC 6266 — Content-Disposition 支援 UTF-8 檔名（含繁中）。
+    雙寫 ASCII fallback + filename* 讓所有瀏覽器都正確存。"""
+    ascii_safe = filename.encode("ascii", "ignore").decode("ascii") or "download"
+    return f"attachment; filename=\"{ascii_safe}\"; filename*=UTF-8''{quote(filename)}"
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -124,7 +133,7 @@ class AgentArtifactViewSet(viewsets.ModelViewSet):
         if art.text_content:
             ct = art.content_type or "text/plain; charset=utf-8"
             resp = HttpResponse(art.text_content, content_type=ct)
-            resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+            resp["Content-Disposition"] = _attachment_header(filename)
             return resp
         if art.storage_key:
             bucket = "agent-artifacts"
@@ -155,7 +164,7 @@ class EvidenceViewSet(viewsets.ModelViewSet):
         if ev.text_content:
             ct = ev.content_type or "text/plain; charset=utf-8"
             resp = HttpResponse(ev.text_content, content_type=ct)
-            resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+            resp["Content-Disposition"] = _attachment_header(filename)
             return resp
         if ev.storage_key:
             bucket = "evidence"
