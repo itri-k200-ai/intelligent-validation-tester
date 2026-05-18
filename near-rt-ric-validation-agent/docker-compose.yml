@@ -1,0 +1,86 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ${APP_SLUG}-db
+    environment:
+      POSTGRES_DB: ${APP_SLUG}
+      POSTGRES_USER: ${APP_SLUG}
+      POSTGRES_PASSWORD: ${APP_SLUG}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${APP_SLUG} -d $${APP_SLUG}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-latest}
+    container_name: ${APP_SLUG}-backend
+    environment:
+      DJANGO_SETTINGS_MODULE: app.settings
+      DATABASE_URL: postgres://${APP_SLUG}:${APP_SLUG}@db:5432/${APP_SLUG}
+      REPO_ROOT: /workspace
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Single-user login. Leave empty to disable auth (dev). Set anything to
+      # require it (production / when exposing via cloudflared).
+      APP_PASSWORD: ${APP_PASSWORD-}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-insecure-single-admin}
+      CLAUDE_CONFIG_DIR: /workspace/.claude
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - .:/workspace
+    working_dir: /workspace/backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ${APP_SLUG}-frontend
+    environment:
+      # Empty = same-origin via Next.js rewrites (lets Cloudflare tunnel work).
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE-}
+      # Where Next.js' SSR proxy forwards /api/* to (inside Docker network).
+      BACKEND_INTERNAL_URL: http://backend:8000
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+      - frontend_next_cache:/app/.next
+    ports:
+      - "3010:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Cloudflare quick tunnel — dynamic ephemeral *.trycloudflare.com URL.
+  # URL is printed to logs once the tunnel registers; retrieve via:
+  #   docker logs ${APP_SLUG}-tunnel 2>&1 | grep trycloudflare.com
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: ${APP_SLUG}-tunnel
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --url
+      - http://frontend:3000
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  frontend_node_modules:
+  frontend_next_cache:

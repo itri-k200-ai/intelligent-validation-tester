@@ -1,0 +1,87 @@
+{
+  "app": {
+    "name": {
+      "en": "Near-RT RIC Validation Agent",
+      "zh": "Near-RT RIC 驗測 Agent"
+    },
+    "slug": "near_rt_ric_validation_agent",
+    "description": {
+      "en": "Validates and tests Near-RT RIC systems.",
+      "zh": "Near-RT RIC 系統驗證與測試。"
+    }
+  },
+  "default_lang": "zh",
+  "features": {
+    "knowledge_tab": true,
+    "growth_timeline": true,
+    "file_upload": true,
+    "artifacts": true,
+    "personas": false
+  },
+  "hero": {
+    "title": {
+      "en": "What do you want to validate today?",
+      "zh": "今天想驗測什麼？"
+    },
+    "subtitle": {
+      "en": "Describe a Near-RT RIC scenario, paste a pcap / log, or pick a starter below.",
+      "zh": "描述你的 Near-RT RIC 驗測情境，貼上 pcap / log，或挑一個下面的起手式。"
+    },
+    "features": [
+      {
+        "icon": "spec",
+        "title": { "en": "Spec-grounded", "zh": "對齊 O-RAN 規格" },
+        "desc": {
+          "en": "Cites O-RAN WG3 documents and section numbers — no hand-waving.",
+          "zh": "引用 O-RAN WG3 文件與章節，不憑印象講規格。"
+        }
+      },
+      {
+        "icon": "pcap",
+        "title": { "en": "Reads your captures", "zh": "看你的抓包" },
+        "desc": {
+          "en": "Paste E2AP / A1 messages or upload pcap — agent walks the flow and flags deviations.",
+          "zh": "貼上 E2AP / A1 訊息或上傳 pcap，幫你走流程、找不合規處。"
+        }
+      },
+      {
+        "icon": "plan",
+        "title": { "en": "Generates test plans", "zh": "產出測試計畫" },
+        "desc": {
+          "en": "Per E2 procedure or E2SM, with pre-conditions, steps, expected results, pass/fail.",
+          "zh": "針對 E2 程序或 E2SM 產出前置、步驟、預期結果、pass/fail。"
+        }
+      }
+    ],
+    "prompts": [
+      {
+        "label": { "en": "Plan E2 Setup conformance test", "zh": "幫我寫 E2 Setup 一致性測試" },
+        "prompt": {
+          "en": "Generate a conformance test plan for the E2 Setup procedure between Near-RT RIC and an E2 Node. Cover success, reject, and timeout cases. Cite the relevant O-RAN.WG3.E2AP sections.",
+          "zh": "幫我針對 Near-RT RIC ↔ E2 Node 的 E2 Setup 程序產出一份一致性測試計畫，涵蓋成功、reject、timeout 三種情境，並標出對應的 O-RAN.WG3.E2AP 章節。"
+        }
+      },
+      {
+        "label": { "en": "Review my KPM xApp subscription", "zh": "幫我看 KPM xApp 的訂閱" },
+        "prompt": {
+          "en": "I will paste my KPM xApp's RIC Subscription Request (ASN.1 / hex / JSON). Walk the message, point out any spec deviations, and suggest a minimal indication-handling skeleton.",
+          "zh": "我會貼我的 KPM xApp RIC Subscription Request（ASN.1 / hex / JSON）。請幫我走訊息、指出不合規處，並給一份最小的 Indication 處理骨架。"
+        }
+      },
+      {
+        "label": { "en": "Diff O-RAN SC vs FlexRIC on E2 Setup", "zh": "比對 O-RAN SC 與 FlexRIC 的 E2 Setup" },
+        "prompt": {
+          "en": "Compare how O-RAN SC RIC and FlexRIC implement the E2 Setup procedure: message fields populated, default timer values, behaviour on E2 Reset. Highlight interop risks.",
+          "zh": "比較 O-RAN SC RIC 與 FlexRIC 在 E2 Setup 程序上的差異：填了哪些欄位、預設 timer、遇到 E2 Reset 的行為。標出可能的互通風險。"
+        }
+      },
+      {
+        "label": { "en": "Analyse my E2AP pcap", "zh": "分析我的 E2AP pcap" },
+        "prompt": {
+          "en": "I will upload a pcap containing E2AP traffic. Identify the procedures, measure RIC Indication end-to-end latency, and flag any malformed or out-of-sequence messages.",
+          "zh": "我會上傳一份含 E2AP 流量的 pcap。請辨識其中的程序、量 RIC Indication 端到端延遲，並標出格式錯誤或順序錯亂的訊息。"
+        }
+      }
+    ]
+  }
+}

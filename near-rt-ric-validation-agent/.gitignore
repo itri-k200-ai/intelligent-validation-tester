@@ -1,0 +1,57 @@
+# OS / editor junk
+desktop.ini
+Thumbs.db
+.DS_Store
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Build / log artifacts
+*.log
+*.o
+*.obj
+*.so
+*.a
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Local env / secrets
+.env
+.env.local
+*.local
+
+# Web UI uploads (files dropped via chat)
+uploads/
+
+# Agent-produced artifacts (runtime; do not commit per-deployment output)
+generated/
+
+# Claude Code user-config in repo .claude/ — only commit agents/ + settings.json,
+# never credentials / per-project memory / cache / sessions / plugins.
+.claude/.credentials.json
+.claude/.claude.json
+.claude/projects/
+.claude/sessions/
+.claude/backups/
+.claude/plugins/
+.claude/todos/
+.claude/cache/
+.claude/history/
+.claude/statsig/
+.claude/shell-snapshots/
+.claude/conversation*.jsonl
+.claude/mcp-needs-auth-cache.json
+.claude/.last-cleanup
+
+# Random screenshot pastes (do NOT commit)
+image*.png
+"image copy*.png"
+frontend/tsconfig.tsbuildinfo
+frontend/node_modules/
+frontend/.next/
