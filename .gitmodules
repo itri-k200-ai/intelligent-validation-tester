@@ -1,0 +1,3 @@
+[submodule "near-rt-ric-validation-agent"]
+	path = near-rt-ric-validation-agent
+	url = https://github.com/itri-k200-ai/near-rt-ric-validation-agent.git
