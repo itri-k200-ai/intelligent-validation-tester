@@ -38,11 +38,13 @@ type Trace = {
     }>;
   }>;
   artifacts: Array<{
+    id?: string;
     relpath: string;
     size_bytes: number | null;
     sha256?: string;
     content_type?: string;
     description?: string;
+    download_url?: string;
   }>;
   case_results?: Array<{
     case_id: string;
@@ -54,12 +56,14 @@ type Trace = {
     evidence_count: number;
   }>;
   evidence?: Array<{
+    id?: string;
     kind: string;
     name: string;
     size_bytes: number | null;
     captured_with: string;
     description: string;
     result_id: string | null;
+    download_url?: string;
   }>;
 };
 
@@ -200,6 +204,7 @@ export default function AgentSessionTracePage({ params }: { params: Promise<{ id
                   <th className="px-3 py-2">擷取工具</th>
                   <th className="px-3 py-2 text-right">大小</th>
                   <th className="px-3 py-2">說明</th>
+                  <th className="px-3 py-2">下載</th>
                 </tr>
               </thead>
               <tbody>
@@ -212,6 +217,12 @@ export default function AgentSessionTracePage({ params }: { params: Promise<{ id
                       {e.size_bytes ? `${(e.size_bytes / 1024).toFixed(1)} KB` : "—"}
                     </td>
                     <td className="px-3 py-2 text-xs">{e.description}</td>
+                    <td className="px-3 py-2 text-xs">
+                      {e.download_url && (
+                        <a href={e.download_url} target="_blank" rel="noreferrer"
+                           className="text-teal hover:underline">↓ 下載</a>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -233,6 +244,7 @@ export default function AgentSessionTracePage({ params }: { params: Promise<{ id
                   <th className="px-3 py-2">類型</th>
                   <th className="px-3 py-2 text-right">大小</th>
                   <th className="px-3 py-2">說明</th>
+                  <th className="px-3 py-2">下載</th>
                 </tr>
               </thead>
               <tbody>
@@ -244,6 +256,12 @@ export default function AgentSessionTracePage({ params }: { params: Promise<{ id
                       {a.size_bytes ? `${(a.size_bytes / 1024).toFixed(1)} KB` : "—"}
                     </td>
                     <td className="px-3 py-2 text-xs">{a.description}</td>
+                    <td className="px-3 py-2 text-xs">
+                      {a.download_url && (
+                        <a href={a.download_url} target="_blank" rel="noreferrer"
+                           className="text-teal hover:underline">↓ 下載</a>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

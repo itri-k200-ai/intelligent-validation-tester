@@ -1,7 +1,11 @@
+from django.http import HttpResponse
+from django.shortcuts import redirect
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
+from core import storage
 
 from .models import (
     AgentArtifact, AgentCommand, AgentSession, AgentStep,
@@ -56,8 +60,10 @@ class AgentSessionViewSet(viewsets.ModelViewSet):
                 ],
             })
         artifacts_data = [
-            {"relpath": a.relpath, "size_bytes": a.size_bytes, "sha256": a.sha256,
-             "content_type": a.content_type, "description": a.description}
+            {"id": str(a.id), "relpath": a.relpath, "size_bytes": a.size_bytes,
+             "sha256": a.sha256, "content_type": a.content_type,
+             "description": a.description,
+             "download_url": f"/api/agent-artifacts/{a.id}/download/"}
             for a in session.artifacts.all()
         ]
         case_results_data = [
@@ -73,9 +79,11 @@ class AgentSessionViewSet(viewsets.ModelViewSet):
             for r in session.case_results.all().select_related("test_case")
         ]
         evidence_data = [
-            {"kind": e.kind, "name": e.name, "size_bytes": e.size_bytes,
-             "captured_with": e.captured_with, "description": e.description,
-             "result_id": str(e.result_id) if e.result_id else None}
+            {"id": str(e.id), "kind": e.kind, "name": e.name,
+             "size_bytes": e.size_bytes, "captured_with": e.captured_with,
+             "description": e.description,
+             "result_id": str(e.result_id) if e.result_id else None,
+             "download_url": f"/api/evidence/{e.id}/download/"}
             for e in session.evidence.all()
         ]
         return Response({
@@ -107,6 +115,22 @@ class AgentArtifactViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filterset_fields = ("session",)
 
+    @action(detail=True, methods=["get"], url_path="download")
+    def download(self, request, pk=None):
+        """text_content 直接吐成檔；storage_key 跳 MinIO presigned。"""
+        art = self.get_object()
+        filename = art.relpath.rsplit("/", 1)[-1] or f"artifact-{art.id}"
+        if art.text_content:
+            ct = art.content_type or "text/plain; charset=utf-8"
+            resp = HttpResponse(art.text_content, content_type=ct)
+            resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+            return resp
+        if art.storage_key:
+            bucket = "agent-artifacts"
+            url = storage.presigned_download_url(bucket, art.storage_key, expires_seconds=3600)
+            return redirect(url)
+        return Response({"error": "no content"}, status=404)
+
 
 class TestCaseResultViewSet(viewsets.ModelViewSet):
     queryset = TestCaseResult.objects.select_related("session", "test_case").all()
@@ -122,3 +146,18 @@ class EvidenceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filterset_fields = ("session", "result", "kind")
     search_fields = ("name", "description")
+
+    @action(detail=True, methods=["get"], url_path="download")
+    def download(self, request, pk=None):
+        ev = self.get_object()
+        filename = ev.name or f"evidence-{ev.id}"
+        if ev.text_content:
+            ct = ev.content_type or "text/plain; charset=utf-8"
+            resp = HttpResponse(ev.text_content, content_type=ct)
+            resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+            return resp
+        if ev.storage_key:
+            bucket = "evidence"
+            url = storage.presigned_download_url(bucket, ev.storage_key, expires_seconds=3600)
+            return redirect(url)
+        return Response({"error": "no content"}, status=404)
