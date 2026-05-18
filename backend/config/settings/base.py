@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "apps.reports",
     "apps.overview",
     "apps.documents",
+    "apps.agent_sessions",
 ]
 
 DOCUMENTS_BUCKET = "documents"
