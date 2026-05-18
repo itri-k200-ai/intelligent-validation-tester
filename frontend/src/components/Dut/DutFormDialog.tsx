@@ -13,8 +13,9 @@ import { Input } from "@/components/ui/input";
 import { SelectButton } from "@/components/ui/select-button";
 import { useIsWallMode } from "@/stores/wallModeStore";
 import type { DutType, Interface } from "@/types/common";
-import type { DutInput } from "@/types/dut";
+import type { AccessMode, DutInput } from "@/types/dut";
 import {
+  ACCESS_MODE_LABEL,
   AVAILABLE_INTERFACES,
   DEFAULT_INTERFACES,
 } from "@/types/dut";
@@ -46,6 +47,8 @@ export function DutFormDialog({
   const [endpoint, setEndpoint] = useState("");
   const [siteId, setSiteId] = useState("");
   const [interfaces, setInterfaces] = useState<Interface[]>(DEFAULT_INTERFACES[dutType]);
+  const [accessMode, setAccessMode] = useState<AccessMode>("unknown");
+  const [accessNotes, setAccessNotes] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const isWall = useIsWallMode();
 
@@ -55,6 +58,8 @@ export function DutFormDialog({
       setEndpoint("");
       setSiteId(sites[0]?.id ?? "");
       setInterfaces(DEFAULT_INTERFACES[dutType]);
+      setAccessMode("unknown");
+      setAccessNotes("");
       setSubmitError(null);
     }
   }, [open, dutType, sites]);
@@ -76,6 +81,8 @@ export function DutFormDialog({
         type: dutType,
         endpoint: endpoint.trim(),
         interfaces,
+        access_mode: accessMode,
+        access_notes: accessNotes.trim(),
       });
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { error?: { details?: Record<string, string[]> } } } })
@@ -150,6 +157,34 @@ export function DutFormDialog({
                   </label>
                 ))}
               </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="dut-access-mode">
+                取得 DUT 方式
+              </label>
+              <select
+                id="dut-access-mode"
+                className="flex h-9 w-full rounded-item border border-white/20 bg-navy-400 text-white px-3 text-sm"
+                value={accessMode}
+                onChange={(e) => setAccessMode(e.target.value as AccessMode)}
+              >
+                {(Object.keys(ACCESS_MODE_LABEL) as AccessMode[]).map((m) => (
+                  <option key={m} value={m}>{ACCESS_MODE_LABEL[m]}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="dut-access-notes">
+                Access 註記（跳板機 / VPN / 寄送單號…）
+              </label>
+              <Input
+                id="dut-access-notes"
+                placeholder="例：bench-3 頂上機架；jump@10.0.0.1"
+                value={accessNotes}
+                onChange={(e) => setAccessNotes(e.target.value)}
+              />
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">

@@ -3,16 +3,37 @@ import type { Environment } from "./site";
 
 export type DutStatus = "online" | "offline" | "error";
 
+export type AccessMode =
+  | "on_site"
+  | "remote_vpn"
+  | "remote_public"
+  | "shipped"
+  | "simulator_local"
+  | "sandbox_only"
+  | "unknown";
+
+export const ACCESS_MODE_LABEL: Record<AccessMode, string> = {
+  on_site: "本地實驗室自接",
+  remote_vpn: "遠端 VPN",
+  remote_public: "公網 IP + jump host",
+  shipped: "對方寄機器來",
+  simulator_local: "本機模擬器",
+  sandbox_only: "純沙箱 / 紙上",
+  unknown: "未指定",
+};
+
 export const DEFAULT_INTERFACES: Record<DutType, Interface[]> = {
   SMO: ["O1", "A1"],
-  RIC: ["A1", "E2"],
+  "Near-RT RIC": ["A1", "E2"],
+  "Non-RT RIC": ["A1", "O1"],  // Non-RT 在 SMO 內透過 A1 對外 + O1 拉資料
   xApp: ["E2"],
   rApp: ["A1", "O1"],
 };
 
 export const AVAILABLE_INTERFACES: Record<DutType, Interface[]> = {
   SMO: ["O1", "A1"],
-  RIC: ["A1", "E2", "O1"],
+  "Near-RT RIC": ["A1", "E2", "O1"],
+  "Non-RT RIC": ["A1", "O1"],
   xApp: ["E2"],
   rApp: ["A1", "O1"],
 };
@@ -31,6 +52,8 @@ export type Dut = {
   data_format: string;
   last_check: string | null;
   created_at: string;
+  access_mode: AccessMode;
+  access_notes: string;
 };
 
 export type DutInput = Omit<Dut,

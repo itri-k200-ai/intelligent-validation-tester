@@ -32,6 +32,19 @@ class TestScenario(models.Model):
     row_count = models.IntegerField(null=True, blank=True)
     description = models.TextField(blank=True)
     parameters = models.JSONField(default=dict)
+
+    # Provenance — 這個 case 從哪份文件來。可空（內部自訂 case 可能沒有）。
+    source_document = models.ForeignKey(
+        "documents.Document",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="test_scenarios",
+    )
+    source_section = models.CharField(
+        max_length=120, blank=True,
+        help_text="文件章節，例如 'O-RAN.WG3.E2AP-v03.00 §8.2.3'",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
