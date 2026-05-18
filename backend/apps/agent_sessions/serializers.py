@@ -32,6 +32,56 @@ class EvidenceSerializer(serializers.ModelSerializer):
                   "description", "created_at")
         read_only_fields = ("id", "created_at")
 
+    def create(self, validated):
+        return _auto_decode_binary_then_create(Evidence, validated, bucket="evidence")
+
+
+# ─── 共用 helper ───────────────────────────────────────────────────────
+import base64 as _b64
+import uuid as _uuid
+from core import storage as _storage
+
+
+_BINARY_MAGICS = {
+    "JVBER": ("application/pdf", "%PDF"),   # PDF base64
+    "iVBOR": ("image/png", b"\x89PNG"),     # PNG base64
+    "/9j/":  ("image/jpeg", b"\xff\xd8\xff"),  # JPEG base64
+}
+
+
+def _auto_decode_binary_then_create(model_cls, validated, bucket):
+    """如果 text_content 看起來是 binary base64（PDF/PNG/JPEG），自動 decode
+    + 上 MinIO + 用 storage_key，不污染 DB row。
+    Agent prompt 例子裡 text_content 是給「小文字檔」用的，不該塞 binary
+    base64—這層攔截避免 download endpoint 吐出 base64 字串。"""
+    tc = (validated.get("text_content") or "").strip()
+    if not tc:
+        return model_cls.objects.create(**validated)
+    matched_ct, magic = None, None
+    for prefix, (ct, m) in _BINARY_MAGICS.items():
+        if tc.startswith(prefix):
+            matched_ct, magic = ct, m
+            break
+    if not matched_ct:
+        return model_cls.objects.create(**validated)
+    try:
+        binary = _b64.b64decode(tc, validate=False)
+    except Exception:
+        return model_cls.objects.create(**validated)
+    if not binary.startswith(magic if isinstance(magic, bytes) else magic.encode()):
+        return model_cls.objects.create(**validated)
+    # 真的是 binary，移到 MinIO
+    ext = {"application/pdf": ".pdf", "image/png": ".png", "image/jpeg": ".jpg"}[matched_ct]
+    key = f"{_uuid.uuid4()}{ext}"
+    meta = _storage.upload_bytes(bucket, key, binary, matched_ct)
+    validated["text_content"] = ""
+    validated["storage_key"] = meta["storage_key"]
+    validated["size_bytes"] = meta["size_bytes"]
+    validated["sha256"] = meta["sha256"]
+    if not validated.get("content_type"):
+        validated["content_type"] = matched_ct
+    return model_cls.objects.create(**validated)
+
 
 class AgentCommandSerializer(serializers.ModelSerializer):
     class Meta:
@@ -48,6 +98,9 @@ class AgentArtifactSerializer(serializers.ModelSerializer):
                   "content_type", "size_bytes", "sha256", "description",
                   "created_at")
         read_only_fields = ("id", "created_at")
+
+    def create(self, validated):
+        return _auto_decode_binary_then_create(AgentArtifact, validated, bucket="agent-artifacts")
 
 
 class AgentStepSerializer(serializers.ModelSerializer):
