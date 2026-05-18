@@ -21,13 +21,17 @@ function readAuth(): AuthState["state"] | null {
   }
 }
 
-function writeAccessToken(access: string) {
+function writeTokens(access: string, refresh?: string) {
   if (typeof window === "undefined") return;
   try {
     const raw = window.localStorage.getItem("ivt-auth");
     if (!raw) return;
     const parsed = JSON.parse(raw);
-    parsed.state = { ...(parsed.state ?? {}), token: access };
+    parsed.state = {
+      ...(parsed.state ?? {}),
+      token: access,
+      ...(refresh ? { refresh } : {}),  // ROTATE_REFRESH_TOKENS=True 會吐新 refresh，要存
+    };
     window.localStorage.setItem("ivt-auth", JSON.stringify(parsed));
   } catch {
     /* ignore */
@@ -60,10 +64,10 @@ function doRefresh(): Promise<string> {
     const auth = readAuth();
     if (!auth?.refresh) throw new Error("no refresh token");
     const r = await axios.post(`${API_BASE}/auth/refresh/`, { refresh: auth.refresh });
-    const access = (r.data as { access?: string }).access;
-    if (!access) throw new Error("refresh: no access in response");
-    writeAccessToken(access);
-    return access;
+    const data = r.data as { access?: string; refresh?: string };
+    if (!data.access) throw new Error("refresh: no access in response");
+    writeTokens(data.access, data.refresh);
+    return data.access;
   })().finally(() => {
     // refresh 完（成功或失敗）清掉 promise，下次 401 可以再試
     setTimeout(() => { refreshPromise = null; }, 0);

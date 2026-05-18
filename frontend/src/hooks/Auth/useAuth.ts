@@ -1,13 +1,20 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { apiClient } from "@/services/api/client";
 import { useAuthStore } from "@/stores/authStore";
 
 export function useAuth(options: { requireAuth?: boolean } = {}) {
-  const { user, token, hasHydrated, logout, setUser } = useAuthStore();
+  // 用 selector 拿 stable reference，避免每次 render setUser 都新 identity
+  // 觸發 useEffect 無限重跑 → /auth/me 連環 401 → 一直被登出。
+  const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
+  const setUser = useAuthStore((s) => s.setUser);
+  const logoutAction = useAuthStore((s) => s.logout);
   const router = useRouter();
+  const refreshedRef = useRef(false);
 
   useEffect(() => {
     if (!hasHydrated) return;
@@ -16,17 +23,12 @@ export function useAuth(options: { requireAuth?: boolean } = {}) {
     }
   }, [options.requireAuth, token, hasHydrated, router]);
 
-  // 每次掛載（含路由切換 / refresh）都 GET /auth/me/ 拉一次最新 user，
-  // 避免 zustand persist 把舊 user schema（缺新欄位 / role 改了）卡在
-  // localStorage —— 之前必須登出再登入才看得到新資料的元兇。
+  // 只在首次掛載拉一次 /auth/me（不掛 deps，避免 token 變動就 re-fire）
   useEffect(() => {
+    if (refreshedRef.current) return;
     if (!hasHydrated || !token) return;
-    apiClient
-      .get("/auth/me/")
-      .then((r) => setUser(r.data))
-      .catch(() => {
-        /* 401 已由 client interceptor 清掉 localStorage，這邊不做 */
-      });
+    refreshedRef.current = true;
+    apiClient.get("/auth/me/").then((r) => setUser(r.data)).catch(() => {});
   }, [hasHydrated, token, setUser]);
 
   return {
@@ -35,7 +37,7 @@ export function useAuth(options: { requireAuth?: boolean } = {}) {
     hasHydrated,
     isAuthenticated: hasHydrated && !!token,
     logout: () => {
-      logout();
+      logoutAction();
       router.replace("/login");
     },
   };
