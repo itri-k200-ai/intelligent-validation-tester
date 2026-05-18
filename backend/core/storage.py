@@ -64,11 +64,26 @@ def upload_bytes(
     }
 
 
-def presigned_download_url(bucket: str, key: str, expires_seconds: int = 3600) -> str:
+def presigned_download_url(
+    bucket: str, key: str, expires_seconds: int = 3600,
+    filename: str | None = None,
+) -> str:
+    """Presigned GET URL。若給 filename，會塞 response-content-disposition
+    讓 MinIO 回的 header 帶 RFC 6266 UTF-8 檔名（繁中能正常下載）。"""
+    response_headers = None
+    if filename:
+        from urllib.parse import quote
+        ascii_safe = filename.encode("ascii", "ignore").decode("ascii") or "download"
+        response_headers = {
+            "response-content-disposition":
+                f"attachment; filename=\"{ascii_safe}\"; "
+                f"filename*=UTF-8''{quote(filename)}",
+        }
     return _client(public=True).presigned_get_object(
         bucket_name=bucket,
         object_name=key,
         expires=timedelta(seconds=expires_seconds),
+        response_headers=response_headers,
     )
 
 

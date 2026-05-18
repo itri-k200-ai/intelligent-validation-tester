@@ -82,5 +82,12 @@ class DocumentViewSet(viewsets.ModelViewSet):
     def download(self, request, pk=None):
         """302 → MinIO presigned URL（預設 1 小時有效）。"""
         doc = self.get_object()
-        url = storage.presigned_download_url(_BUCKET, doc.storage_key, expires_seconds=3600)
+        # 友善檔名：[doc_number] name.ext，避免下載成 UUID
+        from pathlib import PurePosixPath
+        ext = PurePosixPath(doc.storage_key).suffix or ""
+        base = doc.doc_number or doc.name or "document"
+        filename = f"{base}{ext}"
+        url = storage.presigned_download_url(
+            _BUCKET, doc.storage_key, expires_seconds=3600, filename=filename,
+        )
         return redirect(url)

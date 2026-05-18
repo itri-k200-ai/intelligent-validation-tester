@@ -137,7 +137,9 @@ class AgentArtifactViewSet(viewsets.ModelViewSet):
             return resp
         if art.storage_key:
             bucket = "agent-artifacts"
-            url = storage.presigned_download_url(bucket, art.storage_key, expires_seconds=3600)
+            url = storage.presigned_download_url(
+                bucket, art.storage_key, expires_seconds=3600, filename=filename,
+            )
             return redirect(url)
         return Response({"error": "no content"}, status=404)
 
@@ -168,6 +170,8 @@ class EvidenceViewSet(viewsets.ModelViewSet):
             return resp
         if ev.storage_key:
             bucket = "evidence"
-            url = storage.presigned_download_url(bucket, ev.storage_key, expires_seconds=3600)
+            url = storage.presigned_download_url(
+                bucket, ev.storage_key, expires_seconds=3600, filename=filename,
+            )
             return redirect(url)
         return Response({"error": "no content"}, status=404)
