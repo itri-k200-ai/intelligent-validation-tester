@@ -159,7 +159,8 @@ export function ScenarioFormDialog({
               >
                 <option value="">-- 不指定 --</option>
                 <option value="SMO">SMO</option>
-                <option value="RIC">RIC</option>
+                <option value="Near-RT RIC">Near-RT RIC</option>
+                <option value="Non-RT RIC">Non-RT RIC</option>
                 <option value="xApp">xApp</option>
                 <option value="rApp">rApp</option>
               </select>

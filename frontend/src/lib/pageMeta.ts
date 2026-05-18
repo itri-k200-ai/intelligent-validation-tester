@@ -9,7 +9,9 @@
 
 const DUT_TYPE_LABEL: Record<string, string> = {
   smo: "SMO",
-  ric: "RIC",
+  ric: "Near-RT RIC", // 既有 /ric URL 視為 Near-RT RIC
+  "near-rt-ric": "Near-RT RIC",
+  "non-rt-ric": "Non-RT RIC",
   xapp: "xApp",
   rapp: "rApp",
 };
@@ -23,6 +25,8 @@ const REGION_LABEL: Record<string, string> = {
 const DUT_TYPE_ACCENT: Record<string, string> = {
   smo: "text-mint-300",
   ric: "text-teal",
+  "near-rt-ric": "text-teal",
+  "non-rt-ric": "text-teal",
   xapp: "text-warning",
   rapp: "text-danger",
 };

@@ -6,7 +6,8 @@ from django.db import models
 class Dut(models.Model):
     class Type(models.TextChoices):
         SMO = "SMO", "SMO"
-        RIC = "RIC", "RIC"
+        NEAR_RT_RIC = "Near-RT RIC", "Near-RT RIC"
+        NON_RT_RIC = "Non-RT RIC", "Non-RT RIC"
         XAPP = "xApp", "xApp"
         RAPP = "rApp", "rApp"
 
@@ -47,7 +48,9 @@ class DataQualityBaseline(models.Model):
         Dut,
         on_delete=models.CASCADE,
         related_name="data_quality_baseline",
-        limit_choices_to={"type__in": [Dut.Type.SMO, Dut.Type.RIC]},
+        limit_choices_to={"type__in": [
+            Dut.Type.SMO, Dut.Type.NEAR_RT_RIC, Dut.Type.NON_RT_RIC,
+        ]},
     )
     test_category = models.CharField(
         max_length=32, choices=TestCategory.choices, blank=True,

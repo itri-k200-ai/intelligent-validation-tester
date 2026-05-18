@@ -1,4 +1,4 @@
-export const DUT_TYPES = ["SMO", "RIC", "xApp", "rApp"] as const;
+export const DUT_TYPES = ["SMO", "Near-RT RIC", "Non-RT RIC", "xApp", "rApp"] as const;
 export const INTERFACES = ["O1", "A1", "E2"] as const;
 export const AI_CASES = [
   "CCO",

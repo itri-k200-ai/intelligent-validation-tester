@@ -16,7 +16,9 @@ from .serializers import (
 )
 from .services import DutService
 
-BASELINE_ALLOWED_TYPES = (Dut.Type.SMO, Dut.Type.RIC)
+BASELINE_ALLOWED_TYPES = (
+    Dut.Type.SMO, Dut.Type.NEAR_RT_RIC, Dut.Type.NON_RT_RIC,
+)
 
 
 class DutViewSet(viewsets.ModelViewSet):

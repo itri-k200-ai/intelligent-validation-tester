@@ -9,8 +9,8 @@ export type ApiError = {
   error: { code: string; message: string; details?: Record<string, unknown> };
 };
 
-export type DutType = "SMO" | "RIC" | "xApp" | "rApp";
-export type PlatformType = "SMO" | "RIC";
+export type DutType = "SMO" | "Near-RT RIC" | "Non-RT RIC" | "xApp" | "rApp";
+export type PlatformType = "SMO" | "Near-RT RIC" | "Non-RT RIC";
 export type AppType = "xApp" | "rApp";
 export type Region = "domestic" | "international";
 export type Category =

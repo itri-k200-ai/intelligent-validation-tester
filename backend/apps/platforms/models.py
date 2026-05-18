@@ -6,7 +6,8 @@ from django.db import models
 class Platform(models.Model):
     class Type(models.TextChoices):
         SMO = "SMO", "SMO"
-        RIC = "RIC", "RIC"
+        NEAR_RT_RIC = "Near-RT RIC", "Near-RT RIC"
+        NON_RT_RIC = "Non-RT RIC", "Non-RT RIC"
 
     class Status(models.TextChoices):
         PENDING = "pending", "待驗證"
@@ -16,7 +17,7 @@ class Platform(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=200)
-    type = models.CharField(max_length=8, choices=Type.choices)
+    type = models.CharField(max_length=16, choices=Type.choices)
     vendor = models.CharField(max_length=200)
     version = models.CharField(max_length=64)
     category = models.CharField(max_length=32, blank=True)

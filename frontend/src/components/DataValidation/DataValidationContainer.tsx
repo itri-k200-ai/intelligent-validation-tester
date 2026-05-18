@@ -17,7 +17,7 @@ import { RegisterDutDialog } from "./RegisterDutDialog";
 import { RunValidationDialog } from "./RunValidationDialog";
 import { ValidationResultCard } from "./ValidationResultCard";
 
-export type DataValidationDutType = "SMO" | "RIC";
+export type DataValidationDutType = "SMO" | "Near-RT RIC" | "Non-RT RIC";
 
 export function DataValidationContainer({ dutType }: { dutType: DataValidationDutType }) {
   const { duts, isLoading, refresh } = useDutList({ type: dutType, has_baseline: true });

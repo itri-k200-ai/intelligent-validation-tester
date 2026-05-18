@@ -14,7 +14,7 @@ const seed: Dut[] = [
   },
   {
     id: "d2", site: "s1", site_name: "Taipei Lab", site_environment: "indoor",
-    name: "Near-RT RIC", type: "RIC",
+    name: "Near-RT RIC", type: "Near-RT RIC",
     endpoint: "https://ric.example.com",
     interfaces: ["A1", "E2"],
     status: "online", response_time_ms: 80, data_format: "REST",

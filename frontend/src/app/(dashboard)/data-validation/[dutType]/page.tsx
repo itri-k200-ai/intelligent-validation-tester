@@ -5,7 +5,9 @@ import type { DataValidationDutType } from "@/components/DataValidation/DataVali
 
 const MAP: Record<string, DataValidationDutType> = {
   smo: "SMO",
-  ric: "RIC",
+  ric: "Near-RT RIC", // 既有 /ric URL 視為 Near-RT RIC（主要驗測對象）
+  "near-rt-ric": "Near-RT RIC",
+  "non-rt-ric": "Non-RT RIC",
 };
 
 export default async function DataValidationPage({

@@ -60,7 +60,8 @@ export function ScenarioFilters({ value, onChange }: Props) {
         options={[
           { value: "", label: "全部" },
           { value: "SMO", label: "SMO" },
-          { value: "RIC", label: "RIC" },
+          { value: "Near-RT RIC", label: "Near-RT RIC" },
+          { value: "Non-RT RIC", label: "Non-RT RIC" },
           { value: "xApp", label: "xApp" },
           { value: "rApp", label: "rApp" },
         ]}

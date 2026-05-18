@@ -73,7 +73,7 @@ export function DutArchDiagram({ dutType }: { dutType: DutType }) {
           >
             <div
               className={`border-2 rounded px-2 py-1.5 transition-all ${
-                dutType === "RIC"
+                dutType === "Near-RT RIC" || dutType === "Non-RT RIC"
                   ? "border-green-600 bg-green-100 text-green-900"
                   : "border-white/20 bg-white/5"
               }`}

@@ -27,7 +27,9 @@ class OverviewService:
     @classmethod
     def _kpis(cls) -> dict:
         smo_platform_ids = Platform.objects.filter(type="SMO").values_list("id", flat=True)
-        ric_platform_ids = Platform.objects.filter(type="RIC").values_list("id", flat=True)
+        ric_platform_ids = Platform.objects.filter(
+            type__in=["Near-RT RIC", "Non-RT RIC"]
+        ).values_list("id", flat=True)
         smo_q = Q(target_type="platform", target_id__in=list(smo_platform_ids))
         ric_q = Q(target_type="platform", target_id__in=list(ric_platform_ids))
         return {
@@ -60,7 +62,9 @@ class OverviewService:
             total=Count("id"),
             passed=Count("id", filter=Q(status="passed")),
         )
-        ric = Platform.objects.filter(type="RIC").aggregate(
+        ric = Platform.objects.filter(
+            type__in=["Near-RT RIC", "Non-RT RIC"]
+        ).aggregate(
             total=Count("id"),
             passed=Count("id", filter=Q(status="passed")),
         )
