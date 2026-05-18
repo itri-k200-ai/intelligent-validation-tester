@@ -21,8 +21,7 @@ class TestCaseSerializer(serializers.ModelSerializer):
     def get_spec_references_detail(self, obj):
         return [{"id": str(d.id), "doc_number": d.doc_number, "name": d.name,
                  "issuing_body": d.issuing_body, "status": d.status,
-                 "download_url": self.context.get("request").build_absolute_uri(
-                     f"/api/documents/{d.id}/download/") if self.context.get("request") else None}
+                 "download_url": f"/api/documents/{d.id}/download/"}
                 for d in obj.spec_references.all()]
 
 
@@ -64,6 +63,4 @@ class TestScenarioSerializer(serializers.ModelSerializer):
     def get_source_document_download_url(self, obj):
         if not obj.source_document_id:
             return None
-        request = self.context.get("request")
-        path = f"/api/documents/{obj.source_document_id}/download/"
-        return request.build_absolute_uri(path) if request else path
+        return f"/api/documents/{obj.source_document_id}/download/"

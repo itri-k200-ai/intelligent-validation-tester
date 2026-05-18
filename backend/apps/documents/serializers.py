@@ -25,12 +25,10 @@ class DocumentSerializer(serializers.ModelSerializer):
         )
 
     def get_download_url(self, obj):
-        request = self.context.get("request")
-        if not request:
-            return None
-        # 走自己的 download endpoint，server 端再產 presigned URL。
-        # 這樣 client 不必直接跟 MinIO 講話、權限也由 Django 控。
-        return request.build_absolute_uri(f"/api/documents/{obj.id}/download/")
+        # 回相對路徑，避免 nginx 不帶 port 的 Host header 讓
+        # build_absolute_uri 算出 http://localhost/... 跳到 :80。
+        # 瀏覽器收到相對 URL 自己用 current origin 補。
+        return f"/api/documents/{obj.id}/download/"
 
 
 class DocumentUploadSerializer(serializers.Serializer):
