@@ -9,19 +9,52 @@ from django.db import models
 
 class Document(models.Model):
     class DocType(models.TextChoices):
-        SPEC = "spec", "標準規範"          # O-RAN / 3GPP 公開規格
+        SPEC = "spec", "標準規範"          # O-RAN / 3GPP / IETF / ITU-T 公開規格
         INTERNAL = "internal", "內部文件"   # 自訂測試準則 / SOP
         DATASHEET = "datasheet", "設備規格"  # 廠商 datasheet / release notes
         CUSTOMER = "customer", "客戶提供"   # 客戶丟過來的需求 / 測試要求
         OTHER = "other", "其他"
 
+    class IssuingBody(models.TextChoices):
+        """發行的標準制定組織。spec 必填；其他 doc_type 可空。"""
+        IETF = "IETF", "IETF"
+        TGPP = "3GPP", "3GPP"
+        ITU_T = "ITU-T", "ITU-T"
+        IEEE = "IEEE", "IEEE"
+        ORAN = "O-RAN", "O-RAN Alliance"
+        ETSI = "ETSI", "ETSI"
+        OTHER = "OTHER", "其他"
+
+    class Status(models.TextChoices):
+        """規格的生命週期狀態 —— sign-off 報告不能引 obsolete 的。"""
+        DRAFT = "draft", "草案"
+        ACTIVE = "active", "現行"
+        SUPERSEDED = "superseded", "已被取代"
+        OBSOLETE = "obsolete", "廢止"
+        WITHDRAWN = "withdrawn", "撤回"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # 文件識別
     name = models.CharField(max_length=300)
     doc_type = models.CharField(max_length=16, choices=DocType.choices)
-    version = models.CharField(max_length=64, blank=True)  # 例：v03.00、Rel-17
+    issuing_body = models.CharField(
+        max_length=8, choices=IssuingBody.choices, blank=True,
+        help_text="standards body / SDO。spec 強烈建議填。",
+    )
+    doc_number = models.CharField(
+        max_length=64, blank=True,
+        help_text="正式編號，例：RFC 4960、TS 38.300、Y.3172、O-RAN.WG3.E2AP",
+    )
+    version = models.CharField(max_length=64, blank=True)  # 例：v03.00、Rel-17、v16.4.0
+    publication_date = models.DateField(null=True, blank=True)
+    status = models.CharField(
+        max_length=16, choices=Status.choices,
+        default=Status.ACTIVE, blank=True,
+    )
     source_url = models.URLField(
         blank=True,
-        help_text="原始來源 URL（O-RAN 官網、客戶 share point 等）",
+        help_text="原始來源 URL（IETF rfc-editor、ETSI deliver、客戶 share point 等）",
     )
 
     # 實體檔案存 MinIO；DB 只放 key + 元資料。
@@ -43,8 +76,17 @@ class Document(models.Model):
         ordering = ("-uploaded_at",)
         indexes = [
             models.Index(fields=["doc_type", "uploaded_at"]),
+            models.Index(fields=["issuing_body", "doc_number"]),
+            models.Index(fields=["status"]),
         ]
 
     def __str__(self) -> str:
-        v = f" {self.version}" if self.version else ""
-        return f"[{self.get_doc_type_display()}] {self.name}{v}"
+        parts = []
+        if self.issuing_body:
+            parts.append(f"[{self.issuing_body}]")
+        if self.doc_number:
+            parts.append(self.doc_number)
+        parts.append(self.name)
+        if self.version:
+            parts.append(f"({self.version})")
+        return " ".join(parts)

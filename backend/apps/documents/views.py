@@ -58,7 +58,11 @@ class DocumentViewSet(viewsets.ModelViewSet):
         doc = Document.objects.create(
             name=name,
             doc_type=s.validated_data["doc_type"],
+            issuing_body=s.validated_data.get("issuing_body", ""),
+            doc_number=s.validated_data.get("doc_number", ""),
             version=s.validated_data.get("version", ""),
+            publication_date=s.validated_data.get("publication_date"),
+            status=s.validated_data.get("status") or Document.Status.ACTIVE,
             source_url=s.validated_data.get("source_url", ""),
             description=s.validated_data.get("description", ""),
             uploaded_by=request.user if request.user.is_authenticated else None,

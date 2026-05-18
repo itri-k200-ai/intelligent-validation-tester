@@ -10,7 +10,10 @@ class DocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Document
         fields = (
-            "id", "name", "doc_type", "version", "source_url",
+            "id", "name", "doc_type",
+            "issuing_body", "doc_number", "version",
+            "publication_date", "status",
+            "source_url",
             "storage_key", "size_bytes", "sha256", "content_type",
             "description",
             "uploaded_by", "uploaded_by_name", "uploaded_at",
@@ -35,6 +38,14 @@ class DocumentUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
     name = serializers.CharField(max_length=300, required=False, allow_blank=True)
     doc_type = serializers.ChoiceField(choices=Document.DocType.choices)
+    issuing_body = serializers.ChoiceField(
+        choices=Document.IssuingBody.choices, required=False, allow_blank=True,
+    )
+    doc_number = serializers.CharField(max_length=64, required=False, allow_blank=True)
     version = serializers.CharField(max_length=64, required=False, allow_blank=True)
+    publication_date = serializers.DateField(required=False, allow_null=True)
+    status = serializers.ChoiceField(
+        choices=Document.Status.choices, required=False, allow_blank=True,
+    )
     source_url = serializers.URLField(required=False, allow_blank=True)
     description = serializers.CharField(required=False, allow_blank=True)
