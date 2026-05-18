@@ -76,30 +76,66 @@ Near-Real-Time RAN Intelligent Controller（Near-RT RIC）做功能、一致性�
 ### 0. Confirm scope before generating validation artifacts
 
 驗測工作的成本不只是聊天 token —— 一份錯方向的測試計畫會浪費實驗室
-時間。所以在產出測試計畫、IOT matrix、conformance report、test case
-YAML 之前，**先用一個回合鎖定情境**：
+時間、規格買錯版本、機器搬過去才發現少接線。
 
-- **模式**：功能 / 一致性 / 互通性 / 效能 / 韌性？（見上方 Evaluation modes）
-- **DUT**：哪個 RIC 實作？哪個 release / build？
-- **對手**：E2 Node 是真機（哪家、哪版）還是模擬器（e2sim / OAI nrCU /
-  自寫 stub）？**IOT 模式時要列出所有可用組合**。
-- **規格版本**：`O-RAN.WG3.<doc>-v<X.Y>`，未指定就問。
-- **覆蓋範圍**：success-only？含 reject / timeout / negative？單 procedure
-  還是整條 flow？
-- **觀測來源**：使用者會自己跑然後貼 pcap / log？還是只要計畫、之後
-  另外驗？
+**心智模型**：把自己想成顧客。如果有人要幫你規劃這場驗測，你會希望
+他在動手前**先問清楚什麼**？同樣的問題清單要回拋給使用者。**不要假
+裝自己什麼都知道**——很多訊息只有使用者知道，沒問就會猜錯。
 
-提問方式：用編號列已知 / 缺漏，給每個缺漏一個合理預設，讓使用者可以
-直接回「全用預設」就推進，而**不是**被迫一題一題答。
+在產出測試計畫、IOT matrix、conformance report、test case YAML 之前，
+**先用一個回合鎖定 9 件事**：
+
+1. **模式**：功能 / 一致性 / 互通性 / 效能 / 韌性？（見上方 Evaluation modes）
+2. **DUT**：哪個 RIC 實作？哪個 release / build？
+3. **取得 DUT 的方式**（access path）——決定哪些 case 跑得起來、結果
+   怎麼回流：
+   - 本地實驗室自接（使用者坐在機器旁，可裝任何工具）
+   - 遠端 VPN 進實驗室
+   - 公網 IP + jump host
+   - 對方把機器寄來（lead time、HW spec、誰負責拆裝）
+   - 跑模擬器在本機（OSC ric-platform-docker / FlexRIC）
+   - 全沙箱（沒有真實 RIC，只走理論）
+4. **對手**：E2 Node 是真機（哪家、哪版）還是模擬器（e2sim / OAI nrCU /
+   自寫 stub）？**IOT 模式時要列出所有可用組合**。
+5. **規格版本**：`O-RAN.WG3.<doc>-v<X.Y>`，未指定就問。
+6. **要驗的具體 sub-case 清單**：依模式 + DUT 列 5–10 個候選 case
+   讓使用者**勾選**或回「全部」。**不能跳過這步直接寫 plan**——使用者
+   通常只想驗其中 2–3 個。例：
+   E2 Setup → first-time / after Reset / RAN Function list 變更 /
+   重複 setup / timeout / 缺欄位 reject / SCTP 斷線重連 …
+7. **覆蓋範圍**（每個 case 多深）：success-only？含 reject / timeout /
+   negative / edge？
+8. **觀測來源**：使用者自己跑然後貼 pcap / log？只要計畫、之後另外驗？
+   有自動化抓回來還是手動上傳？
+9. **交付形式**（output shape）——不同形式工作量差很多：
+   - Markdown plan（給人讀）
+   - Test case YAML（要說給哪個 framework：robot / pytest / 自家 runner）
+   - Runnable script（bash / python，能丟 Jenkins / GitHub Actions）
+   - PDF / Confluence template（給 PM、客戶 sign-off）
+   - 以上組合
+   不問就預設 Markdown plan + test case YAML，但**要明示這是預設**。
+
+提問方式：用編號列已知 / 缺漏，**給每個缺漏一個合理預設**，讓使用者
+能直接回「全用預設」就推進，而**不是**被迫一題一題答。預設要 make
+sense——是「最常見、最不會卡的」選擇，不是隨便填。
 
 範例：
-> 我準備這樣做（per rule 0），有要改的嗎？沒有就直接產 plan：
->   1. 模式 = 功能 ← 預設（你沒講）
+> 我準備這樣做（per rule 0），有要改的直接講編號，沒有就回「全用預設」：
+>   1. 模式 = 功能 ← 預設（你只說「驗 E2 Setup」）
 >   2. DUT = OSC RIC J-release（你講的）
->   3. 對手 = e2sim ← 預設
->   4. spec = O-RAN.WG3.E2AP-v03.00 ← 預設
->   5. 覆蓋 = success + reject + timeout ← 預設
->   6. 觀測 = 你跑完貼 pcap 我分析 ← 預設
+>   3. 取得 DUT = 你本地實驗室自接 ← 預設（最不會卡）
+>   4. 對手 = e2sim（OSC 附的）← 預設
+>   5. spec = O-RAN.WG3.E2AP-v03.00 ← 預設（J-release 對應線）
+>   6. 要驗的 case（預設全勾，要刪講編號）：
+>      a. E2 Setup first-time success
+>      b. E2 Setup with empty RAN Function list（預期 reject）
+>      c. E2 Setup timeout（對手不回）
+>      d. E2 Setup after Reset
+>      e. 重複 setup（重送 request）
+>   7. 覆蓋 = success + reject + timeout ← 預設
+>   8. 觀測 = 你跑完貼 pcap + e2term log，我做分析 ← 預設
+>   9. 交付 = Markdown plan + test case YAML（OSC 內建 robot framework）
+>            ← 預設
 
 例外：**短問題不必先確認**（例：「E2 Setup 的 RAN Function ID 是必填
 嗎？」直接答 + 引規格章節即可）。判準：產出是「一句話答覆」就直接答；
