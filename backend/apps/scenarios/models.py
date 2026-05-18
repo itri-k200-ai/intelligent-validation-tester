@@ -56,3 +56,43 @@ class TestScenario(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+
+class TestCase(models.Model):
+    """TC-01 / TC-02 等具體案例。Scenario 之下，是真正會被執行、評
+    pass/fail 的最小單位。"""
+
+    class Priority(models.TextChoices):
+        P0 = "P0", "P0 (基礎門檻)"
+        P1 = "P1", "P1 (異常 / 恢復)"
+        P2 = "P2", "P2 (邊角)"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    scenario = models.ForeignKey(
+        "scenarios.TestScenario", on_delete=models.CASCADE, related_name="test_cases",
+    )
+    case_id = models.CharField(max_length=32, help_text="TC-01 / TC-A-3 等短碼")
+    name = models.CharField(max_length=200)
+    priority = models.CharField(max_length=4, choices=Priority.choices, default=Priority.P1)
+    preconditions = models.TextField(blank=True)
+    test_steps = models.TextField(blank=True, help_text="條列步驟")
+    expected_result = models.TextField(blank=True)
+    pass_criteria = models.TextField(blank=True)
+    spec_references = models.ManyToManyField(
+        "documents.Document", blank=True, related_name="referenced_by_test_cases",
+        help_text="此 TC 引用的規格文件（M2M）",
+    )
+    spec_sections = models.JSONField(
+        default=list, blank=True,
+        help_text="引用章節清單，例：['E2AP §8.2.3', 'E2GAP §6']",
+    )
+    tags = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = (("scenario", "case_id"),)
+        ordering = ("scenario", "case_id")
+
+    def __str__(self) -> str:
+        return f"{self.case_id} {self.name}"

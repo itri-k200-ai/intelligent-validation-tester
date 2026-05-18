@@ -49,6 +49,18 @@ class Dut(models.Model):
         help_text="跳板機 / VPN 設定 / 機器寄送單號 / 啟動 script 路徑等",
     )
 
+    # 設備身份 / sign-off 報告需要
+    vendor = models.CharField(max_length=100, blank=True)
+    model = models.CharField(max_length=100, blank=True)
+    firmware_version = models.CharField(max_length=64, blank=True)
+    serial_number = models.CharField(max_length=120, blank=True)
+    deployed_at = models.DateField(null=True, blank=True)
+    contact_email = models.EmailField(blank=True)
+    config_snapshot = models.JSONField(
+        default=dict, blank=True,
+        help_text="當前配置摘要（自由 JSON），給驗測對齊基準",
+    )
+
     class Meta:
         indexes = [models.Index(fields=["type", "status"])]
         ordering = ("-created_at",)

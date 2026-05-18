@@ -1,6 +1,29 @@
 from rest_framework import serializers
 
-from .models import TestScenario
+from .models import TestCase, TestScenario
+
+
+class TestCaseSerializer(serializers.ModelSerializer):
+    spec_references_detail = serializers.SerializerMethodField(read_only=True)
+    results_count = serializers.IntegerField(source="results.count", read_only=True)
+
+    class Meta:
+        model = TestCase
+        fields = (
+            "id", "scenario", "case_id", "name", "priority",
+            "preconditions", "test_steps", "expected_result", "pass_criteria",
+            "spec_references", "spec_references_detail", "spec_sections",
+            "tags", "created_at", "updated_at", "results_count",
+        )
+        read_only_fields = ("id", "created_at", "updated_at", "spec_references_detail",
+                            "results_count")
+
+    def get_spec_references_detail(self, obj):
+        return [{"id": str(d.id), "doc_number": d.doc_number, "name": d.name,
+                 "issuing_body": d.issuing_body, "status": d.status,
+                 "download_url": self.context.get("request").build_absolute_uri(
+                     f"/api/documents/{d.id}/download/") if self.context.get("request") else None}
+                for d in obj.spec_references.all()]
 
 
 class TestScenarioSerializer(serializers.ModelSerializer):

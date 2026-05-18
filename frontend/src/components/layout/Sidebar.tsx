@@ -4,7 +4,9 @@ import {
   ChevronRight,
   Cable,
   Database,
+  FileText,
   Globe,
+  History,
   LayoutDashboard,
   Sparkles,
   Target,
@@ -52,6 +54,7 @@ const NAV: NavNode[] = [
           { kind: "leaf", id: "iv-rapp", href: "/interface-validation/rapp", label: "rApp" },
         ],
       },
+      { kind: "leaf", id: "documents", href: "/documents", label: "規格文件", icon: FileText },
     ],
   },
   // === 暫時隱藏：資料品質驗證 / 智慧程度驗證 ===
@@ -95,6 +98,7 @@ const NAV: NavNode[] = [
   },
   */
   { kind: "leaf", id: "test-scenarios", href: "/test-scenarios", label: "端對端測試情境", icon: Target },
+  { kind: "leaf", id: "agent-sessions", href: "/agent-sessions", label: "Agent 驗測紀錄", icon: History },
   {
     kind: "branch",
     id: "site-management",

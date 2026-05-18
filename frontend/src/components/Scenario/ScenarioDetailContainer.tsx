@@ -153,6 +153,41 @@ export function ScenarioDetailContainer({ id }: { id: string }) {
           </CardContent>
         </Card>
 
+        {/* 規格來源 — agent 引用此 case 時的證據文件 */}
+        {(scenario as any).source_document && (
+          <Card>
+            <CardHeader>
+              <CardTitle>規格來源</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <Field label="文件">
+                  <div className="flex flex-col gap-1">
+                    <span>
+                      [{(scenario as any).source_document_type}]{" "}
+                      <span className="font-mono">{(scenario as any).source_document_version}</span>
+                    </span>
+                    <span className="text-white/80">{(scenario as any).source_document_name}</span>
+                  </div>
+                </Field>
+                <Field label="章節">
+                  <span className="font-mono text-xs">{(scenario as any).source_section || "—"}</span>
+                </Field>
+              </div>
+              {(scenario as any).source_document_download_url && (
+                <a
+                  href={(scenario as any).source_document_download_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex items-center gap-1 text-teal text-xs hover:underline"
+                >
+                  ↓ 下載證據 PDF / 文件
+                </a>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle>參數</CardTitle>

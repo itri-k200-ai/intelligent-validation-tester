@@ -74,6 +74,21 @@ export function getPageMeta(pathname: string): PageMeta {
     };
   }
 
+  if (seg[0] === "documents") {
+    return {
+      title: "規格文件",
+      subtitle: "驗測案例引用來源（IETF / 3GPP / ITU-T / O-RAN）",
+    };
+  }
+
+  if (seg[0] === "agent-sessions") {
+    if (seg[1]) return { title: "驗測回朔" };
+    return {
+      title: "Agent 驗測紀錄",
+      subtitle: "Near-RT RIC Validation Agent 跑過的所有 session + 完整 audit trail",
+    };
+  }
+
   if (seg[0] === "site-management" && seg[1]) {
     return { title: REGION_LABEL[seg[1]] ?? "場域管理" };
   }

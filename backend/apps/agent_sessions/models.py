@@ -131,3 +131,79 @@ class AgentArtifact(models.Model):
 
     class Meta:
         ordering = ("session", "created_at")
+
+
+class TestCaseResult(models.Model):
+    """一筆 TC 在某次 session 的執行結果。把 Stage-1 報告裡 TC-01 PASS /
+    TC-02 FAIL 從字串拆成第一公民 row，可查歷史、做 trend、比對 RIC 版本。"""
+
+    class Status(models.TextChoices):
+        PASS = "pass", "PASS"
+        FAIL = "fail", "FAIL"
+        BLOCKED = "blocked", "BLOCKED"
+        SKIPPED = "skipped", "SKIPPED"
+        ERROR = "error", "ERROR"
+        IN_PROGRESS = "in_progress", "進行中"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.ForeignKey(
+        AgentSession, on_delete=models.CASCADE, related_name="case_results",
+    )
+    test_case = models.ForeignKey(
+        "scenarios.TestCase", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="results",
+    )
+    # 沒對到正式 TestCase 也能用：手動 ad-hoc 結果
+    case_id_raw = models.CharField(max_length=32, blank=True,
+        help_text="未連 TestCase 時的 TC-XX 標籤")
+    case_name = models.CharField(max_length=200, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices)
+    observed = models.TextField(blank=True, help_text="實際觀察")
+    notes = models.TextField(blank=True)
+    executed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("session", "case_id_raw", "executed_at")
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["test_case", "status"]),
+        ]
+
+
+class Evidence(models.Model):
+    """驗測證據 —— pcap / log / screenshot 等附件。掛在 TestCaseResult
+    或 session 上，sign-off 報告可引用。"""
+
+    class Kind(models.TextChoices):
+        PCAP = "pcap", "封包擷取"
+        LOG = "log", "Log"
+        SCREENSHOT = "screenshot", "截圖"
+        CONFIG = "config", "配置檔"
+        OTHER = "other", "其他"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.ForeignKey(
+        AgentSession, on_delete=models.CASCADE, related_name="evidence",
+    )
+    result = models.ForeignKey(
+        TestCaseResult, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="evidence",
+    )
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    name = models.CharField(max_length=300)
+    # 同 AgentArtifact 兩種儲存
+    text_content = models.TextField(blank=True)
+    storage_key = models.CharField(max_length=500, blank=True)
+    content_type = models.CharField(max_length=128, blank=True)
+    size_bytes = models.BigIntegerField(null=True, blank=True)
+    sha256 = models.CharField(max_length=64, blank=True)
+    captured_with = models.CharField(
+        max_length=64, blank=True,
+        help_text="工具：tshark / journalctl / kubectl logs / 自寫 script",
+    )
+    captured_at = models.DateTimeField(null=True, blank=True)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("session", "created_at")

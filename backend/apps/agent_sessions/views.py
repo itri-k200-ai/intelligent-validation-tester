@@ -3,13 +3,18 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import AgentArtifact, AgentCommand, AgentSession, AgentStep
+from .models import (
+    AgentArtifact, AgentCommand, AgentSession, AgentStep,
+    Evidence, TestCaseResult,
+)
 from .serializers import (
     AgentArtifactSerializer,
     AgentCommandSerializer,
     AgentSessionListSerializer,
     AgentSessionSerializer,
     AgentStepSerializer,
+    EvidenceSerializer,
+    TestCaseResultSerializer,
 )
 
 
@@ -55,10 +60,30 @@ class AgentSessionViewSet(viewsets.ModelViewSet):
              "content_type": a.content_type, "description": a.description}
             for a in session.artifacts.all()
         ]
+        case_results_data = [
+            {
+                "case_id": (r.test_case.case_id if r.test_case else r.case_id_raw),
+                "case_name": (r.test_case.name if r.test_case else r.case_name),
+                "status": r.status,
+                "observed": r.observed[:500] if r.observed else "",
+                "notes": r.notes[:500] if r.notes else "",
+                "executed_at": r.executed_at.isoformat() if r.executed_at else None,
+                "evidence_count": r.evidence.count(),
+            }
+            for r in session.case_results.all().select_related("test_case")
+        ]
+        evidence_data = [
+            {"kind": e.kind, "name": e.name, "size_bytes": e.size_bytes,
+             "captured_with": e.captured_with, "description": e.description,
+             "result_id": str(e.result_id) if e.result_id else None}
+            for e in session.evidence.all()
+        ]
         return Response({
             "session": AgentSessionSerializer(session, context={"request": request}).data,
             "steps": steps_data,
             "artifacts": artifacts_data,
+            "case_results": case_results_data,
+            "evidence": evidence_data,
         })
 
 
@@ -81,3 +106,19 @@ class AgentArtifactViewSet(viewsets.ModelViewSet):
     serializer_class = AgentArtifactSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ("session",)
+
+
+class TestCaseResultViewSet(viewsets.ModelViewSet):
+    queryset = TestCaseResult.objects.select_related("session", "test_case").all()
+    serializer_class = TestCaseResultSerializer
+    permission_classes = [IsAuthenticated]
+    filterset_fields = ("session", "test_case", "status")
+    search_fields = ("case_id_raw", "case_name")
+
+
+class EvidenceViewSet(viewsets.ModelViewSet):
+    queryset = Evidence.objects.select_related("session", "result").all()
+    serializer_class = EvidenceSerializer
+    permission_classes = [IsAuthenticated]
+    filterset_fields = ("session", "result", "kind")
+    search_fields = ("name", "description")
