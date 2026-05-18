@@ -25,7 +25,7 @@ class TestScenario(models.Model):
         null=True, blank=True,
     )
     validation_type = models.CharField(max_length=32, choices=ValidationType.choices)
-    dut_type = models.CharField(max_length=8, blank=True)
+    dut_type = models.CharField(max_length=16, blank=True)  # 16 chars 才放得下 "Near-RT RIC"
     ai_case = models.CharField(max_length=64, blank=True)
     category = models.CharField(max_length=32, choices=Category.choices)
     collected_at = models.DateTimeField(null=True, blank=True)
