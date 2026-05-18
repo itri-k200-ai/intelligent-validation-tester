@@ -46,7 +46,15 @@ INSTALLED_APPS = [
     "apps.validations",
     "apps.reports",
     "apps.overview",
+    "apps.documents",
 ]
+
+DOCUMENTS_BUCKET = "documents"
+
+# MinIO 對外的 endpoint —— 給產 presigned URL 用，必須是 client 端
+# 解析得到的 hostname（dev：localhost:9000；prod：放在 nginx 後面或
+# 真實 DNS）。預設等於內網 endpoint，必要時用 env 覆蓋。
+MINIO_PUBLIC_ENDPOINT = env("MINIO_PUBLIC_ENDPOINT", default="localhost:9000")
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",

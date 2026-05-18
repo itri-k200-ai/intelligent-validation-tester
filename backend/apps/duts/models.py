@@ -16,6 +16,16 @@ class Dut(models.Model):
         OFFLINE = "offline", "Offline"
         ERROR = "error", "Error"
 
+    class AccessMode(models.TextChoices):
+        """怎麼接到這台 DUT —— 決定哪些 case 跑得起來、結果怎麼回流。"""
+        ON_SITE = "on_site", "本地實驗室自接"
+        REMOTE_VPN = "remote_vpn", "遠端 VPN"
+        REMOTE_PUBLIC = "remote_public", "公網 IP + jump host"
+        SHIPPED = "shipped", "對方寄機器來"
+        SIMULATOR_LOCAL = "simulator_local", "本機模擬器"
+        SANDBOX_ONLY = "sandbox_only", "純沙箱 / 紙上"
+        UNKNOWN = "unknown", "未指定"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     site = models.ForeignKey(
         "sites.Site", on_delete=models.CASCADE, related_name="duts"
@@ -29,6 +39,15 @@ class Dut(models.Model):
     data_format = models.CharField(max_length=32, blank=True)
     last_check = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    access_mode = models.CharField(
+        max_length=20, choices=AccessMode.choices,
+        default=AccessMode.UNKNOWN,
+    )
+    access_notes = models.TextField(
+        blank=True,
+        help_text="跳板機 / VPN 設定 / 機器寄送單號 / 啟動 script 路徑等",
+    )
 
     class Meta:
         indexes = [models.Index(fields=["type", "status"])]

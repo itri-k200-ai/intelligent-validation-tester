@@ -14,6 +14,7 @@ class DutSerializer(serializers.ModelSerializer):
             "name", "type", "endpoint",
             "interfaces", "status", "response_time_ms", "data_format",
             "last_check", "created_at",
+            "access_mode", "access_notes",
         )
         read_only_fields = ("id", "site_name", "site_environment", "status",
                             "response_time_ms", "data_format", "last_check", "created_at")
