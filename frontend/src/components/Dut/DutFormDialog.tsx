@@ -49,17 +49,21 @@ export function DutFormDialog({
   const [interfaces, setInterfaces] = useState<Interface[]>(DEFAULT_INTERFACES[dutType]);
   const [accessMode, setAccessMode] = useState<AccessMode>("unknown");
   const [accessNotes, setAccessNotes] = useState("");
+  const [vendor, setVendor] = useState("");
+  const [model, setModel] = useState("");
+  const [firmwareVersion, setFirmwareVersion] = useState("");
+  const [serialNumber, setSerialNumber] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const isWall = useIsWallMode();
 
   useEffect(() => {
     if (open) {
-      setName("");
-      setEndpoint("");
-      setSiteId(sites[0]?.id ?? "");
+      setName(""); setEndpoint(""); setSiteId(sites[0]?.id ?? "");
       setInterfaces(DEFAULT_INTERFACES[dutType]);
-      setAccessMode("unknown");
-      setAccessNotes("");
+      setAccessMode("unknown"); setAccessNotes("");
+      setVendor(""); setModel(""); setFirmwareVersion("");
+      setSerialNumber(""); setContactEmail("");
       setSubmitError(null);
     }
   }, [open, dutType, sites]);
@@ -83,7 +87,12 @@ export function DutFormDialog({
         interfaces,
         access_mode: accessMode,
         access_notes: accessNotes.trim(),
-      });
+        vendor: vendor.trim(),
+        model: model.trim(),
+        firmware_version: firmwareVersion.trim(),
+        serial_number: serialNumber.trim(),
+        contact_email: contactEmail.trim(),
+      } as any);
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { error?: { details?: Record<string, string[]> } } } })
         .response?.data?.error?.details;
@@ -187,6 +196,24 @@ export function DutFormDialog({
               />
             </div>
           </div>
+          <details className="space-y-2">
+            <summary className="cursor-pointer text-sm font-medium text-white/70 hover:text-white">
+              設備身份（vendor / firmware / serial）— sign-off 報告用
+            </summary>
+            <div className="grid grid-cols-2 gap-4 pt-2">
+              <Input placeholder="廠商（Nokia / Ericsson / OSC …）"
+                value={vendor} onChange={(e) => setVendor(e.target.value)} />
+              <Input placeholder="型號"
+                value={model} onChange={(e) => setModel(e.target.value)} />
+              <Input placeholder="Firmware 版本"
+                value={firmwareVersion} onChange={(e) => setFirmwareVersion(e.target.value)} />
+              <Input placeholder="序號"
+                value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} />
+              <Input placeholder="聯絡 email" type="email"
+                value={contactEmail} onChange={(e) => setContactEmail(e.target.value)}
+                className="col-span-2" />
+            </div>
+          </details>
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               取消

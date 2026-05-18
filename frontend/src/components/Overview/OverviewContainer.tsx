@@ -2,6 +2,7 @@
 import { PageHeader } from "@/components/common/PageHeader";
 import { useOverviewSummary } from "@/hooks/Overview/useOverviewSummary";
 
+import { AgentSessionsStrip } from "./AgentSessionsStrip";
 import { OverviewKpiGrid } from "./OverviewKpiGrid";
 import { RecentRunsTable } from "./RecentRunsTable";
 
@@ -17,6 +18,7 @@ export function OverviewContainer() {
       <PageHeader title="驗證總覽" />
       <div className="space-y-4 md:space-y-6">
         <OverviewKpiGrid kpis={data.kpis} />
+        <AgentSessionsStrip />
         <RecentRunsTable runs={data.recent_runs} />
       </div>
     </>

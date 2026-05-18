@@ -52,8 +52,17 @@ export type Dut = {
   data_format: string;
   last_check: string | null;
   created_at: string;
-  access_mode: AccessMode;
-  access_notes: string;
+  // backend 一定有預設（access_mode=unknown / access_notes=""），但 TS 上
+  // 標 optional 讓 mock data 跟舊 fixture 不用全補。
+  access_mode?: AccessMode;
+  access_notes?: string;
+  vendor?: string;
+  model?: string;
+  firmware_version?: string;
+  serial_number?: string;
+  deployed_at?: string | null;
+  contact_email?: string;
+  config_snapshot?: Record<string, unknown>;
 };
 
 export type DutInput = Omit<Dut,

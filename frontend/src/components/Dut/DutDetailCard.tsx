@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { formatDate } from "@/lib/formatters";
-import type { Dut, InterfaceTestResult } from "@/types/dut";
+import { ACCESS_MODE_LABEL, type Dut, type InterfaceTestResult } from "@/types/dut";
 
 const ENV_LABEL: Record<string, string> = { indoor: "室內", outdoor: "室外" };
 
@@ -75,6 +75,60 @@ export function DutDetailCard({
                     {ENV_LABEL[dut.site_environment] ?? dut.site_environment}
                   </Badge>
                 )}
+              </div>
+            </div>
+          </div>
+        </section>
+        <section>
+          <h4 className="font-medium mb-3">設備身份</h4>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <div className="text-white/70">廠商</div>
+              <div className="mt-1">{(dut as any).vendor || <span className="text-white/40">—</span>}</div>
+            </div>
+            <div>
+              <div className="text-white/70">型號</div>
+              <div className="mt-1">{(dut as any).model || <span className="text-white/40">—</span>}</div>
+            </div>
+            <div>
+              <div className="text-white/70">Firmware</div>
+              <div className="mt-1 font-mono text-xs">
+                {(dut as any).firmware_version || <span className="text-white/40">—</span>}
+              </div>
+            </div>
+            <div>
+              <div className="text-white/70">序號</div>
+              <div className="mt-1 font-mono text-xs">
+                {(dut as any).serial_number || <span className="text-white/40">—</span>}
+              </div>
+            </div>
+            <div>
+              <div className="text-white/70">部署日期</div>
+              <div className="mt-1">{(dut as any).deployed_at || <span className="text-white/40">—</span>}</div>
+            </div>
+            <div>
+              <div className="text-white/70">聯絡 Email</div>
+              <div className="mt-1 text-xs">
+                {(dut as any).contact_email || <span className="text-white/40">—</span>}
+              </div>
+            </div>
+          </div>
+        </section>
+        <section>
+          <h4 className="font-medium mb-3">驗測情境（agent 用）</h4>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <div className="text-white/70">取得 DUT 方式</div>
+              <div className="mt-1">
+                <Badge tone="gray">
+                  {ACCESS_MODE_LABEL[((dut as any).access_mode ?? "unknown") as keyof typeof ACCESS_MODE_LABEL] ?? (dut as any).access_mode ?? "未指定"}
+                </Badge>
+              </div>
+            </div>
+            <div className="col-span-2">
+              <div className="text-white/70">Access 註記</div>
+              <div className="mt-1 text-xs whitespace-pre-line">
+                {(dut as any).access_notes || <span className="text-white/40">—</span>}
               </div>
             </div>
           </div>
