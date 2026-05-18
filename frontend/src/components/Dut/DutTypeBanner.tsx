@@ -2,7 +2,8 @@ import type { DutType } from "@/types/common";
 
 const STYLES: Record<DutType, { bg: string; border: string; dot: string; text: string }> = {
   SMO:  { bg: "bg-mint-300/10",  border: "border-mint-300/40",   dot: "bg-mint-300",   text: "text-mint-300" },
-  RIC:  { bg: "bg-teal/10",      border: "border-teal/40",       dot: "bg-teal",       text: "text-teal" },
+  "Near-RT RIC": { bg: "bg-teal/10", border: "border-teal/40", dot: "bg-teal", text: "text-teal" },
+  "Non-RT RIC":  { bg: "bg-teal/10", border: "border-teal/40", dot: "bg-teal", text: "text-teal" },
   xApp: { bg: "bg-warning/10",   border: "border-warning/40",    dot: "bg-warning",    text: "text-warning" },
   rApp: { bg: "bg-danger/10",    border: "border-danger/40",     dot: "bg-danger",     text: "text-danger" },
 };

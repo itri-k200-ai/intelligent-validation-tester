@@ -46,13 +46,18 @@ const NAV: NavNode[] = [
         label: "DUT",
         children: [
           { kind: "leaf", id: "iv-smo", href: "/interface-validation/smo", label: "SMO" },
-          { kind: "leaf", id: "iv-ric", href: "/interface-validation/ric", label: "RIC" },
+          { kind: "leaf", id: "iv-near-rt-ric", href: "/interface-validation/near-rt-ric", label: "Near-RT RIC" },
+          { kind: "leaf", id: "iv-non-rt-ric", href: "/interface-validation/non-rt-ric", label: "Non-RT RIC" },
           { kind: "leaf", id: "iv-xapp", href: "/interface-validation/xapp", label: "xApp" },
           { kind: "leaf", id: "iv-rapp", href: "/interface-validation/rapp", label: "rApp" },
         ],
       },
     ],
   },
+  // === 暫時隱藏：資料品質驗證 / 智慧程度驗證 ===
+  // 兩個分支暫時不上 nav；page、API、type 都保留，之後要回來只要把
+  // 下面這段拿出註解就好。路由仍可手動打 /data-validation/... 進去。
+  /*
   {
     kind: "branch",
     id: "data-validation",
@@ -65,7 +70,8 @@ const NAV: NavNode[] = [
         label: "DUT",
         children: [
           { kind: "leaf", id: "dv-smo", href: "/data-validation/smo", label: "SMO" },
-          { kind: "leaf", id: "dv-ric", href: "/data-validation/ric", label: "RIC" },
+          { kind: "leaf", id: "dv-near-rt-ric", href: "/data-validation/near-rt-ric", label: "Near-RT RIC" },
+          { kind: "leaf", id: "dv-non-rt-ric", href: "/data-validation/non-rt-ric", label: "Non-RT RIC" },
         ],
       },
     ],
@@ -87,6 +93,7 @@ const NAV: NavNode[] = [
       },
     ],
   },
+  */
   { kind: "leaf", id: "test-scenarios", href: "/test-scenarios", label: "端對端測試情境", icon: Target },
   {
     kind: "branch",
@@ -287,7 +294,8 @@ export function Sidebar({ className }: { className?: string }) {
               連接介面驗證
             </div>
             <WallNavRow href="/interface-validation/smo" label="SMO" pathname={pathname} compact />
-            <WallNavRow href="/interface-validation/ric" label="RIC" pathname={pathname} compact />
+            <WallNavRow href="/interface-validation/near-rt-ric" label="Near-RT RIC" pathname={pathname} compact />
+            <WallNavRow href="/interface-validation/non-rt-ric" label="Non-RT RIC" pathname={pathname} compact />
             <WallNavRow href="/interface-validation/xapp" label="xApp" pathname={pathname} compact />
             <WallNavRow href="/interface-validation/rapp" label="rApp" pathname={pathname} compact />
             <WallNavRow

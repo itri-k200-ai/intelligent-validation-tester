@@ -8,7 +8,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-ivtpass}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports: ["5432:5432"]
+    # host 5432 留給 near-rt-ric agent；IVT 對 host 開 5433 方便 debug
+    ports: ["5433:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ivt"]
       interval: 5s
@@ -46,7 +47,8 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_started }
       minio: { condition: service_started }
-    ports: ["8000:8000"]
+    # host 8000 留給 near-rt-ric agent；正式入口走 nginx :8080
+    ports: ["8002:8000"]
 
   backend-ws:
     build: ../backend
