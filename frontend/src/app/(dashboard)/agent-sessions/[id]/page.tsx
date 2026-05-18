@@ -1,11 +1,42 @@
 "use client";
 
+import axios from "axios";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { use } from "react";
 
 import { authDownload } from "@/lib/authDownload";
 import { apiClient } from "@/services/api/client";
+
+function AuthedImage({ src, alt }: { src: string; alt: string }) {
+  const [blob, setBlob] = useState<string | null>(null);
+  useEffect(() => {
+    let revoked = false;
+    let local: string | null = null;
+    const token = (() => {
+      try {
+        const raw = window.localStorage.getItem("ivt-auth");
+        if (!raw) return null;
+        return (JSON.parse(raw) as { state?: { token?: string } }).state?.token ?? null;
+      } catch { return null; }
+    })();
+    axios.get(src, {
+      responseType: "blob",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).then((r) => {
+      if (revoked) return;
+      local = URL.createObjectURL(r.data as Blob);
+      setBlob(local);
+    }).catch(() => {});
+    return () => {
+      revoked = true;
+      if (local) URL.revokeObjectURL(local);
+    };
+  }, [src]);
+  if (!blob) return <div className="h-32 w-full bg-white/5 animate-pulse rounded" />;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={blob} alt={alt} className="rounded border border-white/10 max-w-full" />;
+}
 
 type Trace = {
   session: {
@@ -64,6 +95,7 @@ type Trace = {
     captured_with: string;
     description: string;
     result_id: string | null;
+    content_type?: string;
     download_url?: string;
   }>;
 };
@@ -190,7 +222,29 @@ export default function AgentSessionTracePage({ params }: { params: Promise<{ id
         </div>
       )}
 
-      {/* Evidence — pcap / log / screenshot */}
+      {/* Screenshot 縮圖列（agent 截下來的終端機畫面 / UI 證據）*/}
+      {data.evidence && data.evidence.some((e) => e.kind === "screenshot") && (
+        <div>
+          <h2 className="text-lg font-semibold mb-2">
+            截圖證據（agent 執行過程實際畫面）
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {data.evidence
+              .filter((e) => e.kind === "screenshot" && e.download_url)
+              .map((e, i) => (
+                <figure key={i} className="rounded-item border border-white/10 p-2">
+                  <AuthedImage src={e.download_url!} alt={e.name} />
+                  <figcaption className="mt-2 text-xs">
+                    <div className="font-mono text-white/70">{e.name}</div>
+                    <div className="text-white/50">{e.description}</div>
+                  </figcaption>
+                </figure>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Evidence — pcap / log / screenshot 全部表 */}
       {data.evidence && data.evidence.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-2">

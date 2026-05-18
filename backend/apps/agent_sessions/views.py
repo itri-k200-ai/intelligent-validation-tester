@@ -82,6 +82,7 @@ class AgentSessionViewSet(viewsets.ModelViewSet):
             {"id": str(e.id), "kind": e.kind, "name": e.name,
              "size_bytes": e.size_bytes, "captured_with": e.captured_with,
              "description": e.description,
+             "content_type": e.content_type,
              "result_id": str(e.result_id) if e.result_id else None,
              "download_url": f"/api/evidence/{e.id}/download/"}
             for e in session.evidence.all()
