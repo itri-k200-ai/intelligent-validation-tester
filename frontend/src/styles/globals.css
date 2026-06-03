@@ -1374,12 +1374,14 @@ html.wall-mode .war-room-lab-tall {
   overflow: hidden;
   color: rgba(255, 255, 255, 0.95);
 }
-/* 沒被頁面覆寫時的預設標題 placeholder */
+/* 沒被頁面覆寫時的預設 placeholder — 現在放 HudOctagon (War_Room Page 13)。
+   垂直置中於 lab-tall 容器,讓八角形 + 標籤居中顯示。 */
 html.wall-mode .war-room-slot-placeholder {
-  margin-top: auto;
+  margin: auto 0;
   align-self: center;
-  font-size: 3rem;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 html.wall-mode .war-room-lab-tall--dut    { background: rgba(20, 100, 120, 0.55); }   /* 深 teal */
 html.wall-mode .war-room-lab-tall--equip  { background: rgba(56, 178, 200, 0.55); }   /* 亮 cyan */
@@ -1432,3 +1434,91 @@ html.wall-mode .wall-pad { padding: 64px; }
 
 /* Cards in wall mode get bigger internal spacing to feel right at scale */
 html.wall-mode main { padding: 4rem; }
+
+/* ====================================================================
+   Progress stepper — War_Room_mockup Page 9
+   Numbered ①②③④ stepper.  Component renders Tailwind defaults; rules
+   below tune wall-mode proportions (circle 5rem, label 1.75rem, glow
+   ring 8px).  See components/ui/progress-stepper.tsx.
+   ==================================================================== */
+html.wall-mode .progress-stepper {
+  align-items: flex-start;
+  width: 100%;
+}
+html.wall-mode .progress-stepper-circle {
+  height: 5rem !important;             /* 240px */
+  width: 5rem !important;
+  font-size: 2.25rem !important;       /* 108px number */
+  border-width: 3px !important;
+}
+html.wall-mode .progress-stepper-item[data-state="current"] .progress-stepper-circle {
+  box-shadow:
+    0 0 0 8px rgba(128, 255, 232, 0.25),
+    0 0 36px rgba(128, 255, 232, 0.65) !important;
+}
+html.wall-mode .progress-stepper-label {
+  font-size: 1.75rem !important;       /* 84px */
+  line-height: 1.2 !important;
+  margin-top: 0.5rem;
+}
+html.wall-mode .progress-stepper-connector {
+  height: 3px !important;
+  margin-top: 2.25rem !important;      /* align with circle centre */
+  margin-left: 0.75rem;
+  margin-right: 0.75rem;
+  min-width: 4rem;
+}
+
+/* ====================================================================
+   HUD octagon — War_Room_mockup Page 13 LABS illustration
+   Frame colour driven by [data-state]:
+     default  → dim teal           current  → bright mint + glow
+     done     → solid teal         disabled → faded white
+   ==================================================================== */
+.hud-octagon { color: rgba(114, 182, 201, 0.6); }
+.hud-octagon[data-state="current"]  { color: #80FFE8; }
+.hud-octagon[data-state="done"]     { color: #72B6C9; }
+.hud-octagon[data-state="disabled"] { color: rgba(255, 255, 255, 0.18); }
+
+.hud-octagon-svg {
+  width: 80px;
+  height: 80px;
+  display: block;
+}
+.hud-octagon-frame {
+  stroke-width: 2;
+  fill: rgba(10, 23, 47, 0.4);          /* faint navy fill so frame reads on busy bg */
+}
+.hud-octagon[data-state="current"] .hud-octagon-frame {
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 6px rgba(128, 255, 232, 0.65));
+}
+.hud-octagon[data-state="disabled"] .hud-octagon-frame {
+  fill: transparent;
+}
+.hud-octagon-label {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+}
+.hud-octagon[data-state="disabled"] .hud-octagon-label {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* Wall-mode scale.  Octagons sit inside lab-tall slots which are 1920px
+   wide × 2160px tall;  360px frame leaves breathing room with the label. */
+html.wall-mode .hud-octagon-svg {
+  width: 360px !important;
+  height: 360px !important;
+}
+html.wall-mode .hud-octagon-frame {
+  stroke-width: 3 !important;
+}
+html.wall-mode .hud-octagon[data-state="current"] .hud-octagon-frame {
+  filter: drop-shadow(0 0 24px rgba(128, 255, 232, 0.7)) !important;
+  stroke-width: 4 !important;
+}
+html.wall-mode .hud-octagon-label {
+  font-size: 2rem !important;
+  margin-top: 1.25rem;
+}

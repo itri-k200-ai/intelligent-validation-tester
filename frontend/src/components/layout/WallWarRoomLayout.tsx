@@ -3,6 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { HudOctagon } from "@/components/ui/hud-octagon";
 import { useRightWingSlotsStore } from "@/stores/rightWingSlotsStore";
 
 import { Header } from "./Header";
@@ -53,13 +54,25 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
           {/* 下半部:3 個高長條(各跨 2 row),內容由各頁面透過
               <RightWingSlots> 設定;沒設的話顯示分類標題 placeholder。 */}
           <div className="war-room-lab-tall war-room-lab-tall--dut">
-            {slots.dut ?? <span className="war-room-slot-placeholder">待測物</span>}
+            {slots.dut ?? (
+              <div className="war-room-slot-placeholder">
+                <HudOctagon kind="radar" label="待測物" />
+              </div>
+            )}
           </div>
           <div className="war-room-lab-tall war-room-lab-tall--equip">
-            {slots.equip ?? <span className="war-room-slot-placeholder">測試設備</span>}
+            {slots.equip ?? (
+              <div className="war-room-slot-placeholder">
+                <HudOctagon kind="tower" label="測試設備" />
+              </div>
+            )}
           </div>
           <div className="war-room-lab-tall war-room-lab-tall--method">
-            {slots.method ?? <span className="war-room-slot-placeholder">測試方法</span>}
+            {slots.method ?? (
+              <div className="war-room-slot-placeholder">
+                <HudOctagon kind="neural" label="測試方法" />
+              </div>
+            )}
           </div>
         </div>
       </section>
