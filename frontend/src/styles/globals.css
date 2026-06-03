@@ -1238,6 +1238,54 @@ html.wall-mode .war-room-main-body {
   flex: 1;
   overflow: auto;
   padding: 2rem 3rem 3rem;
+  position: relative;
+  isolation: isolate;
+}
+
+/* 平面模式下不顯示主牆背景(浮水印是 wall-mode 戰情室才需要的視覺) */
+.war-room-main-bg { display: none; }
+
+/* === 主牆背景:放大版八角 HUD 浮水印 ===
+   截圖示意「中間螢幕牆」用一個巨大八角形 + HUD 線稿當底,前面疊卡片
+   內容。設計師會給正式圖檔(.png / .svg),屆時改成:
+
+     .war-room-main-bg-asset {
+       background-image: url("/wall-assets/main-bg.png");
+       background-size: contain;
+       background-position: center;
+       background-repeat: no-repeat;
+     }
+     (並把 HudOctagon 從 WallWarRoomLayout 拿掉)
+
+   現在先用 inline HudOctagon 撐版面,確保 background / content 分層
+   結構先到位。 */
+html.wall-mode .war-room-main-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  opacity: 0.08;
+}
+html.wall-mode .war-room-main-bg-asset {
+  /* 等待設計師圖檔的暫用 inline SVG — 撐到主牆內容區大半,放在中央 */
+  margin: 0;
+}
+html.wall-mode .war-room-main-bg .hud-octagon-svg {
+  width: 2400px !important;
+  height: 2400px !important;
+}
+html.wall-mode .war-room-main-bg .hud-octagon-frame {
+  fill: transparent !important;
+  stroke-width: 5 !important;
+}
+html.wall-mode .war-room-main-content {
+  position: relative;
+  z-index: 1;
+  min-height: 100%;
 }
 
 /* 左副牆:y=3240~6480, x=0~5760 — Sidebar 切換選單 */

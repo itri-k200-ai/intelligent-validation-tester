@@ -36,7 +36,15 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
           </button>
         </div>
         <Header />
-        <main className="war-room-main-body">{children}</main>
+        <main className="war-room-main-body">
+          {/* 八角 HUD 背景浮水印 — 之後設計師會給正式圖檔,屆時把
+              .war-room-main-bg-asset 切到 background-image: url(...)。
+              現在先用 inline HudOctagon 給氛圍。 */}
+          <div className="war-room-main-bg" aria-hidden="true">
+            <HudOctagon kind="radar" className="war-room-main-bg-asset" />
+          </div>
+          <div className="war-room-main-content">{children}</div>
+        </main>
       </section>
 
       {/* === 左副牆:Sidebar 切換選單 === */}
