@@ -1,9 +1,10 @@
 "use client";
 import { ChevronLeft } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { HudOctagon } from "@/components/ui/hud-octagon";
+import { getPageMeta } from "@/lib/pageMeta";
 import { useRightWingSlotsStore } from "@/stores/rightWingSlotsStore";
 
 import { Header } from "./Header";
@@ -19,12 +20,17 @@ import { Sidebar } from "./Sidebar";
  */
 export function WallWarRoomLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname() ?? "";
+  const { title, subtitle, accent } = getPageMeta(pathname);
   const slots = useRightWingSlotsStore((s) => s.slots);
 
   return (
     <div className="war-room-root">
       {/* === 主牆:IVT 平台頁面內容 === */}
       <section className="war-room-main">
+        {/* 3 欄 grid:[上一頁] [標題置中] [spacer]
+            Header 在這個版面下會把自己的 .header-title / .header-subtitle 藏掉
+            (見 globals.css),改由 topbar 顯示。 */}
         <div className="war-room-main-topbar">
           <button
             type="button"
@@ -34,6 +40,17 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
           >
             <ChevronLeft className="w-8 h-8" /> 上一頁
           </button>
+          <div className="war-room-main-title">
+            {title && (
+              <div className={`war-room-main-title-text ${accent ?? "text-white"}`}>
+                {title}
+              </div>
+            )}
+            {subtitle && (
+              <div className="war-room-main-subtitle-text">{subtitle}</div>
+            )}
+          </div>
+          <div className="war-room-main-topbar-spacer" aria-hidden />
         </div>
         <Header />
         <main className="war-room-main-body">

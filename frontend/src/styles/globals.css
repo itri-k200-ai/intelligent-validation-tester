@@ -1211,8 +1211,8 @@ html.wall-mode .war-room-main {
   overflow: hidden;
 }
 html.wall-mode .war-room-main-topbar {
-  display: flex;
-  align-items: center;
+  /* grid template + align-items 在 base rule(下方)定義,wall-mode 只蓋
+     padding / bg / border 跟字級 */
   padding: 0.75rem 2rem;
   background: linear-gradient(
     to right,
@@ -1220,6 +1220,14 @@ html.wall-mode .war-room-main-topbar {
     rgba(71, 85, 105, 0.25)
   );
   border-bottom: 2px solid rgba(255, 255, 255, 0.08);
+}
+html.wall-mode .war-room-main-title-text {
+  font-size: 3.5rem !important;        /* 168px */
+  line-height: 1.1 !important;
+}
+html.wall-mode .war-room-main-subtitle-text {
+  font-size: 1.5rem !important;        /* 72px */
+  margin-top: 0.5rem;
 }
 html.wall-mode .war-room-back {
   display: inline-flex;
@@ -1244,6 +1252,43 @@ html.wall-mode .war-room-main-body {
 
 /* 平面模式下不顯示主牆背景(浮水印是 wall-mode 戰情室才需要的視覺) */
 .war-room-main-bg { display: none; }
+
+/* === 主牆 topbar(base) =====================================================
+   3 欄 grid:[上一頁(left)] [標題置中] [spacer(right)]。
+   wall-mode 額外加大字級 / 加 bg gradient(見上方 wall-mode override)。 */
+.war-room-main-topbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+}
+.war-room-main-topbar > .war-room-back {
+  justify-self: start;
+}
+.war-room-main-title {
+  min-width: 0;
+  text-align: center;
+}
+.war-room-main-title-text {
+  font-weight: 700;
+  color: white;
+  line-height: 1.15;
+  font-size: 1.125rem;
+  letter-spacing: 0.01em;
+}
+.war-room-main-subtitle-text {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.8rem;
+  margin-top: 0.15rem;
+}
+
+/* Header 渲染在 war-room layout 內時,把它原本的 title / subtitle 藏掉 —
+   topbar 已經顯示標題,Header 只負責右邊的 utility(電視牆切換 / user / logout)。 */
+.war-room-main header .header-title,
+.war-room-main header .header-subtitle {
+  display: none !important;
+}
 
 /* === 主牆背景:放大版八角 HUD 浮水印 ===
    截圖示意「中間螢幕牆」用一個巨大八角形 + HUD 線稿當底,前面疊卡片
