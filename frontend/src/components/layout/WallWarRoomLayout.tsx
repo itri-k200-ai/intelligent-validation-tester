@@ -23,7 +23,7 @@ import { Sidebar } from "./Sidebar";
 export function WallWarRoomLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname() ?? "";
-  const { title, subtitle, accent } = getPageMeta(pathname);
+  const { title, accent } = getPageMeta(pathname);
   const slots = useRightWingSlotsStore((s) => s.slots);
   const { user, logout } = useAuth();
   const isWall = useWallModeStore((s) => s.isWall);
@@ -53,9 +53,6 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
               <div className={`war-room-main-title-text ${accent ?? "text-white"}`}>
                 {title}
               </div>
-            )}
-            {subtitle && (
-              <div className="war-room-main-subtitle-text">{subtitle}</div>
             )}
           </div>
           <div className="war-room-main-topbar-actions">
