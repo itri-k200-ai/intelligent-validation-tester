@@ -1,13 +1,15 @@
 "use client";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, LogOut, SquareDashed, Tv, Tv2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { Button } from "@/components/ui/button";
 import { HudOctagon } from "@/components/ui/hud-octagon";
+import { useAuth } from "@/hooks/Auth/useAuth";
 import { getPageMeta } from "@/lib/pageMeta";
 import { useRightWingSlotsStore } from "@/stores/rightWingSlotsStore";
+import { useWallModeStore } from "@/stores/wallModeStore";
 
-import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
 
 /**
@@ -23,14 +25,20 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
   const { title, subtitle, accent } = getPageMeta(pathname);
   const slots = useRightWingSlotsStore((s) => s.slots);
+  const { user, logout } = useAuth();
+  const isWall = useWallModeStore((s) => s.isWall);
+  const toggleWall = useWallModeStore((s) => s.toggle);
+  const showBezels = useWallModeStore((s) => s.showBezels);
+  const toggleBezels = useWallModeStore((s) => s.toggleBezels);
 
   return (
     <div className="war-room-root">
       {/* === 主牆:IVT 平台頁面內容 === */}
       <section className="war-room-main">
-        {/* 3 欄 grid:[上一頁] [標題置中] [spacer]
-            Header 在這個版面下會把自己的 .header-title / .header-subtitle 藏掉
-            (見 globals.css),改由 topbar 顯示。 */}
+        {/* 3 欄 grid:[上一頁(left)] [標題置中(center)] [utility(right)]
+            War-room layout 下不再 render <Header />,所有最上層的
+            action(框線 / 電視牆切換 / user / 登出)都集中在 topbar
+            右側,維持單一橫條。 */}
         <div className="war-room-main-topbar">
           <button
             type="button"
@@ -50,9 +58,45 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
               <div className="war-room-main-subtitle-text">{subtitle}</div>
             )}
           </div>
-          <div className="war-room-main-topbar-spacer" aria-hidden />
+          <div className="war-room-main-topbar-actions">
+            {isWall && (
+              <Button
+                variant={showBezels ? "default" : "ghost"}
+                size="sm"
+                onClick={toggleBezels}
+                title={showBezels ? "隱藏電視框線" : "顯示電視框線"}
+              >
+                <SquareDashed className="h-4 w-4 mr-2" />
+                {showBezels ? "框線中" : "框線"}
+              </Button>
+            )}
+            <Button
+              variant={isWall ? "default" : "ghost"}
+              size="sm"
+              onClick={toggleWall}
+              title={isWall ? "切回一般模式" : "切換到電視牆模式"}
+            >
+              {isWall ? (
+                <>
+                  <Tv2 className="h-4 w-4 mr-2" /> 牆面中
+                </>
+              ) : (
+                <>
+                  <Tv className="h-4 w-4 mr-2" /> 電視牆
+                </>
+              )}
+            </Button>
+            {user && (
+              <span className="text-sm text-white/70 hidden sm:inline">
+                {user.email}{" "}
+                <span className="text-white/40">({user.role})</span>
+              </span>
+            )}
+            <Button variant="ghost" size="icon" onClick={logout} title="登出">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-        <Header />
         <main className="war-room-main-body">
           {/* 八角 HUD 背景浮水印 — 之後設計師會給正式圖檔,屆時把
               .war-room-main-bg-asset 切到 background-image: url(...)。

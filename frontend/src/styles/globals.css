@@ -1229,6 +1229,30 @@ html.wall-mode .war-room-main-subtitle-text {
   font-size: 1.5rem !important;        /* 72px */
   margin-top: 0.5rem;
 }
+/* utility 區(框線 / 電視牆 / user / logout)— Header 的放大規則只認 <header>,
+   按鈕搬到 .war-room-main-topbar-actions 裡要另外給字級 / icon / padding */
+html.wall-mode .war-room-main-topbar-actions {
+  gap: 1.5rem;
+}
+html.wall-mode .war-room-main-topbar-actions button {
+  font-size: 2rem !important;          /* 96px */
+  padding: 0.75rem 1.75rem !important;
+  height: auto !important;
+  min-height: 3.5rem;
+}
+html.wall-mode .war-room-main-topbar-actions svg {
+  width: 2rem !important;
+  height: 2rem !important;
+}
+html.wall-mode .war-room-main-topbar-actions span {
+  font-size: 2rem !important;          /* user email */
+}
+html.wall-mode .war-room-main-topbar-actions button.h-9.w-9 {
+  width: 3.5rem !important;
+  height: 3.5rem !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+}
 html.wall-mode .war-room-back {
   display: inline-flex;
   align-items: center;
@@ -1254,7 +1278,8 @@ html.wall-mode .war-room-main-body {
 .war-room-main-bg { display: none; }
 
 /* === 主牆 topbar(base) =====================================================
-   3 欄 grid:[上一頁(left)] [標題置中] [spacer(right)]。
+   3 欄 grid:[上一頁(left)] [標題置中(center)] [utility 按鈕(right)]
+   War-room layout 下不再 render <Header />,所有 top-level action 都進 topbar。
    wall-mode 額外加大字級 / 加 bg gradient(見上方 wall-mode override)。 */
 .war-room-main-topbar {
   display: grid;
@@ -1282,12 +1307,11 @@ html.wall-mode .war-room-main-body {
   font-size: 0.8rem;
   margin-top: 0.15rem;
 }
-
-/* Header 渲染在 war-room layout 內時,把它原本的 title / subtitle 藏掉 —
-   topbar 已經顯示標題,Header 只負責右邊的 utility(電視牆切換 / user / logout)。 */
-.war-room-main header .header-title,
-.war-room-main header .header-subtitle {
-  display: none !important;
+.war-room-main-topbar-actions {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 /* === 主牆背景:放大版八角 HUD 浮水印 ===
