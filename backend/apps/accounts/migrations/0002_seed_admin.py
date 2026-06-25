@@ -10,7 +10,7 @@ def seed_admin(apps, schema_editor):
     User.objects.create(
         email="admin@ivt.local",
         username="admin",
-        password=make_password("admin123"),
+        password=make_password("admin"),
         role="admin",
         is_staff=True,
         is_superuser=True,

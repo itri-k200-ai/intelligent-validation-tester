@@ -461,67 +461,69 @@ function DutWallBandsAggregate({
         </div>
       </div>
 
-      {/* 測試狀態 — 全部 DUT 平均回應時間趨勢(各 interface 類型) */}
-      <div className="dut-wall-band dut-wall-band--status">
-        <div className="dut-wall-band-title">
-          即時測試狀態 — 全部 {dutType}
-        </div>
-        <div className="dut-wall-band-body dut-wall-band-body--chart">
-          <DutStatusChart />
-        </div>
-      </div>
-
-      {/* 測試結果 — 全部 DUT 狀態總覽 */}
-      <div className="dut-wall-band dut-wall-band--result">
-        <div className="dut-wall-band-title">
-          全部設備狀態 — 共 {total} 台 / 在線 {online} / 離線 {offline} / 異常 {errored}
-        </div>
-        <div className="dut-wall-band-body">
-          {total === 0 ? (
-            <div className="aggregate-empty">
-              <p className="aggregate-empty-title">尚無 {dutType} 設備</p>
-              <p className="aggregate-empty-hint">點左側「新增」建立第一台</p>
+      {/* 測試狀態 + 測試結果 — 合併成一格(占 2 col) */}
+      <div className="dut-wall-band dut-wall-band--status dut-wall-band--merged">
+        <div className="dut-wall-band-split">
+          <section>
+            <div className="dut-wall-band-title">
+              即時測試狀態 — 全部 {dutType}
             </div>
-          ) : (
-            <table className="dut-wall-table">
-              <thead>
-                <tr>
-                  <th>設備</th>
-                  <th>狀態</th>
-                  <th>回應時間</th>
-                  <th>最後檢查</th>
-                </tr>
-              </thead>
-              <tbody>
-                {duts.slice(0, 6).map((d) => (
-                  <tr key={d.id}>
-                    <td className="truncate-cell">{d.name}</td>
-                    <td>
-                      <span
-                        className={`result-pill result-pill--${
-                          d.status === "online"
-                            ? "pass"
-                            : d.status === "error"
-                              ? "fail"
-                              : "fail"
-                        }`}
-                      >
-                        {d.status === "online"
-                          ? "在線"
-                          : d.status === "error"
-                            ? "異常"
-                            : "離線"}
-                      </span>
-                    </td>
-                    <td className="tabular">
-                      {d.response_time_ms != null ? `${d.response_time_ms}ms` : "—"}
-                    </td>
-                    <td className="tabular">{formatDate(d.last_check) ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+            <div className="dut-wall-band-body dut-wall-band-body--chart">
+              <DutStatusChart />
+            </div>
+          </section>
+          <section>
+            <div className="dut-wall-band-title">
+              全部設備狀態 — 共 {total} 台 / 在線 {online} / 離線 {offline} / 異常 {errored}
+            </div>
+            <div className="dut-wall-band-body">
+              {total === 0 ? (
+                <div className="aggregate-empty">
+                  <p className="aggregate-empty-title">尚無 {dutType} 設備</p>
+                  <p className="aggregate-empty-hint">點左側「新增」建立第一台</p>
+                </div>
+              ) : (
+                <table className="dut-wall-table">
+                  <thead>
+                    <tr>
+                      <th>設備</th>
+                      <th>狀態</th>
+                      <th>回應時間</th>
+                      <th>最後檢查</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {duts.slice(0, 6).map((d) => (
+                      <tr key={d.id}>
+                        <td className="truncate-cell">{d.name}</td>
+                        <td>
+                          <span
+                            className={`result-pill result-pill--${
+                              d.status === "online"
+                                ? "pass"
+                                : d.status === "error"
+                                  ? "fail"
+                                  : "fail"
+                            }`}
+                          >
+                            {d.status === "online"
+                              ? "在線"
+                              : d.status === "error"
+                                ? "異常"
+                                : "離線"}
+                          </span>
+                        </td>
+                        <td className="tabular">
+                          {d.response_time_ms != null ? `${d.response_time_ms}ms` : "—"}
+                        </td>
+                        <td className="tabular">{formatDate(d.last_check) ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </section>
         </div>
       </div>
     </div>
@@ -721,61 +723,65 @@ function DutWallBands({
           </div>
         </div>
       </div>
-      <div className="dut-wall-band dut-wall-band--status">
-        <div className="dut-wall-band-title">
-          {hasSessions
-            ? `即時測試狀態 — ${sessions.length} 個進行中`
-            : "即時測試狀態"}
-        </div>
-        {hasSessions ? (
-          <div className="dut-wall-band-body">
-            <TestProgressList sessions={sessions} />
-          </div>
-        ) : (
-          <div className="dut-wall-band-body dut-wall-band-body--chart">
-            <DutStatusChart />
-          </div>
-        )}
-      </div>
-      <div className="dut-wall-band dut-wall-band--result">
-        <div className="dut-wall-band-title">即時測試結果</div>
-        <div className="dut-wall-band-body">
-          <table className="dut-wall-table">
-            <thead>
-              <tr>
-                <th>介面</th>
-                <th>結果</th>
-                <th>回應時間</th>
-                <th>時間戳</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>O1</td>
-                <td><span className="result-pill result-pill--pass">通過</span></td>
-                <td className="tabular">45ms</td>
-                <td className="tabular">14:32:01</td>
-              </tr>
-              <tr>
-                <td>A1</td>
-                <td><span className="result-pill result-pill--fail">失敗</span></td>
-                <td className="tabular">timeout</td>
-                <td className="tabular">14:31:55</td>
-              </tr>
-              <tr>
-                <td>E2</td>
-                <td><span className="result-pill result-pill--pass">通過</span></td>
-                <td className="tabular">120ms</td>
-                <td className="tabular">14:31:50</td>
-              </tr>
-              <tr>
-                <td>O1</td>
-                <td><span className="result-pill result-pill--pass">通過</span></td>
-                <td className="tabular">38ms</td>
-                <td className="tabular">14:30:48</td>
-              </tr>
-            </tbody>
-          </table>
+      <div className="dut-wall-band dut-wall-band--status dut-wall-band--merged">
+        <div className="dut-wall-band-split">
+          <section>
+            <div className="dut-wall-band-title">
+              {hasSessions
+                ? `即時測試狀態 — ${sessions.length} 個進行中`
+                : "即時測試狀態"}
+            </div>
+            {hasSessions ? (
+              <div className="dut-wall-band-body">
+                <TestProgressList sessions={sessions} />
+              </div>
+            ) : (
+              <div className="dut-wall-band-body dut-wall-band-body--chart">
+                <DutStatusChart />
+              </div>
+            )}
+          </section>
+          <section>
+            <div className="dut-wall-band-title">即時測試結果</div>
+            <div className="dut-wall-band-body">
+              <table className="dut-wall-table">
+                <thead>
+                  <tr>
+                    <th>介面</th>
+                    <th>結果</th>
+                    <th>回應時間</th>
+                    <th>時間戳</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>O1</td>
+                    <td><span className="result-pill result-pill--pass">通過</span></td>
+                    <td className="tabular">45ms</td>
+                    <td className="tabular">14:32:01</td>
+                  </tr>
+                  <tr>
+                    <td>A1</td>
+                    <td><span className="result-pill result-pill--fail">失敗</span></td>
+                    <td className="tabular">timeout</td>
+                    <td className="tabular">14:31:55</td>
+                  </tr>
+                  <tr>
+                    <td>E2</td>
+                    <td><span className="result-pill result-pill--pass">通過</span></td>
+                    <td className="tabular">120ms</td>
+                    <td className="tabular">14:31:50</td>
+                  </tr>
+                  <tr>
+                    <td>O1</td>
+                    <td><span className="result-pill result-pill--pass">通過</span></td>
+                    <td className="tabular">38ms</td>
+                    <td className="tabular">14:30:48</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
         </div>
       </div>
     </div>

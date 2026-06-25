@@ -51,6 +51,15 @@ html.wall-mode {
    regular mode on the scaled-down preview. */
 html.wall-mode .rounded-section {
   border-radius: 2.625rem !important;   /* 126px */
+  /* 所有 .rounded-section 級別的卡片(<Card/>、KpiCard 等)在 wall-mode 下
+     共用 Figma 規範漸層 + 一致的微 teal 邊框。border shorthand 會蓋掉
+     KpiCard 的 tone-based border-l-4 (彩色左邊條) 跟 base Card 的 navy 純色。 */
+  background: linear-gradient(
+    92deg,
+    rgba(73, 119, 132, 0.40) 14%,
+    rgba(10, 23, 47, 0.40) 83%
+  ) !important;
+  border: 1px solid rgba(114, 182, 201, 0.28) !important;
 }
 html.wall-mode .rounded-item {
   border-radius: 1.5rem !important;     /* 72px */
@@ -506,9 +515,11 @@ html.wall-mode [role="dialog"].wall-dialog--left-wing .dut-form-grid {
 html.wall-mode .slot-panel-title {
   font-size: 3rem !important;           /* 144px */
   font-weight: 700;
+  text-align: center;
 }
 html.wall-mode .slot-panel-subtitle {
   font-size: 1.75rem !important;        /* 84px */
+  text-align: center;
 }
 /* 副牆內所有 button(非 nav row Link)放大 — 刷新 / 新增 / 執行測試 之類 */
 html.wall-mode .war-room-left button,
@@ -622,19 +633,45 @@ html.wall-mode .dut-wall-bands {
   height: calc(3240px - 11rem);
   min-height: 2400px;
 }
+/* 合併卡 — env 占 1 col,merged 占 2 col,內部再切兩 column */
+html.wall-mode .dut-wall-band--merged {
+  grid-column: span 2;
+}
+html.wall-mode .dut-wall-band-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  flex: 1;
+  min-height: 0;
+}
+html.wall-mode .dut-wall-band-split > section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 html.wall-mode .dut-wall-band {
   display: flex;
   flex-direction: column;
   border-radius: 1.5rem;
   padding: 2rem;
   overflow: hidden;
-  background: rgba(10, 23, 47, 0.6);     /* navy base */
+  /* 漸層框 — 跟 war-room-lab-* 共用,維持整面牆每張卡片視覺一致 */
+  /* Figma 規範:92deg, #497784 14%, #0A172F 83%, 兩 stop 都 40% 透明,
+     卡片半透明疊在主牆 navy 背景上,跟整體融合。 */
+  background: linear-gradient(
+    92deg,
+    rgba(73, 119, 132, 0.40) 14%,
+    rgba(10, 23, 47, 0.40) 83%
+  );
+  border: 1px solid rgba(114, 182, 201, 0.28);
 }
 html.wall-mode .dut-wall-band-title {
   font-size: 3rem;
   font-weight: 700;
   margin-bottom: 1.5rem;
   letter-spacing: 0.05em;
+  text-align: center;
 }
 html.wall-mode .dut-wall-band-body {
   flex: 1;
@@ -651,24 +688,8 @@ html.wall-mode .dut-wall-band-body--chart {
   justify-content: stretch;
   min-height: 0;
 }
-/* 即時環境影像 — teal 系(觀察用) */
-html.wall-mode .dut-wall-band--env {
-  background: linear-gradient(135deg, rgba(73, 119, 132, 0.35), rgba(10, 23, 47, 0.7));
-  border: 2px solid rgba(114, 182, 201, 0.5);
-}
-html.wall-mode .dut-wall-band--env .dut-wall-band-title { color: #72B6C9; }
-/* 即時測試狀態 — mint 系(進行中) */
-html.wall-mode .dut-wall-band--status {
-  background: linear-gradient(135deg, rgba(128, 255, 232, 0.18), rgba(10, 23, 47, 0.7));
-  border: 2px solid rgba(128, 255, 232, 0.5);
-}
-html.wall-mode .dut-wall-band--status .dut-wall-band-title { color: #80FFE8; }
-/* 即時測試結果 — xApp 紫(主題裡的 accent,跟 mint / teal 區分) */
-html.wall-mode .dut-wall-band--result {
-  background: linear-gradient(135deg, rgba(180, 144, 255, 0.2), rgba(10, 23, 47, 0.7));
-  border: 2px solid rgba(180, 144, 255, 0.5);
-}
-html.wall-mode .dut-wall-band--result .dut-wall-band-title { color: #B490FF; }
+/* 主牆 3 條 band 的標題統一白色 — base .dut-wall-band-title 沒設色,
+   繼承 white,不再以 env/status/result 給標題上 teal/mint/purple */
 
 /* 主牆色帶內的小表格 + status / result 標籤 */
 html.wall-mode .dut-wall-band-body {
@@ -1201,7 +1222,9 @@ html.wall-mode .video-progress {
   border-radius: 9999px;
 }
 
-/* 主牆:y=0~3240,11520 寬全展開 — 放原本的 IVT app(Header + 頁面內容) */
+/* 主牆:y=0~3240,11520 寬全展開 — 放原本的 IVT app(Header + 頁面內容)
+   背景蓋掉 body 的 navy gradient,讓中間螢幕呈純黑底(浮水印 + 卡片在上面)。
+   兩翼副牆仍保留 teal / warning tint(body bg 的 y=3240~6480 區段)。 */
 html.wall-mode .war-room-main {
   position: absolute;
   inset: 0 0 auto 0;
@@ -1209,17 +1232,12 @@ html.wall-mode .war-room-main {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: #000000;
 }
 html.wall-mode .war-room-main-topbar {
   /* grid template + align-items 在 base rule(下方)定義,wall-mode 只蓋
-     padding / bg / border 跟字級 */
+     padding。不另外給背景色 / border,讓 topbar 直接融入主牆背景。 */
   padding: 0.75rem 2rem;
-  background: linear-gradient(
-    to right,
-    rgba(100, 116, 139, 0.45),
-    rgba(71, 85, 105, 0.25)
-  );
-  border-bottom: 2px solid rgba(255, 255, 255, 0.08);
 }
 html.wall-mode .war-room-main-title-text {
   font-size: 3.5rem !important;        /* 168px */
@@ -1319,12 +1337,12 @@ html.wall-mode .war-room-main-body {
    內容。設計師會給正式圖檔(.png / .svg),屆時改成:
 
      .war-room-main-bg-asset {
-       background-image: url("/wall-assets/main-bg.png");
+       background-image: url("/images/bg-war-room-main.png");
        background-size: contain;
        background-position: center;
        background-repeat: no-repeat;
      }
-     (並把 HudOctagon 從 WallWarRoomLayout 拿掉)
+     (圖檔放 frontend/public/images/,並把 HudOctagon 從 WallWarRoomLayout 拿掉)
 
    現在先用 inline HudOctagon 撐版面,確保 background / content 分層
    結構先到位。 */
@@ -1357,7 +1375,8 @@ html.wall-mode .war-room-main-content {
   min-height: 100%;
 }
 
-/* 左副牆:y=3240~6480, x=0~5760 — Sidebar 切換選單 */
+/* 左副牆:y=3240~6480, x=0~5760 — Sidebar 切換選單
+   背景跟主牆 / 右副牆統一純黑,蓋掉 body bg 的 teal tint */
 html.wall-mode .war-room-left {
   position: absolute;
   top: 3240px;
@@ -1366,6 +1385,15 @@ html.wall-mode .war-room-left {
   height: 3240px;
   display: flex;
   overflow: hidden;
+  background: #000000;
+}
+/* Sidebar (<aside>) 自己有 bg-navy-600/70 半透明底,在 wall-mode 下覆寫成
+   透明,讓 .war-room-left 的純黑能透出來;右側 border-r 也拿掉避免出現
+   一條淺色直線 */
+html.wall-mode .war-room-left .war-room-sidebar,
+html.wall-mode .war-room-left aside {
+  background: transparent !important;
+  border-right: none !important;
 }
 /* 副牆裡的 sidebar 撐滿,覆寫主牆的 1920px 寬度規則,並關閉自動捲動。 */
 html.wall-mode .war-room-left .war-room-sidebar {
@@ -1457,6 +1485,9 @@ html.wall-mode .war-room-right {
   width: 5760px;
   height: 3240px;
   padding: 0;
+  /* 跟主牆一致的純黑底,蓋掉 body 的 warning 橘 tint + navy gradient。
+     6 個 cell(上排 3 個 lab-top + 下排 3 個 lab-tall)的卡片漸層在上面渲染。 */
+  background: #000000;
 }
 html.wall-mode .war-room-lab-info {
   width: 100%;
@@ -1466,7 +1497,8 @@ html.wall-mode .war-room-lab-info {
   grid-template-rows: 1080px 1080px 1080px;
   gap: 0;
 }
-/* 上排 3 格(紫色):實驗室簡介 / 測試目標 / 合作夥伴 — 各占 1 TV cell */
+/* 上排 3 格:實驗室簡介 / 測試目標 / 合作夥伴 — 各占 1 TV cell
+   跟下排 lab-tall 跟主牆 dut-wall-band 共用同一個漸層框視覺 */
 html.wall-mode .war-room-lab-top {
   display: flex;
   align-items: center;
@@ -1474,12 +1506,102 @@ html.wall-mode .war-room-lab-top {
   font-size: 3rem;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.92);
-  background: rgba(167, 139, 250, 0.28);
-  border: 2px solid rgba(167, 139, 250, 0.42);
+  /* Figma 規範:92deg, #497784 14%, #0A172F 83%, 兩 stop 都 40% 透明,
+     卡片半透明疊在主牆 navy 背景上,跟整體融合。 */
+  background: linear-gradient(
+    92deg,
+    rgba(73, 119, 132, 0.40) 14%,
+    rgba(10, 23, 47, 0.40) 83%
+  );
+  border: 1px solid rgba(114, 182, 201, 0.28);
   border-radius: 1.5rem;
   margin: 1rem;
 }
-/* 下排 3 格高長條(各跨 2 row = 2 TV cells):待測物 / 測試設備 / 測試方法 */
+/* 實驗室簡介:左 logo + 右 (名稱 + 描述),覆寫 lab-top 預設的純文字置中
+   左邊 padding 收緊讓 logo 貼近邊框,給人 logo 「靠左」的感覺 */
+html.wall-mode .war-room-lab-top--intro {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2rem;
+  padding: 2rem 2.5rem 2rem 0.5rem;
+  text-align: left;
+}
+html.wall-mode .war-room-lab-intro-logo {
+  height: 600px;
+  width: auto;
+  max-width: 50%;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+html.wall-mode .war-room-lab-intro-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+html.wall-mode .war-room-lab-intro-title {
+  font-size: 3rem;
+  font-weight: 700;
+  color: white;
+  margin: 0;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+}
+html.wall-mode .war-room-lab-intro-desc {
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.78);
+  margin: 0;
+}
+/* 測試目標 / 合作夥伴:左 icon + 右 (標題 + 描述)
+   icon 是黑線稿透明底,filter 強制反白 (brightness(0) invert(1)) */
+html.wall-mode .war-room-lab-top--icon {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2rem;
+  padding: 2rem 2.5rem 2rem 1.5rem;
+  text-align: left;
+}
+html.wall-mode .war-room-lab-icon {
+  height: 400px;
+  width: auto;
+  max-width: 40%;
+  flex-shrink: 0;
+  object-fit: contain;
+  /* 黑線稿 → 白:brightness(0) 強制把任何顏色變黑,invert(1) 再翻成白。
+     透明像素不受 filter 影響仍保持透明。 */
+  filter: brightness(0) invert(1);
+  /* 微弱 mint 光暈,讓 icon 在純黑卡片上更跳一點 */
+  -webkit-filter: brightness(0) invert(1);
+}
+html.wall-mode .war-room-lab-icon-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+html.wall-mode .war-room-lab-icon-title {
+  font-size: 3rem;
+  font-weight: 700;
+  color: white;
+  margin: 0;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+}
+html.wall-mode .war-room-lab-icon-desc {
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.78);
+  margin: 0;
+}
+/* 下排 3 格高長條(各跨 2 row = 2 TV cells):待測物 / 測試設備 / 測試方法
+   共用漸層框 — 不再用 --dut/--equip/--method 分色 */
 html.wall-mode .war-room-lab-tall {
   grid-row: span 2;
   display: flex;
@@ -1490,6 +1612,14 @@ html.wall-mode .war-room-lab-tall {
   border-radius: 1.5rem;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.95);
+  /* Figma 規範:92deg, #497784 14%, #0A172F 83%, 兩 stop 都 40% 透明,
+     卡片半透明疊在主牆 navy 背景上,跟整體融合。 */
+  background: linear-gradient(
+    92deg,
+    rgba(73, 119, 132, 0.40) 14%,
+    rgba(10, 23, 47, 0.40) 83%
+  );
+  border: 1px solid rgba(114, 182, 201, 0.28);
 }
 /* 沒被頁面覆寫時的預設 placeholder — 現在放 HudOctagon (War_Room Page 13)。
    垂直置中於 lab-tall 容器,讓八角形 + 標籤居中顯示。 */
@@ -1500,9 +1630,9 @@ html.wall-mode .war-room-slot-placeholder {
   align-items: center;
   justify-content: center;
 }
-html.wall-mode .war-room-lab-tall--dut    { background: rgba(20, 100, 120, 0.55); }   /* 深 teal */
-html.wall-mode .war-room-lab-tall--equip  { background: rgba(56, 178, 200, 0.55); }   /* 亮 cyan */
-html.wall-mode .war-room-lab-tall--method { background: rgba(244, 196, 199, 0.55); }  /* 粉 */
+/* lab-tall 的 --dut / --equip / --method 不再用顏色區分,內部 HudOctagon
+   的 state 已經給了 mint / teal 等視覺辨識。class 留著供 JSX 仍能傳,但
+   不套不同的 frame 色。 */
 
 /* Toggle bezel guides off via Header button — set on <html> by WallModeApplier
    when showBezels is false. Used to preview the layout without the dev guides. */

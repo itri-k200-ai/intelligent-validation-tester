@@ -113,10 +113,49 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
       {/* === 右副牆:實驗室概要 + page slots === */}
       <section className="war-room-right">
         <div className="war-room-lab-info">
-          {/* 上排:3 個紫色小格,各占一個 TV 螢幕(1920×1080) */}
-          <div className="war-room-lab-top">實驗室簡介</div>
-          <div className="war-room-lab-top">測試目標</div>
-          <div className="war-room-lab-top">合作夥伴</div>
+          {/* 上排:3 格,各占一個 TV 螢幕(1920×1080) */}
+          <div className="war-room-lab-top war-room-lab-top--intro">
+            <img
+              src="/images/%E6%99%BA%E6%85%A7%E7%B6%B2%E8%B7%AF%E5%AF%A6%E9%A9%97%E5%AE%A4LOGO-nobg.png"
+              alt="智慧網路實驗室 logo"
+              className="war-room-lab-intro-logo"
+            />
+            <div className="war-room-lab-intro-text">
+              <h3 className="war-room-lab-intro-title">智慧網路實驗室</h3>
+              <p className="war-room-lab-intro-desc">
+                專注於 O-RAN 開放網路架構驗證、xApp / rApp 智慧應用測試,
+                以及多廠商互通與場域整合驗測。
+              </p>
+            </div>
+          </div>
+          <div className="war-room-lab-top war-room-lab-top--icon">
+            <img
+              src="/images/icon-target.png"
+              alt=""
+              className="war-room-lab-icon"
+            />
+            <div className="war-room-lab-icon-text">
+              <h3 className="war-room-lab-icon-title">測試目標</h3>
+              <p className="war-room-lab-icon-desc">
+                完成 O-RAN 各介面(O1 / A1 / E2 / F1)互通性、效能與韌性驗證,
+                確保多廠商設備在實驗場域整合無虞。
+              </p>
+            </div>
+          </div>
+          <div className="war-room-lab-top war-room-lab-top--icon">
+            <img
+              src="/images/icon-partners.png"
+              alt=""
+              className="war-room-lab-icon"
+            />
+            <div className="war-room-lab-icon-text">
+              <h3 className="war-room-lab-icon-title">合作夥伴</h3>
+              <p className="war-room-lab-icon-desc">
+                聯合國內外電信業者、O-RAN 開源社群與 xApp / rApp 開發團隊,
+                共同推動標準導向的網路驗證生態。
+              </p>
+            </div>
+          </div>
           {/* 下半部:3 個高長條(各跨 2 row),內容由各頁面透過
               <RightWingSlots> 設定;沒設的話顯示分類標題 placeholder。 */}
           <div className="war-room-lab-tall war-room-lab-tall--dut">
