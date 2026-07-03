@@ -1,14 +1,23 @@
 "use client";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { LOGIN_ENABLED } from "@/config/auth";
 import { useLogin } from "@/hooks/Auth/useLogin";
 import { loginSchema, type LoginInput } from "@/lib/validators";
 
 export default function LoginPage() {
+  const router = useRouter();
+  // 登入關閉時不顯示登入頁,直接導回主頁(交給自動登入)。
+  useEffect(() => {
+    if (!LOGIN_ENABLED) router.replace("/overview");
+  }, [router]);
+
   const { login, isLoading, error } = useLogin();
   const {
     register,
