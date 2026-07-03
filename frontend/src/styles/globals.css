@@ -623,6 +623,30 @@ html.wall-mode .war-room-root {
   height: 6480px;
 }
 
+/* 單螢幕拆分(center/right):body 維持 11520×6480,由 WallModeApplier 用
+   translate+scale 把「該區」移到視窗、其餘靠 html.wall-mode 既有的
+   overflow:hidden 裁掉。這裡只做兩件事:
+   1) letterbox 區不要露出翼色底(只留 navy 漸層)
+   2) 隱藏不屬於該區的牆(中牆看不到右翼、右翼看不到中牆) */
+html.wall-region body {
+  background-image: linear-gradient(
+    92deg,
+    rgba(73, 119, 132, 0.40) 14%,
+    rgba(10, 23, 47, 0.40) 83%
+  );
+  background-size: 100% 100%;
+  background-position: 0 0;
+}
+/* 中牆 build:只顯示主牆,右翼隱藏(左翼在 wall-mode 已 display:none)。 */
+html.wall-region-center .war-room-right {
+  display: none;
+}
+/* 右翼 build:只顯示右副牆;主牆 display:none 但 children 仍掛載,
+   右翼的 page slot 內容照常註冊得到。 */
+html.wall-region-right .war-room-main {
+  display: none;
+}
+
 /* 連接介面驗證主牆:三條並排,每條跨 2 個 TV cell。
    配色用主題 palette:teal(觀察)/ mint(進行中)/ warning(結果),
    底色都是深 navy + 該色低透明度 fill,維持戰情室一致的暗色風格。 */

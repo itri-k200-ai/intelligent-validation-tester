@@ -1,6 +1,7 @@
 "use client";
 import type { ReactNode } from "react";
 
+import { WALL_REGION } from "@/config/wallRegion";
 import { useUiStore } from "@/stores/uiStore";
 import { useIsWallMode } from "@/stores/wallModeStore";
 
@@ -12,8 +13,10 @@ import { WallWarRoomLayout } from "./WallWarRoomLayout";
 export function AppShell({ children }: { children: ReactNode }) {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const isWall = useIsWallMode();
+  // 單螢幕拆分(center/right)一律走牆版面 —— 那才是這個 build 要顯示的那面牆。
+  const forceWall = WALL_REGION !== "all";
 
-  if (isWall) {
+  if (isWall || forceWall) {
     return (
       <>
         <WallModeApplier />

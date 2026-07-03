@@ -12,6 +12,9 @@ COPY . ./
 # 會蓋過 .env.local 的值。
 ARG NEXT_PUBLIC_USE_MOCK=false
 ENV NEXT_PUBLIC_USE_MOCK=${NEXT_PUBLIC_USE_MOCK}
+# 電視牆單螢幕拆分:all(預設)/ center / right,決定這個 build 顯示哪一面牆。
+ARG NEXT_PUBLIC_WALL_REGION=all
+ENV NEXT_PUBLIC_WALL_REGION=${NEXT_PUBLIC_WALL_REGION}
 RUN npm run build
 
 FROM node:22-alpine AS runner
