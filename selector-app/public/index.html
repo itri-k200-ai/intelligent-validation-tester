@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>戰情牆選單（左螢幕）</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; background: #070b14; color: #e8edf6;
+        font-family: system-ui, "Noto Sans TC", sans-serif;
+        display: flex; flex-direction: column;
+      }
+      header {
+        padding: 24px 28px; border-bottom: 1px solid rgba(255,255,255,.08);
+        background: linear-gradient(180deg, rgba(79,124,255,.10), transparent);
+      }
+      .title { font-size: 22px; font-weight: 700; letter-spacing: .12em; }
+      .subtitle { color: #6b7a93; font-size: 12px; margin-top: 4px; }
+      .current {
+        margin-top: 16px; padding: 12px 16px; border-radius: 12px;
+        border: 1px solid rgba(52,211,153,.3); background: rgba(52,211,153,.08);
+        display: flex; align-items: center; gap: 10px; min-height: 48px;
+      }
+      .current .label { color: #6b7a93; font-size: 11px; letter-spacing: .1em; }
+      .current .val { font-size: 16px; font-weight: 600; }
+      .current .none { color: #6b7a93; font-size: 14px; }
+      nav { flex: 1; padding: 16px 16px 24px; overflow: auto; }
+      .group-title {
+        display: flex; align-items: center; gap: 8px;
+        padding: 18px 12px 8px; color: #9fb3d1; font-size: 13px;
+        font-weight: 600; letter-spacing: .08em;
+      }
+      .row {
+        display: block; width: 100%; text-align: left; cursor: pointer;
+        padding: 12px 16px; margin: 3px 0; border-radius: 10px;
+        border: 1px solid transparent; background: transparent; color: #c7d2e3;
+        font-size: 16px; transition: .12s;
+      }
+      .row:hover { background: rgba(255,255,255,.05); color: #fff; }
+      .row.child { margin-left: 14px; font-size: 15px; padding: 10px 16px; }
+      .row.active {
+        background: rgba(52,211,153,.14); color: #6ee7b7; font-weight: 600;
+        border-color: rgba(52,211,153,.4);
+      }
+      footer {
+        padding: 10px 28px; border-top: 1px solid rgba(255,255,255,.08);
+        color: #5d6b82; font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="title">戰情牆選單</div>
+      <div class="subtitle">左螢幕控制台 · 獨立 app · 點選後 IVT 中‧右牆即時切換</div>
+      <div class="current" id="current">
+        <span class="label">目前檢視</span>
+        <span class="none">尚未選擇</span>
+      </div>
+    </header>
+
+    <nav id="nav"></nav>
+
+    <footer id="foot">—</footer>
+
+    <script>
+      // 對齊 IVT 電視牆模式的 Sidebar 選單(總覽 / 連接介面驗證 / 端對端 / 場域管理)
+      const MENU = [
+        { href: "/overview", label: "總覽" },
+        { groupTitle: "連接介面驗證" },
+        { href: "/interface-validation/smo", label: "SMO", child: true },
+        { href: "/interface-validation/near-rt-ric", label: "Near-RT RIC", child: true },
+        { href: "/interface-validation/non-rt-ric", label: "Non-RT RIC", child: true },
+        { href: "/interface-validation/xapp", label: "xApp", child: true },
+        { href: "/interface-validation/rapp", label: "rApp", child: true },
+        { href: "/test-scenarios", label: "端對端測試情境" },
+        { groupTitle: "場域管理" },
+        { href: "/site-management/domestic", label: "國內場域", child: true },
+        { href: "/site-management/international", label: "國外場域", child: true },
+      ];
+
+      const nav = document.getElementById("nav");
+      const foot = document.getElementById("foot");
+      const currentBox = document.getElementById("current");
+      let activeHref = null;
+
+      function renderCurrent(sel) {
+        if (sel && sel.label) {
+          currentBox.innerHTML =
+            '<span class="label">目前檢視</span><span class="val">' + sel.label + "</span>";
+        } else {
+          currentBox.innerHTML =
+            '<span class="label">目前檢視</span><span class="none">尚未選擇</span>';
+        }
+      }
+
+      function render() {
+        nav.innerHTML = "";
+        MENU.forEach((item) => {
+          if (item.groupTitle) {
+            const t = document.createElement("div");
+            t.className = "group-title";
+            t.textContent = item.groupTitle;
+            nav.appendChild(t);
+            return;
+          }
+          const btn = document.createElement("button");
+          btn.className =
+            "row" + (item.child ? " child" : "") + (item.href === activeHref ? " active" : "");
+          btn.textContent = item.label;
+          btn.onclick = () => select(item);
+          nav.appendChild(btn);
+        });
+      }
+
+      async function loadCurrent() {
+        try {
+          const cur = await fetch("/api/current").then((r) => r.json());
+          if (cur && cur.href) { activeHref = cur.href; renderCurrent(cur); }
+        } catch (e) { /* 沒有目前選擇就算了 */ }
+        render();
+      }
+
+      async function select(item) {
+        foot.textContent = "切換到:" + item.label + " …";
+        try {
+          const res = await fetch("/api/select", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ href: item.href, label: item.label }),
+          });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          activeHref = item.href;
+          renderCurrent(item);
+          render();
+          foot.textContent = "✅ 已切換:" + item.label + "(IVT 牆應已跟著換頁)";
+        } catch (e) {
+          foot.textContent = "切換失敗:" + e;
+        }
+      }
+
+      loadCurrent();
+    </script>
+  </body>
+</html>

@@ -6,11 +6,13 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { HudOctagon } from "@/components/ui/hud-octagon";
 import { useAuth } from "@/hooks/Auth/useAuth";
+import { useWallSelection } from "@/hooks/WallSelection/useWallSelection";
 import { getPageMeta } from "@/lib/pageMeta";
 import { useRightWingSlotsStore } from "@/stores/rightWingSlotsStore";
 import { useWallModeStore } from "@/stores/wallModeStore";
 
 import { Sidebar } from "./Sidebar";
+import { WallSelectionStatus } from "./WallSelectionStatus";
 
 /**
  * 戰情室版面 — 對應實體三牆配置:
@@ -30,6 +32,9 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
   const toggleWall = useWallModeStore((s) => s.toggle);
   const showBezels = useWallModeStore((s) => s.showBezels);
   const toggleBezels = useWallModeStore((s) => s.toggleBezels);
+
+  // 訂閱左 app(獨立 URL)的選擇廣播,灌進 wallSelectionStore。
+  useWallSelection();
 
   return (
     <div className="war-room-root">
@@ -100,6 +105,9 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
               現在先用 inline HudOctagon 給氛圍。 */}
           <div className="war-room-main-bg" aria-hidden="true">
             <HudOctagon kind="radar" className="war-room-main-bg-asset" />
+          </div>
+          <div className="war-room-main-selection px-6 pt-4">
+            <WallSelectionStatus />
           </div>
           <div className="war-room-main-content">{children}</div>
         </main>

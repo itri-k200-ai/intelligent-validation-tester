@@ -1,0 +1,10 @@
+{
+  "name": "ivt-selector-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "獨立的左螢幕『待測物選擇器』app — 驅動 IVT 中/右牆顯示",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

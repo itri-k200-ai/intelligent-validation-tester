@@ -85,6 +85,18 @@ services:
     depends_on: [backend-web]
     ports: ["3000:3000"]
 
+  # 左螢幕「待測物選擇器」—— 獨立前後端、獨立 URL(:3100)。
+  # 之後會抽成 git submodule 由對接團隊維護;先放這裡方便整套一起測。
+  selector:
+    build: ../selector-app
+    container_name: ivt-selector
+    environment:
+      PORT: 3100
+      IVT_API_BASE: http://backend-web:8000
+      WALL_SERVICE_TOKEN: ${WALL_SERVICE_TOKEN:-dev-wall-token}
+    depends_on: [backend-web]
+    ports: ["3100:3100"]
+
   nginx:
     image: nginx:alpine
     container_name: ivt-nginx

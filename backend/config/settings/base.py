@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "apps.overview",
     "apps.documents",
     "apps.agent_sessions",
+    "apps.selection",
 ]
 
 DOCUMENTS_BUCKET = "documents"
@@ -155,6 +156,11 @@ CORS_ALLOWED_ORIGINS = env.list(
     default=["http://localhost:3000", "http://localhost"],
 )
 CORS_ALLOW_CREDENTIALS = True
+
+# --------------------------- Wall selection ---------------------------
+# 左 app(別團隊)回報選擇用的服務金鑰;中/右牆「目前選擇」狀態存的 Redis。
+WALL_SERVICE_TOKEN = env("WALL_SERVICE_TOKEN", default="dev-wall-token")
+WALL_STATE_REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 
 # ------------------------------ Channels ------------------------------
 CHANNEL_REDIS_URL = env("CHANNEL_REDIS_URL", default="redis://localhost:6379/3")

@@ -1377,15 +1377,11 @@ html.wall-mode .war-room-main-content {
 
 /* 左副牆:y=3240~6480, x=0~5760 — Sidebar 切換選單
    背景跟主牆 / 右副牆統一純黑,蓋掉 body bg 的 teal tint */
+/* 左副牆已獨立成另一個 app(別團隊,自己的 URL),wall-mode 下這塊不再
+   由 IVT 渲染 —— 直接隱藏,實體左螢幕改開選擇器 app。平面模式仍保留
+   Sidebar 當開發導覽用。 */
 html.wall-mode .war-room-left {
-  position: absolute;
-  top: 3240px;
-  left: 0;
-  width: 5760px;
-  height: 3240px;
-  display: flex;
-  overflow: hidden;
-  background: #000000;
+  display: none;
 }
 /* Sidebar (<aside>) 自己有 bg-navy-600/70 半透明底,在 wall-mode 下覆寫成
    透明,讓 .war-room-left 的純黑能透出來;右側 border-r 也拿掉避免出現
