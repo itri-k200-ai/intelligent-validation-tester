@@ -7,6 +7,11 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . ./
+# 預設接真後端;傳 --build-arg NEXT_PUBLIC_USE_MOCK=true 可 build 成
+# mock/免登入的獨立 demo image。process.env 在 Next 的優先序最高,
+# 會蓋過 .env.local 的值。
+ARG NEXT_PUBLIC_USE_MOCK=false
+ENV NEXT_PUBLIC_USE_MOCK=${NEXT_PUBLIC_USE_MOCK}
 RUN npm run build
 
 FROM node:22-alpine AS runner
