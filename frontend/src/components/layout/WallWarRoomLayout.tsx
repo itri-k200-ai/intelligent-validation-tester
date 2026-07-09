@@ -6,12 +6,14 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { HudOctagon } from "@/components/ui/hud-octagon";
 import { useAuth } from "@/hooks/Auth/useAuth";
+import { useWallRegion } from "@/hooks/Wall/useWallRegion";
 import { useWallSelection } from "@/hooks/WallSelection/useWallSelection";
 import { getPageMeta } from "@/lib/pageMeta";
 import { useRightWingSlotsStore } from "@/stores/rightWingSlotsStore";
 import { useWallModeStore } from "@/stores/wallModeStore";
 
 import { Sidebar } from "./Sidebar";
+import { WallLeftSelector } from "./WallLeftSelector";
 import { WallSelectionStatus } from "./WallSelectionStatus";
 
 /**
@@ -35,6 +37,7 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
 
   // 訂閱左 app(獨立 URL)的選擇廣播,灌進 wallSelectionStore。
   useWallSelection();
+  const region = useWallRegion();
 
   return (
     <div className="war-room-root">
@@ -113,9 +116,13 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
         </main>
       </section>
 
-      {/* === 左副牆:Sidebar 切換選單 === */}
+      {/* === 左副牆 === 全貌預覽原生嵌 selector 選單;region build 由 CSS 裁掉。 */}
       <section className="war-room-left">
-        <Sidebar className="war-room-sidebar flex flex-col" />
+        {region === "all" ? (
+          <WallLeftSelector embedded />
+        ) : (
+          <Sidebar className="war-room-sidebar flex flex-col" />
+        )}
       </section>
 
       {/* === 右副牆:實驗室概要 + page slots === */}

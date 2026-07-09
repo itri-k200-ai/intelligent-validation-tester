@@ -28,7 +28,6 @@ export function WallSelectionStatus() {
       ) : (
         <span className="text-white/40">等待左螢幕選擇…</span>
       )}
-      <span className="ml-auto text-xs text-white/30">由左螢幕 app 控制</span>
     </div>
   );
 }

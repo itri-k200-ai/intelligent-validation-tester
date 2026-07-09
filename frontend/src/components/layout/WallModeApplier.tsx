@@ -1,31 +1,29 @@
 "use client";
 import { useEffect } from "react";
 
-import { WALL_REGION, WALL_REGIONS } from "@/config/wallRegion";
+import { WALL_REGIONS } from "@/config/wallRegion";
+import { useWallRegion } from "@/hooks/Wall/useWallRegion";
 import { useIsWallMode, useWallModeStore } from "@/stores/wallModeStore";
 
 /**
- * Applies the `wall-mode` class to <html> and computes the fit-to-viewport
- * scale via JS (CSS `transform: scale(min(calc(100vw / 11520), ...))` doesn't
- * work because length÷number stays a length, not the unitless number scale()
- * needs).
+ * 掛 `wall-mode` class 到 <html>,並用 JS 算 fit-to-viewport 縮放。
  *
- * 單螢幕拆分:NEXT_PUBLIC_WALL_REGION=center|right 時,只把畫布上「該區」
- * 那塊裁切 + 縮放 + 置中到整個視窗(其餘用 overflow:hidden 裁掉),讓中牆 /
- * 右翼各自跑在自己的 port。region=all(預設)維持原本整塊縮放預覽。
+ * 單螢幕拆分:?wall=center|right 時,只把畫布上「該區」裁切 + 縮放 + 置中到
+ * 整個視窗(其餘用 overflow:hidden 裁掉)。?wall=all(預設)整塊縮放預覽。
+ * region=left 由 AppShell 走 WallLeftSelector,不會用到這裡。
  */
 export function WallModeApplier() {
+  const region = useWallRegion();
   const isWall = useIsWallMode();
   const setWall = useWallModeStore((s) => s.setWall);
   const showBezels = useWallModeStore((s) => s.showBezels);
-  // center/right 一律進 wall-mode(那才是拆出來要看的東西),不看 toggle。
-  const active = isWall || WALL_REGION !== "all";
+  const isCrop = region === "center" || region === "right";
+  const active = isWall || isCrop;
 
-  // region build 把 store 也設成 wall,讓元件裡 useIsWallMode() 一致為 true
-  // (否則頁面可能 render 成平面版)。各 port 各自的 localStorage,不互相影響。
+  // region 是 center/right 時把 store 也設成 wall,讓元件裡 useIsWallMode() 一致。
   useEffect(() => {
-    if (WALL_REGION !== "all" && !isWall) setWall(true);
-  }, [isWall, setWall]);
+    if (isCrop && !isWall) setWall(true);
+  }, [isCrop, isWall, setWall]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -38,20 +36,15 @@ export function WallModeApplier() {
       return;
     }
     root.classList.add("wall-mode");
-    // region 模式掛 wall-region + wall-region-<name>:CSS 用它隱藏非該區的牆、
-    // 清掉 letterbox 的翼色背景。裁切靠 html.wall-mode 既有的 overflow:hidden。
-    root.classList.toggle("wall-region", WALL_REGION !== "all");
-    root.classList.toggle("wall-region-center", WALL_REGION === "center");
-    root.classList.toggle("wall-region-right", WALL_REGION === "right");
+    root.classList.toggle("wall-region", isCrop);
+    root.classList.toggle("wall-region-center", region === "center");
+    root.classList.toggle("wall-region-right", region === "right");
 
-    const r = WALL_REGIONS[WALL_REGION] ?? WALL_REGIONS.all;
+    const r = WALL_REGIONS[region] ?? WALL_REGIONS.all;
     const apply = () => {
-      const scale = Math.min(
-        window.innerWidth / r.w,
-        window.innerHeight / r.h,
-      );
-      if (WALL_REGION === "all") {
-        // 整塊:維持原本行為(scale 置中,預設 transform-origin)。
+      const scale = Math.min(window.innerWidth / r.w, window.innerHeight / r.h);
+      if (!isCrop) {
+        // 整塊:scale 置中,預設 transform-origin。
         body.style.transformOrigin = "";
         body.style.transform = `scale(${scale})`;
         return;
@@ -66,14 +59,10 @@ export function WallModeApplier() {
     apply();
     window.addEventListener("resize", apply);
     return () => window.removeEventListener("resize", apply);
-  }, [active]);
+  }, [active, isCrop, region]);
 
-  // Toggle bezel-overlay visibility independently of wall mode itself.
   useEffect(() => {
-    document.documentElement.classList.toggle(
-      "bezels-hidden",
-      active && !showBezels,
-    );
+    document.documentElement.classList.toggle("bezels-hidden", active && !showBezels);
   }, [active, showBezels]);
 
   return null;

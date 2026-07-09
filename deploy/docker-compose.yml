@@ -78,6 +78,8 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_started }
 
+  # 單一前端 image — region 執行時看 URL ?wall=left|center|right(不帶=all)。
+  # 部署後靠不同 URL 切左/中/右,不需多個 image。
   frontend:
     build: ../frontend
     container_name: ivt-frontend
@@ -85,50 +87,14 @@ services:
     depends_on: [backend-web]
     ports: ["3000:3000"]
 
-  # 電視牆「中牆」單螢幕 build —— 同一份前端,build 時指定 region=center。
-  # 對外走 nginx :8081(見 nginx.conf),/api、/ws 一樣轉後端維持同源。
-  frontend-center:
-    build:
-      context: ../frontend
-      args:
-        NEXT_PUBLIC_WALL_REGION: center
-    container_name: ivt-frontend-center
-    env_file: ../frontend/.env.local
-    depends_on: [backend-web]
-
-  # 電視牆「右翼」單螢幕 build —— region=right,對外走 nginx :8082。
-  frontend-right:
-    build:
-      context: ../frontend
-      args:
-        NEXT_PUBLIC_WALL_REGION: right
-    container_name: ivt-frontend-right
-    env_file: ../frontend/.env.local
-    depends_on: [backend-web]
-
-  # 左螢幕「待測物選擇器」—— 獨立前後端、獨立 URL(:3100)。
-  # 之後會抽成 git submodule 由對接團隊維護;先放這裡方便整套一起測。
-  selector:
-    build: ../selector-app
-    container_name: ivt-selector
-    environment:
-      PORT: 3100
-      IVT_API_BASE: http://backend-web:8000
-      WALL_SERVICE_TOKEN: ${WALL_SERVICE_TOKEN:-dev-wall-token}
-    depends_on: [backend-web]
-    # 左螢幕 — 三面牆連續 port 的第一個
-    ports: ["8081:3100"]
-
   nginx:
     image: nginx:alpine
     container_name: ivt-nginx
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx-backend.inc:/etc/nginx/conf.d/ivt-backend.inc:ro
-    # 8080 全貌預覽 / 8082 中牆 / 8083 右翼(左螢幕 selector 是 8081)
-    ports: ["8080:80", "8082:81", "8083:82"]
-    depends_on:
-      [frontend, frontend-center, frontend-right, backend-web, backend-ws, mediamtx]
+    # 單一入口 :8080 —— ?wall=left / center / right 切畫面
+    ports: ["8080:80"]
+    depends_on: [frontend, backend-web, backend-ws, mediamtx]
 
 volumes:
   postgres_data:

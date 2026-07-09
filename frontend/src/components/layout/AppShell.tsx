@@ -1,20 +1,32 @@
 "use client";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
-import { WALL_REGION } from "@/config/wallRegion";
+import { useWallRegion } from "@/hooks/Wall/useWallRegion";
 import { useUiStore } from "@/stores/uiStore";
 import { useIsWallMode } from "@/stores/wallModeStore";
 
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
+import { WallLeftSelector } from "./WallLeftSelector";
 import { WallModeApplier } from "./WallModeApplier";
 import { WallWarRoomLayout } from "./WallWarRoomLayout";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const isWall = useIsWallMode();
-  // 單螢幕拆分(center/right)一律走牆版面 —— 那才是這個 build 要顯示的那面牆。
-  const forceWall = WALL_REGION !== "all";
+  const region = useWallRegion();
+
+  // 分頁標題依 region 標出左/中/右,方便同時開多個 URL 分辨。
+  useEffect(() => {
+    const suffix = { all: "", left: "（左）", center: "（中牆）", right: "（右翼）" }[region];
+    document.title = `智慧驗證 tester${suffix}`;
+  }, [region]);
+
+  // 左螢幕:全螢幕 selector 選單(不走牆版面 / 不裁切)。
+  if (region === "left") return <WallLeftSelector />;
+
+  // 單螢幕拆分(center/right)一律走牆版面 —— 那才是該 URL 要顯示的那面牆。
+  const forceWall = region === "center" || region === "right";
 
   if (isWall || forceWall) {
     return (

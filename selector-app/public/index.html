@@ -44,6 +44,20 @@
         background: rgba(52,211,153,.14); color: #6ee7b7; font-weight: 600;
         border-color: rgba(52,211,153,.4);
       }
+      /* 第三層:分類底下的實際 DUT */
+      .row.dut {
+        margin-left: 34px; font-size: 14px; padding: 8px 14px;
+        display: flex; align-items: center; gap: 9px; color: #9fb3d1;
+        border-left: 1px solid rgba(255,255,255,.08); border-radius: 0 8px 8px 0;
+      }
+      .row.dut:hover { background: rgba(255,255,255,.05); color: #fff; }
+      .row.dut.active {
+        color: #6ee7b7; font-weight: 600;
+        background: rgba(52,211,153,.12); border-color: rgba(52,211,153,.4);
+      }
+      .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+      .online { background: #34d399; } .offline { background: #94a3b8; } .error { background: #fb7185; }
+      .dut-empty { margin-left: 34px; padding: 6px 14px; color: #5d6b82; font-size: 13px; }
       footer {
         padding: 10px 28px; border-top: 1px solid rgba(255,255,255,.08);
         color: #5d6b82; font-size: 12px;
@@ -65,15 +79,16 @@
     <footer id="foot">—</footer>
 
     <script>
-      // 對齊 IVT 電視牆模式的 Sidebar 選單(總覽 / 連接介面驗證 / 端對端 / 場域管理)
+      // 對齊 IVT 電視牆 Sidebar 的三層階層:群組 → 分類 → 該分類的實際 DUT。
+      // 帶 dutType 的分類會在底下列出 catalog 裡該類型的 DUT。
       const MENU = [
         { href: "/overview", label: "總覽" },
         { groupTitle: "連接介面驗證" },
-        { href: "/interface-validation/smo", label: "SMO", child: true },
-        { href: "/interface-validation/near-rt-ric", label: "Near-RT RIC", child: true },
-        { href: "/interface-validation/non-rt-ric", label: "Non-RT RIC", child: true },
-        { href: "/interface-validation/xapp", label: "xApp", child: true },
-        { href: "/interface-validation/rapp", label: "rApp", child: true },
+        { href: "/interface-validation/smo", label: "SMO", child: true, dutType: "SMO" },
+        { href: "/interface-validation/near-rt-ric", label: "Near-RT RIC", child: true, dutType: "Near-RT RIC" },
+        { href: "/interface-validation/non-rt-ric", label: "Non-RT RIC", child: true, dutType: "Non-RT RIC" },
+        { href: "/interface-validation/xapp", label: "xApp", child: true, dutType: "xApp" },
+        { href: "/interface-validation/rapp", label: "rApp", child: true, dutType: "rApp" },
         { href: "/test-scenarios", label: "端對端測試情境" },
         { groupTitle: "場域管理" },
         { href: "/site-management/domestic", label: "國內場域", child: true },
@@ -84,6 +99,8 @@
       const foot = document.getElementById("foot");
       const currentBox = document.getElementById("current");
       let activeHref = null;
+      let activeDutId = null;
+      let dutsByType = {}; // { "SMO": [ {dutId,name,type,status}, ... ] }
 
       function renderCurrent(sel) {
         if (sel && sel.label) {
@@ -105,42 +122,91 @@
             nav.appendChild(t);
             return;
           }
+          // 分類 / 一般項目
           const btn = document.createElement("button");
-          btn.className =
-            "row" + (item.child ? " child" : "") + (item.href === activeHref ? " active" : "");
+          const typeActive = item.href === activeHref && !activeDutId;
+          btn.className = "row" + (item.child ? " child" : "") + (typeActive ? " active" : "");
           btn.textContent = item.label;
-          btn.onclick = () => select(item);
+          btn.onclick = () => selectView(item);
           nav.appendChild(btn);
+
+          // 第三層:該分類底下的 DUT
+          if (item.dutType) {
+            const list = dutsByType[item.dutType] || [];
+            if (list.length === 0) {
+              const e = document.createElement("div");
+              e.className = "dut-empty";
+              e.textContent = "（尚無 DUT）";
+              nav.appendChild(e);
+            }
+            list.forEach((d) => {
+              const db = document.createElement("button");
+              db.className = "row dut" + (d.dutId === activeDutId ? " active" : "");
+              db.innerHTML =
+                '<span class="dot ' + d.status + '"></span><span>' + d.name + "</span>";
+              db.onclick = () => selectDut(item, d);
+              nav.appendChild(db);
+            });
+          }
         });
       }
 
-      async function loadCurrent() {
+      async function loadAll() {
         try {
-          const cur = await fetch("/api/current").then((r) => r.json());
-          if (cur && cur.href) { activeHref = cur.href; renderCurrent(cur); }
-        } catch (e) { /* 沒有目前選擇就算了 */ }
+          const [duts, cur] = await Promise.all([
+            fetch("/api/catalog").then((r) => r.json()).catch(() => []),
+            fetch("/api/current").then((r) => r.json()).catch(() => null),
+          ]);
+          dutsByType = {};
+          (duts || []).forEach((d) => {
+            (dutsByType[d.type] = dutsByType[d.type] || []).push(d);
+          });
+          if (cur) {
+            if (cur.href) activeHref = cur.href;
+            if (cur.dutId) { activeDutId = cur.dutId; }
+            renderCurrent(cur);
+          }
+          foot.textContent = "共 " + (duts ? duts.length : 0) + " 台待測物";
+        } catch (e) {
+          foot.textContent = "載入失敗:" + e;
+        }
         render();
       }
 
-      async function select(item) {
-        foot.textContent = "切換到:" + item.label + " …";
+      async function post(body, okLabel) {
         try {
           const res = await fetch("/api/select", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ href: item.href, label: item.label }),
+            body: JSON.stringify(body),
           });
           if (!res.ok) throw new Error("HTTP " + res.status);
-          activeHref = item.href;
-          renderCurrent(item);
-          render();
-          foot.textContent = "✅ 已切換:" + item.label + "(IVT 牆應已跟著換頁)";
+          foot.textContent = "✅ " + okLabel;
         } catch (e) {
           foot.textContent = "切換失敗:" + e;
         }
       }
 
-      loadCurrent();
+      function selectView(item) {
+        activeHref = item.href;
+        activeDutId = null;
+        renderCurrent({ label: item.label });
+        render();
+        post({ href: item.href, label: item.label }, "已切換:" + item.label);
+      }
+
+      function selectDut(item, d) {
+        activeHref = item.href;
+        activeDutId = d.dutId;
+        renderCurrent({ label: d.name });
+        render();
+        post(
+          { href: item.href, label: d.name, dutId: d.dutId },
+          "已選 DUT:" + d.name,
+        );
+      }
+
+      loadAll();
     </script>
   </body>
 </html>
