@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 
-import { AUTO_LOGIN_CREDENTIALS, LOGIN_ENABLED } from "@/config/auth";
+import { AUTO_LOGIN_CREDENTIALS } from "@/config/auth";
 import { authService } from "@/services";
 import { apiClient } from "@/services/api/client";
 import { useAuthStore } from "@/stores/authStore";
@@ -25,12 +25,8 @@ export function useAuth(options: { requireAuth?: boolean } = {}) {
   useEffect(() => {
     if (!hasHydrated) return;
     if (!options.requireAuth || token) return;
-    // 沒 token 且需要驗證時:
-    //   登入開啟 → 導去登入頁(原本行為)
-    //   登入關閉 → 背後用預設 admin 自動登入,不出現登入頁
-    if (LOGIN_ENABLED) {
-      router.replace("/login");
-    } else if (!autoLoginInFlight) {
+    // 沒 token 且需要驗證 → 背後用預設 admin 自動登入(沒有登入頁)。
+    if (!autoLoginInFlight) {
       autoLoginInFlight = true;
       authService
         .login(AUTO_LOGIN_CREDENTIALS.identifier, AUTO_LOGIN_CREDENTIALS.password)
@@ -40,7 +36,7 @@ export function useAuth(options: { requireAuth?: boolean } = {}) {
           autoLoginInFlight = false;
         });
     }
-  }, [options.requireAuth, token, hasHydrated, router, setAuth]);
+  }, [options.requireAuth, token, hasHydrated, setAuth]);
 
   // 只在首次掛載拉一次 /auth/me（不掛 deps，避免 token 變動就 re-fire）
   useEffect(() => {
@@ -57,8 +53,8 @@ export function useAuth(options: { requireAuth?: boolean } = {}) {
     isAuthenticated: hasHydrated && !!token,
     logout: () => {
       logoutAction();
-      // 登入關閉時導回主頁(會再自動登入),不要把人丟到登入頁。
-      router.replace(LOGIN_ENABLED ? "/login" : "/overview");
+      // 沒有登入頁 —— 導回主頁(會再自動登入)。
+      router.replace("/overview");
     },
   };
 }

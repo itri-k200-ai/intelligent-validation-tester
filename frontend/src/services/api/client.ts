@@ -89,7 +89,7 @@ apiClient.interceptors.response.use(
     if (original.url?.includes("/auth/refresh/")) {
       clearAuth();
       if (typeof window !== "undefined") {
-        window.location.href = "/login";
+        window.location.reload();
       }
       return Promise.reject(error);
     }
@@ -98,7 +98,7 @@ apiClient.interceptors.response.use(
     if (original._retried) {
       clearAuth();
       if (typeof window !== "undefined") {
-        window.location.href = "/login";
+        window.location.reload();
       }
       return Promise.reject(error);
     }
@@ -112,7 +112,7 @@ apiClient.interceptors.response.use(
     } catch (refreshErr) {
       clearAuth();
       if (typeof window !== "undefined") {
-        window.location.href = "/login";
+        window.location.reload();
       }
       return Promise.reject(refreshErr);
     }
