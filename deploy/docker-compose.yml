@@ -8,8 +8,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-ivtpass}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # host 5432 留給 near-rt-ric agent；IVT 對 host 開 5433 方便 debug
-    ports: ["5433:5432"]
+    # host 5432 留給 near-rt-ric agent、5433 留給 imctrl-db；IVT 用 5434 避免衝突
+    ports: ["5434:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ivt"]
       interval: 5s
