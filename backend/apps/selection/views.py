@@ -69,6 +69,9 @@ class CurrentSelectionView(APIView):
                 "href": href,
                 "label": request.data.get("label", ""),
             }
+            # 選單點的是某台 DUT 時,一併帶 dutId → 中牆導航後自動選中那台。
+            if dut_id:
+                selection["dutId"] = dut_id
         elif dut_id:
             try:
                 dut = Dut.objects.get(id=dut_id)

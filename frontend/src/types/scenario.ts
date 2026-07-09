@@ -51,6 +51,23 @@ export type TestScenarioInput = {
   parameters?: Record<string, unknown>;
 };
 
+export type TestCase = {
+  id: string;
+  scenario: string;
+  case_id: string;
+  name: string;
+  priority: "P0" | "P1" | "P2";
+  interface: string;
+  oran_release: string;
+  spec_url: string;
+  preconditions: string;
+  test_steps: string;
+  expected_result: string;
+  pass_criteria: string;
+  spec_sections: string[];
+  tags: string[];
+};
+
 export type ScenarioFilters = {
   validation_type?: ValidationType;
   category?: ScenarioCategory;

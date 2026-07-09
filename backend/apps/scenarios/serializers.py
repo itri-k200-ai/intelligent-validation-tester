@@ -11,6 +11,7 @@ class TestCaseSerializer(serializers.ModelSerializer):
         model = TestCase
         fields = (
             "id", "scenario", "case_id", "name", "priority",
+            "interface", "oran_release", "spec_url",
             "preconditions", "test_steps", "expected_result", "pass_criteria",
             "spec_references", "spec_references_detail", "spec_sections",
             "tags", "created_at", "updated_at", "results_count",

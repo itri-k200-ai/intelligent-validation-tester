@@ -74,6 +74,14 @@ class TestCase(models.Model):
     case_id = models.CharField(max_length=32, help_text="TC-01 / TC-A-3 等短碼")
     name = models.CharField(max_length=200)
     priority = models.CharField(max_length=4, choices=Priority.choices, default=Priority.P1)
+    # 對齊 RICtester：案例對應的介面 / O-RAN 版本 / 規格 PDF
+    interface = models.CharField(
+        max_length=8, blank=True, help_text="對應介面 E2 / A1 / O1（Near-RT RIC 用）",
+    )
+    oran_release = models.CharField(
+        max_length=32, blank=True, help_text="O-RAN 版本，例 R003 / v03.00",
+    )
+    spec_url = models.URLField(blank=True, help_text="規格 PDF 連結")
     preconditions = models.TextField(blank=True)
     test_steps = models.TextField(blank=True, help_text="條列步驟")
     expected_result = models.TextField(blank=True)

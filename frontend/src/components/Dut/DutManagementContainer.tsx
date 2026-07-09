@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
@@ -22,16 +22,19 @@ import { useDutForm } from "@/hooks/Dut/useDutForm";
 import { useDutHealthcheck } from "@/hooks/Dut/useDutHealthcheck";
 import { useDutInterfaceTest } from "@/hooks/Dut/useDutInterfaceTest";
 import { useDutList } from "@/hooks/Dut/useDutList";
+import { useDutTestCases } from "@/hooks/Scenario/useDutTestCases";
 import { useSites } from "@/hooks/Site/useSites";
 import { formatDate } from "@/lib/formatters";
 import {
   useTestSessionsStore,
   type TestSession,
 } from "@/stores/testSessionsStore";
+import { useWallSelectionStore } from "@/stores/wallSelectionStore";
 import { useIsWallMode } from "@/stores/wallModeStore";
 import type { DutType } from "@/types/common";
 import { AVAILABLE_INTERFACES } from "@/types/dut";
 import type { Dut, InterfaceTestResult } from "@/types/dut";
+import type { TestCase } from "@/types/scenario";
 
 import { DutDetailCard } from "./DutDetailCard";
 import { DutFormDialog } from "./DutFormDialog";
@@ -52,6 +55,9 @@ export function DutManagementContainer({ dutType }: { dutType: DutType }) {
   const [testDialogOpen, setTestDialogOpen] = useState(false);
   const [selected, setSelected] = useState<Dut | null>(null);
   const [testResult, setTestResult] = useState<InterfaceTestResult | null>(null);
+  // P1:選中 DUT 的適用測試案例 + 目前選中的案例(細節顯示在右牆)
+  const { cases: testCases } = useDutTestCases(selected ? dutType : null);
+  const [selectedCase, setSelectedCase] = useState<TestCase | null>(null);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const isWall = useIsWallMode();
@@ -87,6 +93,7 @@ export function DutManagementContainer({ dutType }: { dutType: DutType }) {
   useEffect(() => {
     setSelected(null);
     setTestResult(null);
+    setSelectedCase(null);
   }, [dutType]);
 
   useEffect(() => {
@@ -95,6 +102,19 @@ export function DutManagementContainer({ dutType }: { dutType: DutType }) {
       if (refreshed && refreshed !== selected) setSelected(refreshed);
     }
   }, [duts, selected]);
+
+  // 左螢幕選單點某台 DUT 時,廣播帶 dutId → 這裡自動選中那台。
+  // 只在 dutId「換了」時套一次,不覆蓋中牆上手動點選的結果。
+  const wallDutId = useWallSelectionStore((s) => s.selection?.dutId);
+  const appliedWallDutIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!wallDutId || wallDutId === appliedWallDutIdRef.current) return;
+    const found = duts.find((d) => d.id === wallDutId);
+    if (found) {
+      setSelected(found);
+      appliedWallDutIdRef.current = wallDutId;
+    }
+  }, [wallDutId, duts]);
 
   const runTest = async () => {
     if (!selected) return;
@@ -147,7 +167,13 @@ export function DutManagementContainer({ dutType }: { dutType: DutType }) {
       <>
         {/* 主牆:選了 DUT → 該 DUT 的三條色帶;沒選 → 該 dutType 全部設備聚合視圖 */}
         {selected ? (
-          <DutWallBands dut={selected} testResult={testResult} />
+          <DutWallBands
+            dut={selected}
+            testResult={testResult}
+            testCases={testCases}
+            selectedCase={selectedCase}
+            onSelectCase={setSelectedCase}
+          />
         ) : (
           <DutWallBandsAggregate duts={duts} dutType={dutType} />
         )}
@@ -187,11 +213,18 @@ export function DutManagementContainer({ dutType }: { dutType: DutType }) {
           }
           method={
             selected ? (
-              <DutSlotInterfaces
-                dut={selected}
-                testResult={testResult}
-                onRunTest={() => setTestDialogOpen(true)}
-              />
+              selectedCase ? (
+                <DutSlotCaseDetail
+                  testCase={selectedCase}
+                  onBack={() => setSelectedCase(null)}
+                />
+              ) : (
+                <DutSlotInterfaces
+                  dut={selected}
+                  testResult={testResult}
+                  onRunTest={() => setTestDialogOpen(true)}
+                />
+              )
             ) : (
               <DutSlotAggregateInterfaces duts={duts} dutType={dutType} />
             )
@@ -318,6 +351,7 @@ function SlotPanel({
 
 // 「待測物」格 — 顯示選中的 DUT 基本資訊
 function DutSlotBasic({ dut }: { dut: Dut }) {
+  const isRic = dut.type === "Near-RT RIC";
   return (
     <SlotPanel title="待測物" subtitle={dut.type}>
       <div className="space-y-3">
@@ -325,6 +359,24 @@ function DutSlotBasic({ dut }: { dut: Dut }) {
           <div className="text-xs text-white/60">名稱</div>
           <div className="text-xl font-semibold">{dut.name}</div>
         </div>
+        {isRic && (dut.product || dut.version) && (
+          <div className="flex gap-6">
+            <div>
+              <div className="text-xs text-white/60">產品</div>
+              <div className="text-sm">{dut.product || "—"}</div>
+            </div>
+            <div>
+              <div className="text-xs text-white/60">版本</div>
+              <div className="font-mono text-sm">{dut.version || "—"}</div>
+            </div>
+          </div>
+        )}
+        {isRic && dut.description && (
+          <div>
+            <div className="text-xs text-white/60">描述</div>
+            <div className="text-sm whitespace-pre-line">{dut.description}</div>
+          </div>
+        )}
         <div>
           <div className="text-xs text-white/60">Endpoint</div>
           <div className="font-mono text-sm break-all">{dut.endpoint}</div>
@@ -680,9 +732,15 @@ function DutSlotAggregateInterfaces({
 function DutWallBands({
   dut,
   testResult,
+  testCases = [],
+  selectedCase = null,
+  onSelectCase,
 }: {
   dut: Dut | null;
   testResult: InterfaceTestResult | null;
+  testCases?: TestCase[];
+  selectedCase?: TestCase | null;
+  onSelectCase?: (c: TestCase) => void;
 }) {
   const sessions = useTestSessionsStore((s) => s.sessions);
   const hasSessions = sessions.length > 0;
@@ -742,44 +800,41 @@ function DutWallBands({
             )}
           </section>
           <section>
-            <div className="dut-wall-band-title">即時測試結果</div>
+            <div className="dut-wall-band-title">
+              適用測試案例{testCases.length > 0 ? ` — ${testCases.length} 項` : ""}
+            </div>
             <div className="dut-wall-band-body">
-              <table className="dut-wall-table">
-                <thead>
-                  <tr>
-                    <th>介面</th>
-                    <th>結果</th>
-                    <th>回應時間</th>
-                    <th>時間戳</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>O1</td>
-                    <td><span className="result-pill result-pill--pass">通過</span></td>
-                    <td className="tabular">45ms</td>
-                    <td className="tabular">14:32:01</td>
-                  </tr>
-                  <tr>
-                    <td>A1</td>
-                    <td><span className="result-pill result-pill--fail">失敗</span></td>
-                    <td className="tabular">timeout</td>
-                    <td className="tabular">14:31:55</td>
-                  </tr>
-                  <tr>
-                    <td>E2</td>
-                    <td><span className="result-pill result-pill--pass">通過</span></td>
-                    <td className="tabular">120ms</td>
-                    <td className="tabular">14:31:50</td>
-                  </tr>
-                  <tr>
-                    <td>O1</td>
-                    <td><span className="result-pill result-pill--pass">通過</span></td>
-                    <td className="tabular">38ms</td>
-                    <td className="tabular">14:30:48</td>
-                  </tr>
-                </tbody>
-              </table>
+              {testCases.length === 0 ? (
+                <p className="text-sm text-white/40 p-2">此類型尚無測試案例</p>
+              ) : (
+                <table className="dut-wall-table dut-wall-table--cases">
+                  <thead>
+                    <tr>
+                      <th>案例</th>
+                      <th>介面</th>
+                      <th>名稱</th>
+                      <th>等級</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {testCases.map((c) => (
+                      <tr
+                        key={c.id}
+                        className={
+                          selectedCase?.id === c.id ? "dut-wall-case-row--active" : ""
+                        }
+                        onClick={() => onSelectCase?.(c)}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <td className="tabular">{c.case_id}</td>
+                        <td>{c.interface && <Badge tone="blue">{c.interface}</Badge>}</td>
+                        <td>{c.name}</td>
+                        <td className="tabular">{c.priority}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </section>
         </div>
@@ -903,9 +958,31 @@ function TestProgressRow({ session }: { session: TestSession }) {
 
 // 「測試設備」格 — 連接資訊(資料格式 / 回應時間 / 最後檢查)
 function DutSlotConnection({ dut }: { dut: Dut }) {
+  const isRic = dut.type === "Near-RT RIC";
+  const hasE2Id = dut.e2_mcc || dut.e2_mnc || dut.e2_gnb_id || dut.e2_cell_id;
   return (
     <SlotPanel title="測試設備" subtitle="連接資訊">
       <div className="space-y-3 text-sm">
+        {isRic && (
+          <>
+            <div>
+              <div className="text-xs text-white/60">E2 身分（gNB）</div>
+              <div className="mt-1 font-mono text-xs">
+                {hasE2Id
+                  ? `MCC ${dut.e2_mcc || "—"} / MNC ${dut.e2_mnc || "—"} / gNB ${dut.e2_gnb_id || "—"} / Cell ${dut.e2_cell_id || "—"}`
+                  : "未設定"}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-white/60">各介面連線位址</div>
+              <div className="mt-1 space-y-0.5 font-mono text-xs">
+                <div>E2: {dut.e2_address || "—"}</div>
+                <div>A1: {dut.a1_address || "—"}</div>
+                <div>O1: {dut.o1_address || "—"}</div>
+              </div>
+            </div>
+          </>
+        )}
         <div>
           <div className="text-xs text-white/60">資料格式</div>
           <div className="mt-1">{dut.data_format || "未知"}</div>
@@ -919,6 +996,66 @@ function DutSlotConnection({ dut }: { dut: Dut }) {
         <div>
           <div className="text-xs text-white/60">最後檢查</div>
           <div className="mt-1">{formatDate(dut.last_check)}</div>
+        </div>
+      </div>
+    </SlotPanel>
+  );
+}
+
+// 右牆「測試方法」格 — 中牆選中某測試案例時,顯示該案細節(對齊 RICtester)
+function DutSlotCaseDetail({
+  testCase,
+  onBack,
+}: {
+  testCase: TestCase;
+  onBack: () => void;
+}) {
+  const specs = [
+    ...(testCase.spec_sections ?? []),
+  ].filter(Boolean);
+  return (
+    <SlotPanel title={testCase.case_id} subtitle="測試案例">
+      <div className="flex h-full flex-col gap-3 overflow-auto text-sm">
+        <div>
+          <div className="text-lg font-semibold">{testCase.name}</div>
+          <div className="mt-1 flex items-center gap-2 text-xs text-white/60">
+            {testCase.interface && <Badge tone="blue">{testCase.interface}</Badge>}
+            {testCase.oran_release && <span>O-RAN {testCase.oran_release}</span>}
+            <span>· {testCase.priority}</span>
+          </div>
+        </div>
+        {testCase.preconditions && (
+          <div>
+            <div className="text-xs text-white/60">前置條件</div>
+            <div className="mt-1 whitespace-pre-line">{testCase.preconditions}</div>
+          </div>
+        )}
+        <div>
+          <div className="text-xs text-white/60">測試程序</div>
+          <div className="mt-1 whitespace-pre-line">
+            {testCase.test_steps || <span className="text-white/40">—</span>}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-white/60">通過條件</div>
+          <div className="mt-1 whitespace-pre-line text-mint-300">
+            {testCase.pass_criteria || <span className="text-white/40">—</span>}
+          </div>
+        </div>
+        {specs.length > 0 && (
+          <div>
+            <div className="text-xs text-white/60">規格章節</div>
+            <div className="mt-1 font-mono text-xs space-y-0.5">
+              {specs.map((s, i) => (
+                <div key={i}>{s}</div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="mt-auto pt-2">
+          <Button variant="ghost" size="sm" onClick={onBack}>
+            ← 回案例清單
+          </Button>
         </div>
       </div>
     </SlotPanel>

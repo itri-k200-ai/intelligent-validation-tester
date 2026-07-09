@@ -114,6 +114,48 @@ export function DutDetailCard({
             </div>
           </div>
         </section>
+        {dut.type === "Near-RT RIC" && (
+          <section>
+            <h4 className="font-medium mb-3">Near-RT RIC 驗測資訊</h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <div className="text-white/70">產品</div>
+                <div className="mt-1">{dut.product || <span className="text-white/40">—</span>}</div>
+              </div>
+              <div>
+                <div className="text-white/70">版本</div>
+                <div className="mt-1 font-mono text-xs">{dut.version || <span className="text-white/40">—</span>}</div>
+              </div>
+              <div className="col-span-2">
+                <div className="text-white/70">描述</div>
+                <div className="mt-1 text-xs whitespace-pre-line">
+                  {dut.description || <span className="text-white/40">—</span>}
+                </div>
+              </div>
+              <div className="col-span-2">
+                <div className="text-white/70">E2 身分（gNB）</div>
+                <div className="mt-1 font-mono text-xs">
+                  {dut.e2_mcc || dut.e2_mnc || dut.e2_gnb_id || dut.e2_cell_id ? (
+                    `MCC ${dut.e2_mcc || "—"} / MNC ${dut.e2_mnc || "—"} / gNB ${dut.e2_gnb_id || "—"} / Cell ${dut.e2_cell_id || "—"}`
+                  ) : (
+                    <span className="text-white/40">未設定</span>
+                  )}
+                </div>
+              </div>
+              <div className="col-span-2">
+                <div className="text-white/70">各介面連線位址</div>
+                <div className="mt-1 space-y-1 font-mono text-xs">
+                  <div>E2: {dut.e2_address || <span className="text-white/40">—</span>}</div>
+                  <div>A1: {dut.a1_address || <span className="text-white/40">—</span>}</div>
+                  <div>
+                    O1: {dut.o1_address || <span className="text-white/40">—</span>}
+                    {dut.o1_username && <span className="text-white/50"> （{dut.o1_username}{dut.o1_password ? " / ••••" : ""}）</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
         <section>
           <h4 className="font-medium mb-3">驗測情境（agent 用）</h4>
           <div className="grid grid-cols-2 gap-4 text-sm">

@@ -1,5 +1,41 @@
 import type { Paginated } from "@/types/common";
-import type { ScenarioFilters, TestScenario, TestScenarioInput } from "@/types/scenario";
+import type {
+  ScenarioFilters,
+  TestCase,
+  TestScenario,
+  TestScenarioInput,
+} from "@/types/scenario";
+
+// Near-RT RIC 連接介面驗證的 mock 案例(對齊後端 seed,mock demo image 也看得到)。
+const mockCases: TestCase[] = [
+  {
+    id: "mc-e2-1", scenario: "sc-ric-if", case_id: "E2-SETUP-01", name: "E2 Setup 建立",
+    priority: "P0", interface: "E2", oran_release: "R003", spec_url: "",
+    preconditions: "探針可經 SCTP 連到 RIC 的 E2term。",
+    test_steps: "1. 探針以 SCTP 連上 E2term\n2. 送 E2 Setup Request\n3. 等待回應",
+    expected_result: "RIC 回 E2 Setup Response。",
+    pass_criteria: "收到 E2 Setup Response 且 Global RIC ID 合法。",
+    spec_sections: ["O-RAN.WG3.E2AP-v03.00 §8.3.1"], tags: [],
+  },
+  {
+    id: "mc-a1-1", scenario: "sc-ric-if", case_id: "A1-PT-01", name: "A1 Policy Type 建立與查詢",
+    priority: "P0", interface: "A1", oran_release: "R003", spec_url: "",
+    preconditions: "a1mediator A1-P 端點可用。",
+    test_steps: "1. PUT policytype\n2. GET policytypes 應含該 id",
+    expected_result: "Policy type 建立成功且可查詢。",
+    pass_criteria: "PUT 回 201/200,清單包含建立的 id。",
+    spec_sections: ["O-RAN.WG2.A1AP-v03.01 §A1-P"], tags: [],
+  },
+  {
+    id: "mc-o1-1", scenario: "sc-ric-if", case_id: "O1-NETCONF-01", name: "O1 NETCONF 連線與取得設定",
+    priority: "P0", interface: "O1", oran_release: "R003", spec_url: "",
+    preconditions: "o1mediator NETCONF 可達。",
+    test_steps: "1. NETCONF over SSH 交握\n2. <get-config> source=running",
+    expected_result: "取得 running 設定。",
+    pass_criteria: "交握成功,回合法 XML。",
+    spec_sections: ["O-RAN.WG10.O1-Interface §NETCONF"], tags: [],
+  },
+];
 
 const seed: TestScenario[] = [
   {
@@ -68,5 +104,19 @@ export const mockScenarioService = {
   },
   async remove(id: string): Promise<void> {
     store.delete(id);
+  },
+  async findInterfaceScenario(dutType: string): Promise<TestScenario | null> {
+    if (dutType !== "Near-RT RIC") return null;
+    return {
+      id: "sc-ric-if", name: "Near-RT RIC 連接介面驗證",
+      site: null, site_name: null, site_region: null, site_location: null,
+      source_dut: null, source_dut_name: null, source_dut_type: null,
+      validation_type: "interface-validation", dut_type: "Near-RT RIC", ai_case: "",
+      category: "ground-floor", collected_at: null, row_count: null,
+      description: "", parameters: {}, created_at: new Date().toISOString(),
+    };
+  },
+  async listCases(scenarioId: string): Promise<TestCase[]> {
+    return scenarioId === "sc-ric-if" ? mockCases : [];
   },
 };

@@ -63,6 +63,21 @@ export type Dut = {
   deployed_at?: string | null;
   contact_email?: string;
   config_snapshot?: Record<string, unknown>;
+  // 對齊 RICtester（現階段主要給 Near-RT RIC 用）
+  description?: string;
+  product?: string;
+  version?: string;
+  // E2 身分（探針冒充 gNB 連 RIC 用）
+  e2_mcc?: string;
+  e2_mnc?: string;
+  e2_gnb_id?: string;
+  e2_cell_id?: string;
+  // 每介面連線位址
+  e2_address?: string;
+  a1_address?: string;
+  o1_address?: string;
+  o1_username?: string;
+  o1_password?: string;
 };
 
 export type DutInput = Omit<Dut,

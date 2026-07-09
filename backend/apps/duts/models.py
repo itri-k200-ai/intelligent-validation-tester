@@ -61,6 +61,27 @@ class Dut(models.Model):
         help_text="當前配置摘要（自由 JSON），給驗測對齊基準",
     )
 
+    # ── 對齊 RICtester 的 DUT 欄位（現階段主要給 Near-RT RIC 用）─────────
+    # ③ 產品身分:RICtester 有 product / version / description。
+    description = models.TextField(blank=True, help_text="受測設備描述")
+    product = models.CharField(max_length=200, blank=True, help_text="產品名稱（ex: Acme Near-RT RIC）")
+    version = models.CharField(max_length=64, blank=True, help_text="產品版本（ex: v2.1.0）")
+
+    # ① E2 身分:驗 E2 時探針冒充一顆 gNB 連 RIC,這四欄是那顆假 gNB 的識別碼。
+    # 只驗 A1 / O1 可全留空。Near-RT RIC 專用。
+    e2_mcc = models.CharField(max_length=8, blank=True, help_text="E2 身分 — MCC 行動國碼（ex: 455）")
+    e2_mnc = models.CharField(max_length=8, blank=True, help_text="E2 身分 — MNC 行動網路碼（ex: 637）")
+    e2_gnb_id = models.CharField(max_length=32, blank=True, help_text="E2 身分 — gNB ID（ex: 201507）")
+    e2_cell_id = models.CharField(max_length=32, blank=True, help_text="E2 身分 — Cell ID（ex: 0）")
+
+    # ② 每介面連線位址（加欄位版,取代單一 endpoint 對每個介面共用）。
+    # 位址格式:E2=SCTP IP:port、A1=A1-P URL、O1=NETCONF IP:port(+ 帳密)。
+    e2_address = models.CharField(max_length=255, blank=True, help_text="E2 SCTP 位址:埠（ex: 10.3.0.71:32222）")
+    a1_address = models.CharField(max_length=255, blank=True, help_text="A1-P URL（ex: http://10.3.0.71:30183）")
+    o1_address = models.CharField(max_length=255, blank=True, help_text="O1 NETCONF 位址:埠（ex: 10.3.0.71:30830）")
+    o1_username = models.CharField(max_length=120, blank=True, help_text="O1 NETCONF 帳號")
+    o1_password = models.CharField(max_length=255, blank=True, help_text="O1 NETCONF 密碼")
+
     class Meta:
         indexes = [models.Index(fields=["type", "status"])]
         ordering = ("-created_at",)

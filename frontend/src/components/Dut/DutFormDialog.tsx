@@ -54,8 +54,22 @@ export function DutFormDialog({
   const [firmwareVersion, setFirmwareVersion] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
   const [contactEmail, setContactEmail] = useState("");
+  // 對齊 RICtester（Near-RT RIC）
+  const [description, setDescription] = useState("");
+  const [product, setProduct] = useState("");
+  const [version, setVersion] = useState("");
+  const [e2Mcc, setE2Mcc] = useState("");
+  const [e2Mnc, setE2Mnc] = useState("");
+  const [e2GnbId, setE2GnbId] = useState("");
+  const [e2CellId, setE2CellId] = useState("");
+  const [e2Address, setE2Address] = useState("");
+  const [a1Address, setA1Address] = useState("");
+  const [o1Address, setO1Address] = useState("");
+  const [o1Username, setO1Username] = useState("");
+  const [o1Password, setO1Password] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const isWall = useIsWallMode();
+  const isRic = dutType === "Near-RT RIC";
 
   useEffect(() => {
     if (open) {
@@ -64,6 +78,10 @@ export function DutFormDialog({
       setAccessMode("unknown"); setAccessNotes("");
       setVendor(""); setModel(""); setFirmwareVersion("");
       setSerialNumber(""); setContactEmail("");
+      setDescription(""); setProduct(""); setVersion("");
+      setE2Mcc(""); setE2Mnc(""); setE2GnbId(""); setE2CellId("");
+      setE2Address(""); setA1Address(""); setO1Address("");
+      setO1Username(""); setO1Password("");
       setSubmitError(null);
     }
   }, [open, dutType, sites]);
@@ -92,6 +110,19 @@ export function DutFormDialog({
         firmware_version: firmwareVersion.trim(),
         serial_number: serialNumber.trim(),
         contact_email: contactEmail.trim(),
+        // Near-RT RIC 專屬(對齊 RICtester);其他類型送空值
+        description: description.trim(),
+        product: product.trim(),
+        version: version.trim(),
+        e2_mcc: e2Mcc.trim(),
+        e2_mnc: e2Mnc.trim(),
+        e2_gnb_id: e2GnbId.trim(),
+        e2_cell_id: e2CellId.trim(),
+        e2_address: e2Address.trim(),
+        a1_address: a1Address.trim(),
+        o1_address: o1Address.trim(),
+        o1_username: o1Username.trim(),
+        o1_password: o1Password,
       } as any);
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { error?: { details?: Record<string, string[]> } } } })
@@ -214,6 +245,64 @@ export function DutFormDialog({
                 className="col-span-2" />
             </div>
           </details>
+
+          {isRic && (
+            <details open className="space-y-3 rounded-item border border-mint-300/20 bg-mint-300/5 p-3">
+              <summary className="cursor-pointer text-sm font-medium text-mint-300">
+                Near-RT RIC 驗測資訊（對齊 RIC tester）
+              </summary>
+
+              {/* 產品身分 */}
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <Input placeholder="產品（ex: Acme Near-RT RIC）"
+                  value={product} onChange={(e) => setProduct(e.target.value)} />
+                <Input placeholder="版本（ex: v2.1.0）"
+                  value={version} onChange={(e) => setVersion(e.target.value)} />
+                <textarea
+                  className="col-span-2 min-h-[60px] w-full rounded-item border border-white/20 bg-navy-400 text-white px-3 py-2 text-sm"
+                  placeholder="描述（ex: 受測的 Near-RT RIC）"
+                  value={description} onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+
+              {/* E2 身分 — 探針冒充 gNB 連 RIC 用,只驗 A1/O1 可留空 */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-white/60">
+                  E2 身分（探針冒充的 gNB 識別碼,選填)
+                </label>
+                <div className="grid grid-cols-4 gap-3">
+                  <Input placeholder="MCC (455)" value={e2Mcc} onChange={(e) => setE2Mcc(e.target.value)} />
+                  <Input placeholder="MNC (637)" value={e2Mnc} onChange={(e) => setE2Mnc(e.target.value)} />
+                  <Input placeholder="gNB ID" value={e2GnbId} onChange={(e) => setE2GnbId(e.target.value)} />
+                  <Input placeholder="Cell ID" value={e2CellId} onChange={(e) => setE2CellId(e.target.value)} />
+                </div>
+              </div>
+
+              {/* 每介面連線位址 — 只顯示有勾選的介面 */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-white/60">各介面連線位址</label>
+                {interfaces.includes("E2") && (
+                  <Input placeholder="E2 — SCTP 位址:埠（ex: 10.3.0.71:32222）"
+                    value={e2Address} onChange={(e) => setE2Address(e.target.value)} />
+                )}
+                {interfaces.includes("A1") && (
+                  <Input placeholder="A1 — A1-P URL（ex: http://10.3.0.71:30183）"
+                    value={a1Address} onChange={(e) => setA1Address(e.target.value)} />
+                )}
+                {interfaces.includes("O1") && (
+                  <div className="grid grid-cols-3 gap-3">
+                    <Input placeholder="O1 — NETCONF 位址:埠"
+                      value={o1Address} onChange={(e) => setO1Address(e.target.value)} />
+                    <Input placeholder="O1 帳號"
+                      value={o1Username} onChange={(e) => setO1Username(e.target.value)} />
+                    <Input placeholder="O1 密碼" type="password"
+                      value={o1Password} onChange={(e) => setO1Password(e.target.value)} />
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               取消

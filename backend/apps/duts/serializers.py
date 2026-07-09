@@ -17,6 +17,10 @@ class DutSerializer(serializers.ModelSerializer):
             "access_mode", "access_notes",
             "vendor", "model", "firmware_version", "serial_number",
             "deployed_at", "contact_email", "config_snapshot",
+            # 對齊 RICtester（Near-RT RIC）
+            "description", "product", "version",
+            "e2_mcc", "e2_mnc", "e2_gnb_id", "e2_cell_id",
+            "e2_address", "a1_address", "o1_address", "o1_username", "o1_password",
         )
         read_only_fields = ("id", "site_name", "site_environment", "status",
                             "response_time_ms", "data_format", "last_check", "created_at")
