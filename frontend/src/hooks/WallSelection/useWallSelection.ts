@@ -2,24 +2,18 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 
-import { WALL_SELECTION_CHANNEL } from "@/services/Selection/mockSelectionService";
-import { selectionService } from "@/services";
+import {
+  WALL_SELECTION_CHANNEL,
+  mockSelectionService,
+} from "@/services/Selection/mockSelectionService";
 import { useWallSelectionStore, type WallSelection } from "@/stores/wallSelectionStore";
 
-const WS_BASE = process.env.NEXT_PUBLIC_WS_BASE ?? "ws://localhost:8001/ws";
-const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
-
-type SelectionMessage = {
-  type: "selection_changed";
-  payload: WallSelection | null;
-};
-
 /**
- * 訂閱選擇廣播,把左螢幕的選擇灌進 wallSelectionStore,並在收到導覽目標
- * (href)時把中牆導航過去 —— 右牆內容隨頁面切換。整個 app 只掛一次。
+ * 牆的選擇同步(左 → 中/右)。Phase 1 起改走純前端 BroadcastChannel +
+ * localStorage,帶完整 payload(dutName/interface/testcaseId),不依賴後端
+ * (IVT 選擇後端將退場,之後由 RICtester 接手跨機器同步)。同瀏覽器跨分頁即時。
  *
- * - 真後端:WebSocket `/ws/selection/`(連上先補水)。
- * - Mock:BroadcastChannel 跨分頁同步(免後端),初次從 localStorage 補水。
+ * 收到帶 href 的選擇時把中牆導航過去 → 右牆內容隨頁面切換。整個 app 掛一次。
  */
 export function useWallSelection() {
   const setSelection = useWallSelectionStore((s) => s.setSelection);
@@ -38,37 +32,12 @@ export function useWallSelection() {
       }
     };
 
-    // ── Mock:BroadcastChannel + localStorage 補水 ──
-    if (USE_MOCK) {
-      setConnected(true);
-      selectionService.current().then((p) => p && apply(p as WallSelection));
-      const ch = new BroadcastChannel(WALL_SELECTION_CHANNEL);
-      ch.onmessage = (ev) => apply(ev.data as WallSelection | null);
-      return () => ch.close();
-    }
-
-    // ── 真後端:WebSocket ──
-    let ws: WebSocket | null = null;
-    let retry: ReturnType<typeof setTimeout> | null = null;
-    let closed = false;
-    const connect = () => {
-      ws = new WebSocket(`${WS_BASE}/selection/`);
-      ws.onopen = () => setConnected(true);
-      ws.onmessage = (ev) => {
-        const msg = JSON.parse(ev.data) as SelectionMessage;
-        if (msg.type === "selection_changed") apply(msg.payload);
-      };
-      ws.onclose = () => {
-        setConnected(false);
-        if (!closed) retry = setTimeout(connect, 2000);
-      };
-      ws.onerror = () => ws?.close();
-    };
-    connect();
-    return () => {
-      closed = true;
-      if (retry) clearTimeout(retry);
-      ws?.close();
-    };
+    setConnected(true);
+    // 初次補水:從 localStorage 拿目前選擇
+    mockSelectionService.current().then((p) => p && apply(p as WallSelection));
+    // 跨分頁即時:BroadcastChannel
+    const ch = new BroadcastChannel(WALL_SELECTION_CHANNEL);
+    ch.onmessage = (ev) => apply(ev.data as WallSelection | null);
+    return () => ch.close();
   }, [setSelection, setConnected]);
 }
