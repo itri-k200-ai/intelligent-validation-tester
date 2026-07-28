@@ -1,15 +1,18 @@
 "use client";
 import { create } from "zustand";
 
+/** 左螢幕驅動測試後,每個測項的 runningId(輪詢狀態/結果用)。 */
+export type WallRunning = {
+  testcaseId: string;
+  runningId: string;
+};
+
 /**
  * 戰情牆「目前檢視」全域狀態。
  *
- * 拆分後,選擇來自**另一個 app(左螢幕,別團隊)**,經由後端
- * `POST /api/selection/current/` 寫入、`WS /ws/selection/` 廣播過來。
- * 中/右牆只「讀」這裡,不自己改 —— 真實來源是後端 Redis。
- *
- * 主要形態是導覽目標 `{ href, label }`(左 app 選單點的那一頁);
- * 也相容舊的 DUT 形態 `{ dutId, name, type, status }`。
+ * 選擇來自左螢幕(選單/操作台),經 BroadcastChannel + localStorage 跨分頁
+ * 廣播過來;中/右牆只「讀」這裡。除了導覽目標 { href, label },也帶
+ * RICtester 的識別(dutName / interface / testcaseId)與驅動後的 runnings。
  */
 export type WallSelection = {
   href?: string;
@@ -19,6 +22,13 @@ export type WallSelection = {
   type?: string;
   status?: string;
   updatedAt?: string;
+  // RICtester(adapter)識別
+  dutName?: string;
+  interface?: string;
+  testcaseId?: string;
+  // 左螢幕按「執行測試」後的每測項 runningId + 起跑時間
+  runnings?: WallRunning[];
+  runStartedAt?: string;
 };
 
 type State = {

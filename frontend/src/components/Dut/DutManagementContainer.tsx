@@ -25,7 +25,6 @@ import { useDutList } from "@/hooks/Dut/useDutList";
 import { useDutTestCases } from "@/hooks/Scenario/useDutTestCases";
 import { useWallAdapterView } from "@/hooks/Adapter/useWallAdapterView";
 import { useSites } from "@/hooks/Site/useSites";
-import type { AdapterTestcase } from "@/services/Adapter/adapterService";
 import { DutAdapterWallBands, useAdapterDutInfoSlots } from "./DutAdapterWall";
 import { formatDate } from "@/lib/formatters";
 import {
@@ -166,19 +165,15 @@ export function DutManagementContainer({ dutType }: { dutType: DutType }) {
   };
 
   // Phase 1:左選單改用 RICtester adapter,選了 DUT·介面 → 中/右牆走 adapter 顯示。
+  // 中牆 = 過程/結果(讀左螢幕廣播的 runnings 輪詢);右牆 = 靜態明細 + 測項清單。
   const adapterView = useWallAdapterView();
-  const setWallSelection = useWallSelectionStore((s) => s.setSelection);
-  const wallSel = useWallSelectionStore((s) => s.selection);
   // hook 必須無條件呼叫(即使沒用到);右牆明細來自 RICtester back_end。
   const rightSlots = useAdapterDutInfoSlots(adapterView);
-  const selectAdapterTestcase = (tc: AdapterTestcase) => {
-    setWallSelection({ ...(wallSel ?? {}), testcaseId: tc.testcaseId });
-  };
 
   if (isWall && adapterView.active) {
     return (
       <>
-        <DutAdapterWallBands view={adapterView} onSelectTestcase={selectAdapterTestcase} />
+        <DutAdapterWallBands view={adapterView} />
         <RightWingSlots dut={rightSlots.dut} equip={rightSlots.equip} method={rightSlots.method} />
       </>
     );

@@ -1,21 +1,52 @@
 "use client";
 import { Maximize2, Pause, Play, Video, Volume2 } from "lucide-react";
+import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import type { AdapterTestcase } from "@/services/Adapter/adapterService";
+import { selectionService } from "@/services";
+import { adapterService, type AdapterTestcase } from "@/services/Adapter/adapterService";
 import type { WallAdapterView } from "@/hooks/Adapter/useWallAdapterView";
+import { useAdapterRun, type RunItemState } from "@/hooks/Adapter/useAdapterRun";
 import { useRicDutDetail } from "@/hooks/Backend/useRicDutDetail";
+import { useWallSelectionStore } from "@/stores/wallSelectionStore";
 
-// 中牆三帶(adapter 版):即時環境影像 | 測項清單 | 選中測項(過程/結果)。
-// 中牆聚焦「測試過程與結果」;固定的受測物資訊移到右牆。
-export function DutAdapterWallBands({
-  view,
-  onSelectTestcase,
-}: {
-  view: WallAdapterView;
-  onSelectTestcase: (tc: AdapterTestcase) => void;
-}) {
-  const { interface: iface, testcases, selectedTestcase } = view;
+// ── 中牆三帶:即時環境影像 | 測試過程 | 測試結果 ─────────────────────────
+// 中牆 = 動態戰情(跑什麼、結果如何);測項清單(靜態)在右牆。
+// 執行鈕在「測試過程」帶(左螢幕只負責選擇),按下 → adapter drive →
+// 廣播 runnings(其他分頁)+ 更新本分頁 store → 輪詢顯示。
+export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
+  const run = useAdapterRun();
+  const wallSel = useWallSelectionStore((s) => s.selection);
+  const setWallSelection = useWallSelectionStore((s) => s.setSelection);
+  const [driving, setDriving] = useState(false);
+  const [driveErr, setDriveErr] = useState<string | null>(null);
+
+  const runTest = async () => {
+    if (driving || view.testcases.length === 0) return;
+    setDriving(true);
+    setDriveErr(null);
+    try {
+      const runnings = await adapterService.drive(view.testcases.map((tc) => tc.testcaseId));
+      const payload = {
+        ...(wallSel ?? {}),
+        runnings,
+        runStartedAt: new Date().toISOString(),
+      };
+      // BroadcastChannel 不會回送給自己 → 本分頁手動更新 store,其他分頁走廣播。
+      await selectionService.setSelection(payload).catch(() => {});
+      setWallSelection(payload);
+    } catch (e) {
+      setDriveErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDriving(false);
+    }
+  };
+  // runningId → 測項名稱(顯示用)
+  const nameById = new Map(view.testcases.map((tc) => [tc.testcaseId, tc.testcaseName]));
+  const finished = run.items.filter(
+    (i) => i.status === "finished" || i.status === "error",
+  ).length;
+
   return (
     <div className="dut-wall-bands">
       {/* 左帶:即時環境影像(不動)*/}
@@ -45,70 +76,103 @@ export function DutAdapterWallBands({
         </div>
       </div>
 
-      {/* 右側兩帶:測項清單 | 選中測項過程/結果 */}
+      {/* 右側兩帶:過程 | 結果 */}
       <div className="dut-wall-band dut-wall-band--status dut-wall-band--merged">
         <div className="dut-wall-band-split">
-          {/* 測項清單 */}
+          {/* 測試過程 */}
           <section>
             <div className="dut-wall-band-title">
-              測試項目{iface ? ` — ${iface}` : ""}（{testcases.length}）
+              測試過程
+              {run.active ? `（${finished}/${run.items.length} 完成）` : ""}
             </div>
             <div className="dut-wall-band-body">
-              {testcases.length === 0 ? (
-                <p className="p-2 text-sm text-white/40">此介面尚無測項</p>
+              {!run.active ? (
+                <div className="space-y-3 p-2">
+                  <button
+                    onClick={runTest}
+                    disabled={driving || view.testcases.length === 0}
+                    className={`w-full rounded-item px-4 py-3 text-lg font-bold tracking-widest transition-colors ${
+                      driving
+                        ? "cursor-wait bg-white/10 text-white/40"
+                        : "bg-emerald-500/90 text-[#06281c] hover:bg-emerald-400"
+                    }`}
+                  >
+                    {driving
+                      ? "啟動中…"
+                      : `▶ 執行測試(${view.interface ?? "全部"} · ${view.testcases.length} 項)`}
+                  </button>
+                  {driveErr && <p className="text-sm text-rose-400">驅動失敗:{driveErr}</p>}
+                  <p className="text-sm text-white/40">按下後此區顯示逐項進度</p>
+                </div>
+              ) : (
+                <div className="space-y-2 p-1">
+                  {run.items.map((i) => (
+                    <div
+                      key={i.runningId || i.testcaseId}
+                      className="flex items-center gap-3 rounded-item border border-white/10 px-3 py-2"
+                    >
+                      <StatusDot item={i} />
+                      <span className="font-mono text-sm">
+                        {nameById.get(i.testcaseId) ?? i.testcaseId}
+                      </span>
+                      <span className="ml-auto text-xs text-white/50">
+                        {i.status === "running" && i.progress != null
+                          ? `${i.progress}%`
+                          : STATUS_LABEL[i.status]}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-3 px-1 pt-1">
+                    {run.startedAt && (
+                      <span className="text-xs text-white/40">
+                        起跑:{new Date(run.startedAt).toLocaleTimeString()}
+                      </span>
+                    )}
+                    {run.done && (
+                      <button
+                        onClick={runTest}
+                        disabled={driving}
+                        className="ml-auto rounded-item border border-emerald-400/40 px-3 py-1 text-sm text-emerald-300 hover:bg-emerald-400/10"
+                      >
+                        ↻ 重新執行
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* 測試結果 */}
+          <section>
+            <div className="dut-wall-band-title">
+              測試結果
+              {run.active
+                ? ` — 通過 ${run.passed} / 失敗 ${run.failed} / 共 ${run.items.length}`
+                : ""}
+            </div>
+            <div className="dut-wall-band-body">
+              {!run.active ? (
+                <p className="p-2 text-sm text-white/40">執行後顯示逐項判決</p>
               ) : (
                 <table className="dut-wall-table dut-wall-table--cases">
                   <thead>
                     <tr>
                       <th>測項</th>
+                      <th>判決</th>
                       <th>說明</th>
-                      <th>狀態</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {testcases.map((tc) => (
-                      <tr
-                        key={tc.testcaseId}
-                        className={selectedTestcase?.testcaseId === tc.testcaseId ? "dut-wall-case-row--active" : ""}
-                        onClick={() => onSelectTestcase(tc)}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <td className="font-mono">{tc.testcaseName}</td>
-                        <td>{tc.testcaseDescription}</td>
-                        <td><span className="result-pill">未執行</span></td>
+                    {run.items.map((i) => (
+                      <tr key={i.runningId || i.testcaseId}>
+                        <td className="font-mono">{nameById.get(i.testcaseId) ?? i.testcaseId}</td>
+                        <td><VerdictPill item={i} /></td>
+                        <td className="text-xs">{i.resultDescription || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              )}
-            </div>
-          </section>
-
-          {/* 選中測項:過程 / 結果(尚未驅動 → 顯示待執行)*/}
-          <section>
-            <div className="dut-wall-band-title">測試過程 / 結果</div>
-            <div className="dut-wall-band-body">
-              {selectedTestcase ? (
-                <div className="space-y-4 p-2">
-                  <div>
-                    <div className="text-xs text-white/60">測項</div>
-                    <div className="font-mono text-xl font-semibold">
-                      {selectedTestcase.testcaseName}
-                    </div>
-                    <div className="mt-1 text-sm text-white/60">
-                      {selectedTestcase.testcaseDescription}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-white/60">狀態</div>
-                    <div className="mt-1"><Badge tone="gray">尚未執行</Badge></div>
-                  </div>
-                  <p className="text-sm text-white/40">
-                    （執行驅動與即時結果為下一階段;按執行後這裡顯示進度與 pass/fail)
-                  </p>
-                </div>
-              ) : (
-                <p className="p-2 text-sm text-white/40">從左側清單點一個測項</p>
               )}
             </div>
           </section>
@@ -118,13 +182,38 @@ export function DutAdapterWallBands({
   );
 }
 
-// 右牆三格內容:受測物完整明細(來自 RICtester back_end)。
-// 回傳 { dut, equip, method } 三個 JSX 供 RightWingSlots 使用。
+const STATUS_LABEL: Record<RunItemState["status"], string> = {
+  pending: "等待中",
+  running: "執行中",
+  finished: "完成",
+  error: "錯誤",
+};
+
+function StatusDot({ item }: { item: RunItemState }) {
+  const cls =
+    item.status === "finished"
+      ? "bg-emerald-400"
+      : item.status === "running"
+        ? "bg-sky-400 animate-pulse"
+        : item.status === "error"
+          ? "bg-rose-400"
+          : "bg-zinc-500";
+  return <span className={`inline-block h-2.5 w-2.5 flex-none rounded-full ${cls}`} />;
+}
+
+function VerdictPill({ item }: { item: RunItemState }) {
+  if (item.result === "passed")
+    return <span className="result-pill result-pill--pass">通過</span>;
+  if (item.result === "failed" || item.result === "error")
+    return <span className="result-pill result-pill--fail">失敗</span>;
+  return <span className="result-pill">—</span>;
+}
+
+// ── 右牆三格:受測物明細 | 介面連線 | 測試項目清單(靜態)──────────────────
 export function useAdapterDutInfoSlots(view: WallAdapterView) {
   const { dutName, interface: iface, testcases } = view;
   const { detail } = useRicDutDetail(dutName);
   const dut = detail.dut;
-  // 依目前選的介面過濾連線端點(e2/a1/o1)
   const eps = iface
     ? detail.endpoints.filter(
         (e) => e.dut_endpoint_interface.toLowerCase() === iface.toLowerCase(),
@@ -182,20 +271,34 @@ export function useAdapterDutInfoSlots(view: WallAdapterView) {
         )}
       </div>
     ),
+    // 測試項目清單(從中牆移來):這次會跑哪些測項(靜態輸入面)
     method: (
       <div className="flex h-full flex-col gap-2 overflow-auto p-2 text-white">
-        <div className="text-sm uppercase tracking-widest text-white/50">測試案例集</div>
-        {view.scenarioNames.length === 0 ? (
-          <div className="text-white/40">—</div>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {view.scenarioNames.map((n, i) => (
-              <li key={i} className="text-white/80">· {n}</li>
-            ))}
-          </ul>
+        <div className="text-sm uppercase tracking-widest text-white/50">
+          測試項目{iface ? ` — ${iface}` : ""}（{testcases.length}）
+        </div>
+        {view.scenarioNames.length > 0 && (
+          <div className="text-xs text-white/40">
+            案例集:{view.scenarioNames.join("、")}
+          </div>
         )}
-        <div className="mt-2 text-xs text-white/60">此介面測項數</div>
-        <div className="text-xl tabular">{testcases.length}</div>
+        {testcases.length === 0 ? (
+          <div className="text-white/40">此介面尚無測項</div>
+        ) : (
+          <table className="dut-wall-table">
+            <thead>
+              <tr><th>測項</th><th>說明</th></tr>
+            </thead>
+            <tbody>
+              {testcases.map((tc: AdapterTestcase) => (
+                <tr key={tc.testcaseId}>
+                  <td className="font-mono text-sm">{tc.testcaseName}</td>
+                  <td className="text-xs">{tc.testcaseDescription}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     ),
   };

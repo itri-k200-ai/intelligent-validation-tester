@@ -56,14 +56,22 @@ export const adapterService = {
   testList(): Promise<AdapterDut[]> {
     return req<AdapterDut[]>("/autoTest/testList");
   },
-  // 驅動一批測項 → 回每項的 runningId
-  drive(testcaseIds: string[]): Promise<{ testProject: AdapterRunning[] } | AdapterRunning[]> {
-    return req("/autoTest/test", {
+  // 驅動一批測項 → 回每項的 runningId(adapter 回 {testProject: [...]})
+  // 注意:drive 回應的 key 是 testCaseId(大寫 C),與 testList 的 testcaseId
+  // 不同 —— 這裡正規化成 testcaseId。
+  async drive(testcaseIds: string[]): Promise<AdapterRunning[]> {
+    const data = await req<{
+      testProject: { testCaseId?: string; testcaseId?: string; runningId: string }[];
+    }>("/autoTest/test", {
       method: "POST",
       body: JSON.stringify({
         testcaseList: testcaseIds.map((id) => ({ testcaseId: id })),
       }),
     });
+    return (data.testProject ?? []).map((p) => ({
+      testcaseId: p.testCaseId ?? p.testcaseId ?? "",
+      runningId: p.runningId,
+    }));
   },
   // 查一批 runningId 的狀態
   testStatus(runningIds: string[]): Promise<AdapterStatus[]> {

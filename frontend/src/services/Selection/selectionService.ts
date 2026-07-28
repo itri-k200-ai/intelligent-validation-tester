@@ -16,6 +16,9 @@ export type WallSelectionPayload = {
   scenarioId?: string;
   testcaseId?: string;
   interface?: string;
+  // 左螢幕按「執行測試」後的每測項 runningId + 起跑時間
+  runnings?: { testcaseId: string; runningId: string }[];
+  runStartedAt?: string;
 };
 
 // 左螢幕選單用的服務。前端以自動登入的 admin JWT 呼叫,後端
