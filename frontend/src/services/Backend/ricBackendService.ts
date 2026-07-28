@@ -68,4 +68,5 @@ export const ricBackend = {
   suites: (filter?: Record<string, unknown>) => ricRead("registry", "suites", filter),
   suiteItems: (filter?: Record<string, unknown>) =>
     ricRead("registry", "suite_items", filter),
+  cameras: (filter?: Record<string, unknown>) => ricRead("registry", "cameras", filter),
 };

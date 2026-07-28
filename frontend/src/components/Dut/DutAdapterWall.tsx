@@ -7,7 +7,9 @@ import { selectionService } from "@/services";
 import { adapterService, type AdapterTestcase } from "@/services/Adapter/adapterService";
 import type { WallAdapterView } from "@/hooks/Adapter/useWallAdapterView";
 import { useAdapterRun, type RunItemState } from "@/hooks/Adapter/useAdapterRun";
+import { useRicCameras } from "@/hooks/Backend/useRicCameras";
 import { useRicDutDetail } from "@/hooks/Backend/useRicDutDetail";
+import { HlsPlayer } from "@/components/Site/HlsPlayer";
 import { useWallSelectionStore } from "@/stores/wallSelectionStore";
 
 // ── 中牆三帶:即時環境影像 | 測試過程 | 測試結果 ─────────────────────────
@@ -16,6 +18,7 @@ import { useWallSelectionStore } from "@/stores/wallSelectionStore";
 // 廣播 runnings(其他分頁)+ 更新本分頁 store → 輪詢顯示。
 export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
   const run = useAdapterRun();
+  const { cameras } = useRicCameras();
   const wallSel = useWallSelectionStore((s) => s.selection);
   const setWallSelection = useWallSelectionStore((s) => s.setSelection);
   const [driving, setDriving] = useState(false);
@@ -49,30 +52,36 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
 
   return (
     <div className="dut-wall-bands">
-      {/* 左帶:即時環境影像(不動)*/}
+      {/* 左帶:即時環境影像(位置不動;來源 = RICtester cameras + mediamtx HLS)*/}
       <div className="dut-wall-band dut-wall-band--env">
-        <div className="dut-wall-band-title">即時環境影像</div>
+        <div className="dut-wall-band-title">
+          即時環境影像{cameras[0] ? ` — ${cameras[0].camera_name}` : ""}
+        </div>
         <div className="dut-wall-band-body">
-          <div className="video-placeholder">
-            <div className="video-screen">
-              <div className="video-empty">
-                <Video className="w-20 h-20" strokeWidth={1.25} />
-                <p>尚無攝影機串流</p>
+          {cameras[0] ? (
+            <HlsPlayer src={`/hls/${cameras[0].camera_uuid}/index.m3u8`} />
+          ) : (
+            <div className="video-placeholder">
+              <div className="video-screen">
+                <div className="video-empty">
+                  <Video className="w-20 h-20" strokeWidth={1.25} />
+                  <p>尚無攝影機串流</p>
+                </div>
+                <div className="video-live-badge">
+                  <span className="video-live-dot" /> LIVE
+                </div>
               </div>
-              <div className="video-live-badge">
-                <span className="video-live-dot" /> LIVE
+              <div className="video-controls">
+                <button type="button" aria-label="play"><Play className="w-5 h-5" /></button>
+                <button type="button" aria-label="pause"><Pause className="w-5 h-5" /></button>
+                <span className="video-time">00:00</span>
+                <div className="video-timeline"><div className="video-progress" /></div>
+                <span className="video-time">--:--</span>
+                <button type="button" aria-label="volume"><Volume2 className="w-5 h-5" /></button>
+                <button type="button" aria-label="fullscreen"><Maximize2 className="w-5 h-5" /></button>
               </div>
             </div>
-            <div className="video-controls">
-              <button type="button" aria-label="play"><Play className="w-5 h-5" /></button>
-              <button type="button" aria-label="pause"><Pause className="w-5 h-5" /></button>
-              <span className="video-time">00:00</span>
-              <div className="video-timeline"><div className="video-progress" /></div>
-              <span className="video-time">--:--</span>
-              <button type="button" aria-label="volume"><Volume2 className="w-5 h-5" /></button>
-              <button type="button" aria-label="fullscreen"><Maximize2 className="w-5 h-5" /></button>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 

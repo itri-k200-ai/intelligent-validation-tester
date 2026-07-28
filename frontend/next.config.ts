@@ -28,7 +28,8 @@ const config: NextConfig = {
       { source: "/api/back_end/:path*", destination: "http://localhost:5010/api/back_end/:path*" },
       { source: "/api/:path*", destination: "http://localhost:8080/api/:path*/" },
       { source: "/ws/:path*", destination: "http://localhost:8080/ws/:path*" },
-      { source: "/hls/:path*", destination: "http://localhost:8080/hls/:path*" },
+      // 環境攝影機 HLS —— RICtester mediamtx(影像已整併過去,host :8890)
+      { source: "/hls/:path*", destination: "http://localhost:8890/:path*" },
       { source: "/admin/:path*", destination: "http://localhost:8080/admin/:path*/" },
       { source: "/static/:path*", destination: "http://localhost:8080/static/:path*" },
     ];
