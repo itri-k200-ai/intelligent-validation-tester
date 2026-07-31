@@ -92,6 +92,9 @@ services:
     container_name: ivt-nginx
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    # RICtester(adapter/back_end/mediamtx)在另一個 compose,經宿主機埠代理
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # 單一入口 :8080 —— ?wall=left / center / right 切畫面
     ports: ["8080:80"]
     depends_on: [frontend, backend-web, backend-ws, mediamtx]
