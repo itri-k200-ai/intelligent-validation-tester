@@ -1,6 +1,6 @@
 "use client";
 import { Maximize2, Pause, Play, Video, Volume2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { selectionService } from "@/services";
@@ -9,6 +9,7 @@ import type { WallAdapterView } from "@/hooks/Adapter/useWallAdapterView";
 import { useAdapterRun, type RunItemState } from "@/hooks/Adapter/useAdapterRun";
 import { useRicCameras } from "@/hooks/Backend/useRicCameras";
 import { useRicDutDetail } from "@/hooks/Backend/useRicDutDetail";
+import { useRicTestcaseCatalog } from "@/hooks/Backend/useRicTestcaseCatalog";
 import { HlsPlayer } from "@/components/Site/HlsPlayer";
 import { useWallSelectionStore } from "@/stores/wallSelectionStore";
 
@@ -19,10 +20,13 @@ import { useWallSelectionStore } from "@/stores/wallSelectionStore";
 export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
   const run = useAdapterRun();
   const { cameras } = useRicCameras();
+  const { catalog } = useRicTestcaseCatalog();
   const wallSel = useWallSelectionStore((s) => s.selection);
   const setWallSelection = useWallSelectionStore((s) => s.setSelection);
   const [driving, setDriving] = useState(false);
   const [driveErr, setDriveErr] = useState<string | null>(null);
+  const [procPage, setProcPage] = useState(0);
+  const [resPage, setResPage] = useState(0);
 
   const runTest = async () => {
     if (driving || view.testcases.length === 0) return;
@@ -49,6 +53,58 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
   const finished = run.items.filter(
     (i) => i.status === "finished" || i.status === "error",
   ).length;
+
+  // 過程清單:執行前就先列出本次會跑的測項(未執行),執行後接輪詢狀態。
+  const procItems: ProcItem[] = run.active
+    ? run.items.map((i) => ({
+        key: i.runningId || i.testcaseId,
+        name: nameById.get(i.testcaseId) ?? i.testcaseId,
+        status: i.status,
+        progress: i.progress,
+      }))
+    : view.testcases.map((tc) => ({
+        key: tc.testcaseId,
+        name: tc.testcaseName,
+        status: "idle" as const,
+        progress: null,
+      }));
+
+  const totalProcPages = Math.max(1, Math.ceil(procItems.length / PAGE_SIZE));
+  const pagedProc = procItems.slice(procPage * PAGE_SIZE, (procPage + 1) * PAGE_SIZE);
+  const totalResPages = Math.max(1, Math.ceil(run.items.length / RES_PAGE_SIZE));
+  const pagedResults = run.items.slice(
+    resPage * RES_PAGE_SIZE,
+    (resPage + 1) * RES_PAGE_SIZE,
+  );
+
+  // 整體進度:完成/錯誤算 100%,執行中算該項 progress
+  const overallPct =
+    run.active && run.items.length
+      ? Math.round(
+          run.items.reduce(
+            (s, i) =>
+              s +
+              (i.status === "finished" || i.status === "error"
+                ? 100
+                : i.status === "running"
+                  ? (i.progress ?? 0)
+                  : 0),
+            0,
+          ) / run.items.length,
+        )
+      : 0;
+
+  // 執行中自動翻到目前項目那一頁
+  const runningIdx = run.items.findIndex((i) => i.status === "running");
+  useEffect(() => {
+    if (run.active && runningIdx >= 0) setProcPage(Math.floor(runningIdx / PAGE_SIZE));
+  }, [run.active, runningIdx]);
+
+  // 換 DUT / 介面時回到第一頁
+  useEffect(() => {
+    setProcPage(0);
+    setResPage(0);
+  }, [view.dutName, view.interface]);
 
   return (
     <div className="dut-wall-bands">
@@ -88,67 +144,74 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
       {/* 右側兩帶:過程 | 結果 */}
       <div className="dut-wall-band dut-wall-band--status dut-wall-band--merged">
         <div className="dut-wall-band-split">
-          {/* 測試過程 */}
+          {/* 測試過程:執行前就列出本次會跑的測項;執行鈕在右上角 */}
           <section>
-            <div className="dut-wall-band-title">
-              測試過程
-              {run.active ? `（${finished}/${run.items.length} 完成）` : ""}
+            <div className="dut-wall-band-title flex items-center justify-between gap-3">
+              <span>
+                測試過程
+                {run.active ? `（${finished}/${run.items.length} 完成）` : ""}
+              </span>
+              <button
+                onClick={runTest}
+                disabled={driving || view.testcases.length === 0 || (run.active && !run.done)}
+                className={`rounded-item px-4 py-1.5 text-sm font-bold tracking-widest transition-colors ${
+                  driving || (run.active && !run.done)
+                    ? "cursor-wait bg-white/10 text-white/40"
+                    : "bg-emerald-500/90 text-[#06281c] hover:bg-emerald-400"
+                }`}
+              >
+                {driving
+                  ? "啟動中…"
+                  : run.active && !run.done
+                    ? "執行中…"
+                    : run.done
+                      ? "↻ 重新執行"
+                      : "▶ 執行測試"}
+              </button>
+            </div>
+            {/* 整體進度條 */}
+            <div className="mb-2 px-1">
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-emerald-400 transition-all duration-500"
+                  style={{ width: `${overallPct}%` }}
+                />
+              </div>
+              <div className="mt-1 flex justify-between text-xs text-white/50">
+                <span>
+                  {run.active
+                    ? `整體進度 ${overallPct}%`
+                    : `本次將執行 ${view.testcases.length} 項`}
+                </span>
+                {run.startedAt && (
+                  <span>起跑:{new Date(run.startedAt).toLocaleTimeString()}</span>
+                )}
+              </div>
+              {driveErr && <p className="mt-1 text-sm text-rose-400">驅動失敗:{driveErr}</p>}
             </div>
             <div className="dut-wall-band-body">
-              {!run.active ? (
-                <div className="space-y-3 p-2">
-                  <button
-                    onClick={runTest}
-                    disabled={driving || view.testcases.length === 0}
-                    className={`w-full rounded-item px-4 py-3 text-lg font-bold tracking-widest transition-colors ${
-                      driving
-                        ? "cursor-wait bg-white/10 text-white/40"
-                        : "bg-emerald-500/90 text-[#06281c] hover:bg-emerald-400"
-                    }`}
-                  >
-                    {driving
-                      ? "啟動中…"
-                      : `▶ 執行測試(${view.interface ?? "全部"} · ${view.testcases.length} 項)`}
-                  </button>
-                  {driveErr && <p className="text-sm text-rose-400">驅動失敗:{driveErr}</p>}
-                  <p className="text-sm text-white/40">按下後此區顯示逐項進度</p>
-                </div>
-              ) : (
-                <div className="space-y-2 p-1">
-                  {run.items.map((i) => (
+              <div className="flex h-full flex-col">
+                <div className="flex-1 space-y-2 p-1">
+                  {pagedProc.map((i) => (
                     <div
-                      key={i.runningId || i.testcaseId}
+                      key={i.key}
                       className="flex items-center gap-3 rounded-item border border-white/10 px-3 py-2"
                     >
-                      <StatusDot item={i} />
-                      <span className="font-mono text-sm">
-                        {nameById.get(i.testcaseId) ?? i.testcaseId}
+                      <StatusDot status={i.status} />
+                      <span className="font-mono text-sm">{i.name}</span>
+                      <span className="min-w-0 truncate text-xs text-white/40">
+                        {catalog.get(i.name)?.testcase_procedure}
                       </span>
-                      <span className="ml-auto text-xs text-white/50">
+                      <span className="ml-auto flex-none text-xs text-white/50">
                         {i.status === "running" && i.progress != null
                           ? `${i.progress}%`
                           : STATUS_LABEL[i.status]}
                       </span>
                     </div>
                   ))}
-                  <div className="flex items-center gap-3 px-1 pt-1">
-                    {run.startedAt && (
-                      <span className="text-xs text-white/40">
-                        起跑:{new Date(run.startedAt).toLocaleTimeString()}
-                      </span>
-                    )}
-                    {run.done && (
-                      <button
-                        onClick={runTest}
-                        disabled={driving}
-                        className="ml-auto rounded-item border border-emerald-400/40 px-3 py-1 text-sm text-emerald-300 hover:bg-emerald-400/10"
-                      >
-                        ↻ 重新執行
-                      </button>
-                    )}
-                  </div>
                 </div>
-              )}
+                <Pager page={procPage} total={totalProcPages} onChange={setProcPage} />
+              </div>
             </div>
           </section>
 
@@ -164,24 +227,46 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
               {!run.active ? (
                 <p className="p-2 text-sm text-white/40">執行後顯示逐項判決</p>
               ) : (
-                <table className="dut-wall-table dut-wall-table--cases">
-                  <thead>
-                    <tr>
-                      <th>測項</th>
-                      <th>判決</th>
-                      <th>說明</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {run.items.map((i) => (
-                      <tr key={i.runningId || i.testcaseId}>
-                        <td className="font-mono">{nameById.get(i.testcaseId) ?? i.testcaseId}</td>
-                        <td><VerdictPill item={i} /></td>
-                        <td className="text-xs">{i.resultDescription || "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="flex h-full flex-col">
+                  <div className="min-h-0 flex-1 space-y-2 overflow-hidden p-1">
+                    {pagedResults.map((i) => {
+                      const code = nameById.get(i.testcaseId) ?? i.testcaseId;
+                      const cat = catalog.get(code);
+                      return (
+                        <div
+                          key={i.runningId || i.testcaseId}
+                          className="rounded-item border border-white/10 bg-white/[0.03] px-3 py-2"
+                        >
+                          {/* 測項代碼 + 程序名 + 判決 */}
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-sm">{code}</span>
+                            <span className="truncate text-xs text-white/50">
+                              {cat?.testcase_procedure}
+                            </span>
+                            <span className="ml-auto flex-none">
+                              <VerdictPill item={i} />
+                            </span>
+                          </div>
+                          {/* 這項在驗什麼(型錄中文通過條件) */}
+                          {cat?.testcase_pass_criteria && (
+                            <div className="mt-0.5 truncate text-xs text-emerald-300/80">
+                              通過條件:{cat.testcase_pass_criteria}
+                            </div>
+                          )}
+                          {/* 本次執行的結果說明(失敗原因) */}
+                          {i.resultDescription && (
+                            <div className="mt-0.5 text-xs text-white/60">
+                              結果:{i.resultDescription}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-auto">
+                    <Pager page={resPage} total={totalResPages} onChange={setResPage} />
+                  </div>
+                </div>
               )}
             </div>
           </section>
@@ -191,20 +276,69 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
   );
 }
 
-const STATUS_LABEL: Record<RunItemState["status"], string> = {
+// 上/下頁切換(清單超出一頁時顯示)
+function Pager({
+  page,
+  total,
+  onChange,
+}: {
+  page: number;
+  total: number;
+  onChange: (p: number) => void;
+}) {
+  if (total <= 1) return null;
+  const btn =
+    "rounded-item border border-white/15 px-3 py-1 text-sm text-white/70 " +
+    "hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent";
+  return (
+    <div className="flex items-center justify-center gap-4 pt-2">
+      <button className={btn} disabled={page <= 0} onClick={() => onChange(page - 1)}>
+        ‹ 上一頁
+      </button>
+      <span className="text-sm text-white/50">
+        {page + 1} / {total}
+      </span>
+      <button
+        className={btn}
+        disabled={page >= total - 1}
+        onClick={() => onChange(page + 1)}
+      >
+        下一頁 ›
+      </button>
+    </div>
+  );
+}
+
+// 每頁顯示的測項數(清單超過就出現上/下頁)
+const PAGE_SIZE = 7;
+// 結果卡片含通過條件/說明三行,每頁少一點
+const RES_PAGE_SIZE = 5;
+// 右牆「測試項目」格:每項兩行(代碼+通過條件),每頁 5 項
+const RIGHT_PAGE_SIZE = 5;
+
+type ProcStatus = RunItemState["status"] | "idle";
+type ProcItem = {
+  key: string;
+  name: string;
+  status: ProcStatus;
+  progress: number | null;
+};
+
+const STATUS_LABEL: Record<ProcStatus, string> = {
+  idle: "未執行",
   pending: "等待中",
   running: "執行中",
   finished: "完成",
   error: "錯誤",
 };
 
-function StatusDot({ item }: { item: RunItemState }) {
+function StatusDot({ status }: { status: ProcStatus }) {
   const cls =
-    item.status === "finished"
+    status === "finished"
       ? "bg-emerald-400"
-      : item.status === "running"
+      : status === "running"
         ? "bg-sky-400 animate-pulse"
-        : item.status === "error"
+        : status === "error"
           ? "bg-rose-400"
           : "bg-zinc-500";
   return <span className={`inline-block h-2.5 w-2.5 flex-none rounded-full ${cls}`} />;
@@ -222,7 +356,18 @@ function VerdictPill({ item }: { item: RunItemState }) {
 export function useAdapterDutInfoSlots(view: WallAdapterView) {
   const { dutName, interface: iface, testcases } = view;
   const { detail } = useRicDutDetail(dutName);
+  const { catalog } = useRicTestcaseCatalog();
   const dut = detail.dut;
+  // 測試項目清單分頁(右牆格高度有限,超過一頁用上/下頁切)
+  const [tcPage, setTcPage] = useState(0);
+  useEffect(() => {
+    setTcPage(0);
+  }, [dutName, iface]);
+  const totalTcPages = Math.max(1, Math.ceil(testcases.length / RIGHT_PAGE_SIZE));
+  const pagedTcs = testcases.slice(
+    tcPage * RIGHT_PAGE_SIZE,
+    (tcPage + 1) * RIGHT_PAGE_SIZE,
+  );
   const eps = iface
     ? detail.endpoints.filter(
         (e) => e.dut_endpoint_interface.toLowerCase() === iface.toLowerCase(),
@@ -231,7 +376,7 @@ export function useAdapterDutInfoSlots(view: WallAdapterView) {
 
   return {
     dut: (
-      <div className="flex h-full flex-col gap-3 overflow-auto p-2 text-white">
+      <div className="flex h-full w-full min-w-0 flex-col gap-3 overflow-hidden p-2 text-white">
         <div className="text-sm uppercase tracking-widest text-white/50">受測物</div>
         <div className="text-3xl font-semibold">{dut?.dut_name ?? dutName ?? "—"}</div>
         <div className="grid grid-cols-2 gap-3 text-sm">
@@ -255,58 +400,68 @@ export function useAdapterDutInfoSlots(view: WallAdapterView) {
       </div>
     ),
     equip: (
-      <div className="flex h-full flex-col gap-3 overflow-auto p-2 text-white">
+      <div className="flex h-full w-full min-w-0 flex-col gap-3 overflow-hidden p-2 text-white">
         <div className="text-sm uppercase tracking-widest text-white/50">
           介面連線{iface ? ` — ${iface}` : ""}
         </div>
         {eps.length === 0 ? (
           <div className="text-white/40">尚無連線端點</div>
         ) : (
-          <table className="dut-wall-table">
-            <thead>
-              <tr><th>介面</th><th>位址</th><th>帳號</th><th>狀態</th></tr>
-            </thead>
-            <tbody>
-              {eps.map((e) => (
-                <tr key={e.dut_endpoint_uuid}>
-                  <td><Badge tone="blue">{e.dut_endpoint_interface.toUpperCase()}</Badge></td>
-                  <td className="font-mono text-xs">{e.dut_endpoint_address}</td>
-                  <td className="text-xs">{e.dut_endpoint_username || "—"}</td>
-                  <td className="text-xs">{e.dut_endpoint_status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="space-y-2">
+            {eps.map((e) => (
+              <div
+                key={e.dut_endpoint_uuid}
+                className="rounded-item border border-white/10 bg-white/[0.03] px-3 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <Badge tone="blue">{e.dut_endpoint_interface.toUpperCase()}</Badge>
+                  <span className="text-xs text-white/50">{e.dut_endpoint_status}</span>
+                </div>
+                {/* 位址可折行,不撐爆格寬 */}
+                <div className="mt-1 break-all font-mono text-xs text-white/80">
+                  {e.dut_endpoint_address}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     ),
-    // 測試項目清單(從中牆移來):這次會跑哪些測項(靜態輸入面)
+    // 測試項目清單:精簡為每項兩行(代碼 + 中文通過條件)。
+    // 規格章節等細節留給中牆結果區;此格重點是「這次會跑哪些」。
+    // w-full min-w-0:格子容器 align-items:center 會讓過寬內容兩側被裁,
+    // 內容鎖成格寬 + 內部 truncate 才不會爆版。
     method: (
-      <div className="flex h-full flex-col gap-2 overflow-auto p-2 text-white">
-        <div className="text-sm uppercase tracking-widest text-white/50">
+      <div className="flex h-full w-full min-w-0 flex-col gap-2 overflow-hidden p-2 text-white">
+        <div className="truncate text-sm uppercase tracking-widest text-white/50">
           測試項目{iface ? ` — ${iface}` : ""}（{testcases.length}）
         </div>
-        {view.scenarioNames.length > 0 && (
-          <div className="text-xs text-white/40">
-            案例集:{view.scenarioNames.join("、")}
-          </div>
-        )}
         {testcases.length === 0 ? (
           <div className="text-white/40">此介面尚無測項</div>
         ) : (
-          <table className="dut-wall-table">
-            <thead>
-              <tr><th>測項</th><th>說明</th></tr>
-            </thead>
-            <tbody>
-              {testcases.map((tc: AdapterTestcase) => (
-                <tr key={tc.testcaseId}>
-                  <td className="font-mono text-sm">{tc.testcaseName}</td>
-                  <td className="text-xs">{tc.testcaseDescription}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="flex h-full min-h-0 w-full flex-col">
+            <div className="min-h-0 flex-1 space-y-2 overflow-hidden">
+              {pagedTcs.map((tc: AdapterTestcase) => {
+                const cat = catalog.get(tc.testcaseName);
+                return (
+                  <div
+                    key={tc.testcaseId}
+                    className="min-w-0 rounded-item border border-white/10 bg-white/[0.03] px-3 py-2"
+                  >
+                    <div className="truncate font-mono text-sm text-white">
+                      {tc.testcaseName}
+                    </div>
+                    <div className="mt-0.5 truncate text-xs text-emerald-300/90">
+                      {cat?.testcase_pass_criteria || tc.testcaseDescription || "—"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-auto">
+              <Pager page={tcPage} total={totalTcPages} onChange={setTcPage} />
+            </div>
+          </div>
         )}
       </div>
     ),
