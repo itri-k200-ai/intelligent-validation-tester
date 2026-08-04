@@ -637,14 +637,16 @@ html.wall-region body {
   background-size: 100% 100%;
   background-position: 0 0;
 }
-/* 中牆 build:只顯示主牆,右翼隱藏(左翼在 wall-mode 已 display:none)。 */
+/* 中牆 build:只顯示主牆,右翼隱藏(左翼在 wall-mode 已 display:none)。
+   !important:後面的定位規則(html.wall-mode .war-room-main/right)帶
+   display:flex 且同權重,不加會被蓋掉 → 裁切區漏出別牆內容。 */
 html.wall-region-center .war-room-right {
-  display: none;
+  display: none !important;
 }
 /* 右翼 build:只顯示右副牆;主牆 display:none 但 children 仍掛載,
    右翼的 page slot 內容照常註冊得到。 */
 html.wall-region-right .war-room-main {
-  display: none;
+  display: none !important;
 }
 
 /* 連接介面驗證主牆:三條並排,每條跨 2 個 TV cell。
@@ -1137,6 +1139,24 @@ html.wall-mode .test-pill--fail {
   border-color: rgba(244, 196, 199, 0.5);
   background: rgba(244, 196, 199, 0.12);
   color: #F4C4C7;
+}
+
+/* 即時環境影像 — HlsPlayer(真串流)撐滿帶身、影像置中,
+   蓋掉 Tailwind 的 aspect-video(16:9 貼頂會讓直式高格看起來比例怪) */
+html.wall-mode .dut-wall-band--env .dut-wall-band-body > .relative {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  background: #000;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+html.wall-mode .dut-wall-band--env .dut-wall-band-body > .relative video {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  object-fit: contain;
 }
 
 /* 即時環境影像內的播放器 placeholder */
