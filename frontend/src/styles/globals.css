@@ -656,8 +656,10 @@ html.wall-mode .dut-wall-bands {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1.5rem;
-  height: calc(3240px - 11rem);
-  min-height: 2400px;
+  /* 改吃父層(main-content)給的高度,不再寫死 3240-11rem —— 固定值
+     跟 banner/padding 加總會略超出可用高度,造成主牆出現上下捲動。 */
+  height: 100%;
+  min-height: 0;
 }
 /* 合併卡 — env 占 1 col,merged 占 2 col,內部再切兩 column */
 html.wall-mode .dut-wall-band--merged {
@@ -1330,7 +1332,12 @@ html.wall-mode .war-room-back svg {
 }
 html.wall-mode .war-room-main-body {
   flex: 1;
-  overflow: auto;
+  /* 電視牆是純顯示,主牆嚴格不捲動:超出的內容一律裁掉,
+     並用 flex column 讓 banner + 內容剛好分完可用高度。 */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   padding: 2rem 3rem 3rem;
   position: relative;
   isolation: isolate;
@@ -1416,7 +1423,10 @@ html.wall-mode .war-room-main-bg .hud-octagon-frame {
 html.wall-mode .war-room-main-content {
   position: relative;
   z-index: 1;
-  min-height: 100%;
+  /* 填滿 banner 之後的剩餘高度,超出即裁(主牆不捲動) */
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* 左副牆:y=3240~6480, x=0~5760(畫布左下),放 selector iframe。
