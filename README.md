@@ -16,16 +16,79 @@ O-RAN 架構資料與 AI 表現驗證儀表板。
 
 ```
 intelligent-validation-tester/
-├── backend/            # Django 專案(apps/*、config/、core/)
-├── frontend/           # Next.js 專案(src/app、components、services、hooks、stores)
-├── deploy/             # docker-compose.yml、nginx.conf
+├── frontend/           # Next.js 電視牆前端(src/app、components、services、hooks、stores)
+├── deploy/             # 前端 docker-compose.yml、nginx.conf
+├── rictester/          # ★ submodule:RICtester 後端(adapter / back_end / probe / mediamtx …)
+├── backend/            # (legacy)IVT 自帶 Django 後端,測試資料源已改用 rictester
 ├── media-server/       # mediamtx.yml
 └── docs/               # 開發過程產出文件
 ```
 
+> **架構現況(2026-08)**:系統已整併為**單一 repo** —— IVT 前端(`frontend/`)+ RICtester 後端(`rictester/` submodule)。
+> 測試資料(DUT / 測項 / 執行結果)來自 RICtester:左牆用 adapter `/autoTest/*`(:5110),中/右牆用 back_end `/api/back_end/*`(:5010)。
+> 下方〈在別台部署〉為目前正確步驟;再下方的〈部署(legacy)〉是舊的 IVT-only Django 後端說明,保留參考。
+
 ---
 
-## 部署
+## 在別台部署(IVT + RICtester submodule)
+
+### 前置需求
+Docker + Docker Compose、git、能連 GitHub。(要跑前端 dev server 才需 Node 22)
+
+### 步驟
+
+**1. Clone(含 submodule)**
+```bash
+git clone --recurse-submodules git@github.com:itri-k200-ai/intelligent-validation-tester.git
+cd intelligent-validation-tester
+# 若忘了 --recurse-submodules:
+git submodule update --init --recursive
+```
+
+**2. 建 `.env`(不在版控,從範本複製)**
+```bash
+cp rictester/.env.example rictester/.env
+# frontend/.env.local 已在 repo;若缺則參考 frontend/.env.example 建立
+```
+
+**3. 起後端(RICtester,從 submodule)**
+```bash
+cd rictester
+docker compose up -d --build sql_db no_sql_db back_end adapter mediamtx front_end
+# 首次要 --build(image 標籤指向內部 Harbor,不 build 會 pull 失敗;probe 也是本機 build)
+# 只起核心服務,避開 nmagent(會撞 IVT 的 :8001)
+```
+
+**4. 起前端(IVT)**
+```bash
+cd ../deploy
+docker compose up -d --build
+```
+
+**5. 開啟**(同一瀏覽器三個分頁 → 對應三面實體螢幕)
+- 左(選單):`http://localhost:8080/?wall=left`
+- 中(過程/結果):`http://localhost:8080/?wall=center`
+- 右(受測物資訊):`http://localhost:8080/?wall=right`
+
+### 對外服務埠
+| 服務 | 埠 | 說明 |
+| --- | --- | --- |
+| IVT nginx(唯一入口) | **8080** | `/` 前端、`/api/*` IVT、`/autoTest/*`→adapter、`/api/back_end/*`→back_end、`/hls/*`→mediamtx |
+| RICtester adapter | 5110 | `/autoTest/*` 驅動介面 |
+| RICtester back_end | 5010 | `/api/back_end/*`(登入 `manager_name=admin` / `admin1234`) |
+| RICtester mediamtx | 8890 | 環境攝影機 HLS |
+
+### ⚠️ 常見坑
+1. **`.env` 不在 git** → 一定要從 `.env.example` 複製,否則後端起不來。
+2. **DB 資料不隨 git 走**:新機是全新 DB,只有 seed 的 Lab RIC;先前手動加的 DUT(如 116)不會在。要帶資料:舊機 `docker exec <sql-db> pg_dump -U oran oran_tester > d.sql` + `docker exec <no-sql-db> mongodump --db oran_tester --archive > m.archive`,新機 `psql -U oran -d oran_tester < d.sql`、`mongorestore --db oran_tester --drop --archive < m.archive`。
+3. **RICtester 首次務必 `--build`**(不依賴內部 Harbor)。
+4. **埠衝突**:8080 / 5010 / 5110 / 8890 等不能被佔;nmagent 服務會撞 :8001,故只起核心服務。
+5. **E2(SCTP)要與受測 RIC 同網段**才連得通(A1/O1 走 TCP 較寬鬆)—— 屬網路拓樸,非部署設定。
+6. **postgres 偶發權限 glitch**(`pg_filenode.map: Permission denied`,常見於機器重開/休眠後)→ `docker restart <該 postgres 容器>` 即修。
+
+---
+
+## 部署(legacy:IVT 自帶 Django 後端)
 
 ### 0. 概觀
 
