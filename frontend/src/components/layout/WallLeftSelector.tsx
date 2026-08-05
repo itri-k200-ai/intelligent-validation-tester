@@ -10,7 +10,7 @@ type NavItem = { groupTitle?: string; href?: string; label?: string; child?: boo
 
 const TOP_NAV: NavItem[] = [{ href: "/overview", label: "總覽" }];
 const BOTTOM_NAV: NavItem[] = [
-  { href: "/test-scenarios", label: "端對端測試情境" },
+  { href: "/test-records", label: "測試紀錄" },
   { groupTitle: "場域管理" },
   { href: "/site-management/domestic", label: "國內場域", child: true },
   { href: "/site-management/international", label: "國外場域", child: true },

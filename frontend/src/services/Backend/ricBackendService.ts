@@ -69,4 +69,7 @@ export const ricBackend = {
   suiteItems: (filter?: Record<string, unknown>) =>
     ricRead("registry", "suite_items", filter),
   cameras: (filter?: Record<string, unknown>) => ricRead("registry", "cameras", filter),
+  testRuns: (filter?: Record<string, unknown>) => ricRead("scheduler", "test_runs", filter),
+  caseResults: (filter?: Record<string, unknown>) =>
+    ricRead("oracle", "case_results", filter),
 };
