@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { selectionService } from "@/services";
-import { adapterService, type AdapterTestcase } from "@/services/Adapter/adapterService";
+import { adapterService } from "@/services/Adapter/adapterService";
 import type { WallAdapterView } from "@/hooks/Adapter/useWallAdapterView";
 import { useAdapterRun, type RunItemState } from "@/hooks/Adapter/useAdapterRun";
 import { useRicCameras } from "@/hooks/Backend/useRicCameras";
@@ -313,8 +313,8 @@ function Pager({
 const PAGE_SIZE = 7;
 // 結果卡片含通過條件/說明三行,每頁少一點
 const RES_PAGE_SIZE = 5;
-// 右牆「測試項目」格:每項兩行(代碼+通過條件),每頁 5 項
-const RIGHT_PAGE_SIZE = 5;
+// 右牆各介面統計的顯示順序
+const SLOT_IFACE_ORDER = ["E2", "A1", "O1"];
 
 type ProcStatus = RunItemState["status"] | "idle";
 type ProcItem = {
@@ -353,26 +353,25 @@ function VerdictPill({ item }: { item: RunItemState }) {
 }
 
 // ── 右牆三格:受測物明細 | 介面連線 | 測試項目清單(靜態)──────────────────
+// 右牆 = DUT 整體檔案:換介面「不」跟著變(介面層級的內容歸中牆),
+// 只用當前介面做視覺高亮,避免與中牆重複。
 export function useAdapterDutInfoSlots(view: WallAdapterView) {
-  const { dutName, interface: iface, testcases } = view;
+  const { dutName, interface: iface, allTestcases, scenarios } = view;
   const { detail } = useRicDutDetail(dutName);
-  const { catalog } = useRicTestcaseCatalog();
   const dut = detail.dut;
-  // 測試項目清單分頁(右牆格高度有限,超過一頁用上/下頁切)
-  const [tcPage, setTcPage] = useState(0);
-  useEffect(() => {
-    setTcPage(0);
-  }, [dutName, iface]);
-  const totalTcPages = Math.max(1, Math.ceil(testcases.length / RIGHT_PAGE_SIZE));
-  const pagedTcs = testcases.slice(
-    tcPage * RIGHT_PAGE_SIZE,
-    (tcPage + 1) * RIGHT_PAGE_SIZE,
+  // 全部介面端點(不過濾);選中的介面加高亮框
+  const eps = detail.endpoints;
+  // 各介面測項數(DUT 層級統計,依 E2/A1/O1 排序)
+  const ifaceCounts = new Map<string, number>();
+  allTestcases.forEach((tc) => {
+    const p = (tc.testcaseName.split(".")[0] || "").toUpperCase();
+    if (p) ifaceCounts.set(p, (ifaceCounts.get(p) ?? 0) + 1);
+  });
+  const ifaceSummary = [...ifaceCounts.entries()].sort(
+    (a, b) =>
+      (SLOT_IFACE_ORDER.indexOf(a[0]) + 1 || 99) -
+      (SLOT_IFACE_ORDER.indexOf(b[0]) + 1 || 99),
   );
-  const eps = iface
-    ? detail.endpoints.filter(
-        (e) => e.dut_endpoint_interface.toLowerCase() === iface.toLowerCase(),
-      )
-    : detail.endpoints;
 
   return {
     dut: (
@@ -401,68 +400,84 @@ export function useAdapterDutInfoSlots(view: WallAdapterView) {
     ),
     equip: (
       <div className="flex h-full w-full min-w-0 flex-col gap-3 overflow-hidden p-2 text-white">
-        <div className="text-sm uppercase tracking-widest text-white/50">
-          介面連線{iface ? ` — ${iface}` : ""}
-        </div>
+        <div className="text-sm uppercase tracking-widest text-white/50">介面連線</div>
         {eps.length === 0 ? (
           <div className="text-white/40">尚無連線端點</div>
         ) : (
           <div className="space-y-2">
-            {eps.map((e) => (
-              <div
-                key={e.dut_endpoint_uuid}
-                className="rounded-item border border-white/10 bg-white/[0.03] px-3 py-2"
-              >
-                <div className="flex items-center gap-2">
-                  <Badge tone="blue">{e.dut_endpoint_interface.toUpperCase()}</Badge>
-                  <span className="text-xs text-white/50">{e.dut_endpoint_status}</span>
+            {eps.map((e) => {
+              const isCurrent =
+                !!iface &&
+                e.dut_endpoint_interface.toLowerCase() === iface.toLowerCase();
+              return (
+                <div
+                  key={e.dut_endpoint_uuid}
+                  className={`rounded-item border px-3 py-2 ${
+                    isCurrent
+                      ? "border-emerald-400/50 bg-emerald-400/[0.06]"
+                      : "border-white/10 bg-white/[0.03]"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Badge tone="blue">{e.dut_endpoint_interface.toUpperCase()}</Badge>
+                    <span className="text-xs text-white/50">{e.dut_endpoint_status}</span>
+                    {isCurrent && (
+                      <span className="ml-auto text-xs text-emerald-300/80">測試中介面</span>
+                    )}
+                  </div>
+                  {/* 位址可折行,不撐爆格寬 */}
+                  <div className="mt-1 break-all font-mono text-xs text-white/80">
+                    {e.dut_endpoint_address}
+                  </div>
                 </div>
-                {/* 位址可折行,不撐爆格寬 */}
-                <div className="mt-1 break-all font-mono text-xs text-white/80">
-                  {e.dut_endpoint_address}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
     ),
-    // 測試項目清單:精簡為每項兩行(代碼 + 中文通過條件)。
-    // 規格章節等細節留給中牆結果區;此格重點是「這次會跑哪些」。
-    // w-full min-w-0:格子容器 align-items:center 會讓過寬內容兩側被裁,
-    // 內容鎖成格寬 + 內部 truncate 才不會爆版。
+    // 測試能力總覽(DUT 層級,換介面不變):各介面測項數 + 案例集。
+    // 「當前介面的測項清單」歸中牆(測試過程),此格不重複。
     method: (
-      <div className="flex h-full w-full min-w-0 flex-col gap-2 overflow-hidden p-2 text-white">
-        <div className="truncate text-sm uppercase tracking-widest text-white/50">
-          測試項目{iface ? ` — ${iface}` : ""}（{testcases.length}）
+      <div className="flex h-full w-full min-w-0 flex-col gap-3 overflow-hidden p-2 text-white">
+        <div className="text-sm uppercase tracking-widest text-white/50">
+          測試能力（{allTestcases.length} 項）
         </div>
-        {testcases.length === 0 ? (
-          <div className="text-white/40">此介面尚無測項</div>
-        ) : (
-          <div className="flex h-full min-h-0 w-full flex-col">
-            <div className="min-h-0 flex-1 space-y-2 overflow-hidden">
-              {pagedTcs.map((tc: AdapterTestcase) => {
-                const cat = catalog.get(tc.testcaseName);
-                return (
-                  <div
-                    key={tc.testcaseId}
-                    className="min-w-0 rounded-item border border-white/10 bg-white/[0.03] px-3 py-2"
-                  >
-                    <div className="truncate font-mono text-sm text-white">
-                      {tc.testcaseName}
-                    </div>
-                    <div className="mt-0.5 truncate text-xs text-emerald-300/90">
-                      {cat?.testcase_pass_criteria || tc.testcaseDescription || "—"}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-auto">
-              <Pager page={tcPage} total={totalTcPages} onChange={setTcPage} />
-            </div>
-          </div>
-        )}
+        {/* 各介面測項數;當前介面高亮 */}
+        <div className="flex flex-wrap gap-2">
+          {ifaceSummary.map(([name, count]) => {
+            const isCurrent = !!iface && name === iface.toUpperCase();
+            return (
+              <div
+                key={name}
+                className={`rounded-item border px-3 py-1.5 text-sm ${
+                  isCurrent
+                    ? "border-emerald-400/50 bg-emerald-400/[0.08] text-emerald-300"
+                    : "border-white/10 bg-white/[0.03] text-white/80"
+                }`}
+              >
+                {name} · {count} 項
+              </div>
+            );
+          })}
+        </div>
+        {/* 案例集清單 */}
+        <div className="min-h-0 flex-1 space-y-2 overflow-hidden">
+          <div className="text-xs text-white/40">測試案例集</div>
+          {scenarios.length === 0 ? (
+            <div className="text-white/40">—</div>
+          ) : (
+            scenarios.map((s, i) => (
+              <div
+                key={i}
+                className="min-w-0 rounded-item border border-white/10 bg-white/[0.03] px-3 py-2"
+              >
+                <div className="truncate text-sm text-white/85">{s.name}</div>
+                <div className="mt-0.5 text-xs text-white/40">{s.count} 個測項</div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     ),
   };
