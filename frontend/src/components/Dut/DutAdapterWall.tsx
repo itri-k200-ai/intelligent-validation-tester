@@ -1,5 +1,5 @@
 "use client";
-import { Maximize2, Pause, Play, Video, Volume2 } from "lucide-react";
+import { CheckCircle2, Maximize2, Pause, Play, Video, Volume2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -227,7 +227,7 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
               {!run.active ? (
                 <p className="p-2 text-sm text-white/40">執行後顯示逐項判決</p>
               ) : (
-                <div className="flex h-full flex-col">
+                <div className="flex h-full min-h-0 flex-col">
                   <div className="min-h-0 flex-1 space-y-2 overflow-hidden p-1">
                     {pagedResults.map((i) => {
                       const code = nameById.get(i.testcaseId) ?? i.testcaseId;
@@ -263,7 +263,7 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
                       );
                     })}
                   </div>
-                  <div className="mt-auto">
+                  <div className="flex-none">
                     <Pager page={resPage} total={totalResPages} onChange={setResPage} />
                   </div>
                 </div>
@@ -311,8 +311,8 @@ function Pager({
 
 // 每頁顯示的測項數(清單超過就出現上/下頁)
 const PAGE_SIZE = 7;
-// 結果卡片含通過條件/說明三行,每頁少一點
-const RES_PAGE_SIZE = 5;
+// 結果卡片含通過條件/說明多行 + 放大判決 icon,每頁 4 項留空間給分頁列
+const RES_PAGE_SIZE = 4;
 // 右牆各介面統計的顯示順序
 const SLOT_IFACE_ORDER = ["E2", "A1", "O1"];
 // 右牆「測試能力」展開清單:每頁測項數
@@ -348,10 +348,20 @@ function StatusDot({ status }: { status: ProcStatus }) {
 
 function VerdictPill({ item }: { item: RunItemState }) {
   if (item.result === "passed")
-    return <span className="result-pill result-pill--pass">通過</span>;
+    return (
+      <span className="flex items-center gap-2 font-semibold text-emerald-400">
+        <CheckCircle2 className="h-9 w-9" strokeWidth={2.2} />
+        <span>通過</span>
+      </span>
+    );
   if (item.result === "failed" || item.result === "error")
-    return <span className="result-pill result-pill--fail">失敗</span>;
-  return <span className="result-pill">—</span>;
+    return (
+      <span className="flex items-center gap-2 font-semibold text-rose-400">
+        <XCircle className="h-9 w-9" strokeWidth={2.2} />
+        <span>失敗</span>
+      </span>
+    );
+  return <span className="text-2xl text-white/40">—</span>;
 }
 
 // ── 右牆三格:受測物明細 | 介面連線 | 測試項目清單(靜態)──────────────────

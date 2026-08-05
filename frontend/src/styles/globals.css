@@ -725,6 +725,9 @@ html.wall-mode .dut-wall-band-body {
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
+  /* 讓內部 flex-1 + overflow-hidden 真的能裁切,而不是撐高把分頁列頂出格外
+     (結果卡片變高時分頁鈕會消失,就是缺這個) */
+  min-height: 0;
 }
 html.wall-mode .dut-wall-table {
   width: 100%;
