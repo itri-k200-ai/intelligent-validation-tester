@@ -315,6 +315,8 @@ const PAGE_SIZE = 7;
 const RES_PAGE_SIZE = 5;
 // 右牆各介面統計的顯示順序
 const SLOT_IFACE_ORDER = ["E2", "A1", "O1"];
+// 右牆「測試能力」展開清單:每頁測項數
+const EXPAND_PAGE_SIZE = 6;
 
 type ProcStatus = RunItemState["status"] | "idle";
 type ProcItem = {
@@ -359,6 +361,25 @@ export function useAdapterDutInfoSlots(view: WallAdapterView) {
   const { dutName, interface: iface, allTestcases, scenarios } = view;
   const { detail } = useRicDutDetail(dutName);
   const dut = detail.dut;
+  // 「測試能力」點開某介面 → 展開該介面的測項清單(分頁;再點收合)
+  const [openIface, setOpenIface] = useState<string | null>(null);
+  const [exPage, setExPage] = useState(0);
+  useEffect(() => {
+    setOpenIface(null);
+  }, [dutName]);
+  useEffect(() => {
+    setExPage(0);
+  }, [openIface]);
+  const openList = openIface
+    ? allTestcases.filter((tc) =>
+        tc.testcaseName.toLowerCase().startsWith(openIface.toLowerCase() + "."),
+      )
+    : [];
+  const totalExPages = Math.max(1, Math.ceil(openList.length / EXPAND_PAGE_SIZE));
+  const pagedExList = openList.slice(
+    exPage * EXPAND_PAGE_SIZE,
+    (exPage + 1) * EXPAND_PAGE_SIZE,
+  );
   // 全部介面端點(不過濾);選中的介面加高亮框
   const eps = detail.endpoints;
   // 各介面測項數(DUT 層級統計,依 E2/A1/O1 排序)
@@ -443,41 +464,69 @@ export function useAdapterDutInfoSlots(view: WallAdapterView) {
         <div className="text-sm uppercase tracking-widest text-white/50">
           測試能力（{allTestcases.length} 項）
         </div>
-        {/* 各介面測項數;當前介面高亮 */}
+        {/* 各介面測項數;可點開展開該介面的測項清單;當前測試中介面高亮 */}
         <div className="flex flex-wrap gap-2">
           {ifaceSummary.map(([name, count]) => {
             const isCurrent = !!iface && name === iface.toUpperCase();
+            const isOpen = openIface === name;
             return (
-              <div
+              <button
                 key={name}
-                className={`rounded-item border px-3 py-1.5 text-sm ${
-                  isCurrent
-                    ? "border-emerald-400/50 bg-emerald-400/[0.08] text-emerald-300"
-                    : "border-white/10 bg-white/[0.03] text-white/80"
+                onClick={() => setOpenIface(isOpen ? null : name)}
+                className={`rounded-item border px-3 py-1.5 text-sm transition-colors ${
+                  isOpen
+                    ? "border-white/40 bg-white/10 text-white"
+                    : isCurrent
+                      ? "border-emerald-400/50 bg-emerald-400/[0.08] text-emerald-300"
+                      : "border-white/10 bg-white/[0.03] text-white/80 hover:bg-white/[0.07]"
                 }`}
               >
-                {name} · {count} 項
-              </div>
+                {name} · {count} 項 {isOpen ? "▾" : "▸"}
+              </button>
             );
           })}
         </div>
-        {/* 案例集清單 */}
-        <div className="min-h-0 flex-1 space-y-2 overflow-hidden">
-          <div className="text-xs text-white/40">測試案例集</div>
-          {scenarios.length === 0 ? (
-            <div className="text-white/40">—</div>
-          ) : (
-            scenarios.map((s, i) => (
-              <div
-                key={i}
-                className="min-w-0 rounded-item border border-white/10 bg-white/[0.03] px-3 py-2"
-              >
-                <div className="truncate text-sm text-white/85">{s.name}</div>
-                <div className="mt-0.5 text-xs text-white/40">{s.count} 個測項</div>
-              </div>
-            ))
-          )}
-        </div>
+        {openIface ? (
+          /* 展開:該介面的測項清單(分頁,正常字級);再點一次介面鈕收合 */
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="mb-1 text-xs text-white/40">
+              {openIface} 測試項目(點上方 {openIface} 收合)
+            </div>
+            <div className="min-h-0 flex-1 space-y-1.5 overflow-hidden">
+              {pagedExList.map((tc) => (
+                <div
+                  key={tc.testcaseId}
+                  className="min-w-0 rounded-item border border-white/10 bg-white/[0.03] px-3 py-1.5"
+                >
+                  <span className="truncate font-mono text-sm text-white/85">
+                    {tc.testcaseName}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-auto">
+              <Pager page={exPage} total={totalExPages} onChange={setExPage} />
+            </div>
+          </div>
+        ) : (
+          /* 預設:案例集清單 */
+          <div className="min-h-0 flex-1 space-y-2 overflow-hidden">
+            <div className="text-xs text-white/40">測試案例集</div>
+            {scenarios.length === 0 ? (
+              <div className="text-white/40">—</div>
+            ) : (
+              scenarios.map((s, i) => (
+                <div
+                  key={i}
+                  className="min-w-0 rounded-item border border-white/10 bg-white/[0.03] px-3 py-2"
+                >
+                  <div className="truncate text-sm text-white/85">{s.name}</div>
+                  <div className="mt-0.5 text-xs text-white/40">{s.count} 個測項</div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     ),
   };

@@ -721,7 +721,10 @@ html.wall-mode .dut-wall-band-body--chart {
 
 /* 主牆色帶內的小表格 + status / result 標籤 */
 html.wall-mode .dut-wall-band-body {
-  align-items: stretch;                  /* 改成讓 table 撐開,不再置中 */
+  /* 內容靠左上、子元素撐滿格寬 —— 原本 center 會讓字少的內容縮在正中間 */
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
 }
 html.wall-mode .dut-wall-table {
   width: 100%;
