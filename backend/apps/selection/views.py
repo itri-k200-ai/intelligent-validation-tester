@@ -59,20 +59,22 @@ class CurrentSelectionView(APIView):
         href = request.data.get("href")
         dut_id = request.data.get("dutId")
 
-        if href:
-            if not isinstance(href, str) or not href.startswith("/"):
-                return Response(
-                    {"detail": "href 必須是以 / 開頭的路徑。"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            selection = {
-                "href": href,
-                "label": request.data.get("label", ""),
-            }
-            # 選單點的是某台 DUT 時,一併帶 dutId → 中牆導航後自動選中那台。
-            if dut_id:
-                selection["dutId"] = dut_id
-        elif dut_id:
+        dut_name = request.data.get("dutName")
+
+        # 需要至少一種選擇識別:href(導覽)/ dutId(IVT)/ dutName(RICtester)
+        if href is not None and (not isinstance(href, str) or not href.startswith("/")):
+            return Response(
+                {"detail": "href 必須是以 / 開頭的路徑。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not (href or dut_id or dut_name):
+            return Response(
+                {"detail": "需要 href / dutId / dutName 其中之一。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 舊路徑:只給 dutId(IVT DUT)→ 補上身分卡片欄位
+        if dut_id and not href and not dut_name:
             try:
                 dut = Dut.objects.get(id=dut_id)
             except (Dut.DoesNotExist, ValueError, DjangoValidationError):
@@ -82,10 +84,13 @@ class CurrentSelectionView(APIView):
                 )
             selection = _to_card(dut)
         else:
-            return Response(
-                {"detail": "需要 href 或 dutId。"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            # 一般路徑:pass-through 左 app / 牆用的所有欄位(RICtester 相容)
+            selection = {}
+            for k in ("href", "label", "dutId", "dutName", "interface",
+                      "testcaseId", "scenarioId", "runnings", "runStartedAt"):
+                v = request.data.get(k)
+                if v is not None:
+                    selection[k] = v
 
         selection["updatedAt"] = timezone.now().isoformat()
         state.set_current(selection)

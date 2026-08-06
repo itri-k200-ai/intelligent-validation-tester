@@ -9,6 +9,7 @@ import { overviewService as realOverview } from "./Overview/overviewService";
 import { mockScenarioService } from "./Scenario/mockScenarioService";
 import { scenarioService as realScenario } from "./Scenario/scenarioService";
 import { mockSelectionService } from "./Selection/mockSelectionService";
+import { selectionService as realSelection } from "./Selection/selectionService";
 import { mockSitesService } from "./Site/mockSitesService";
 import { sitesService as realSites } from "./Site/sitesService";
 import { mockValidationRunService } from "./ValidationRun/mockValidationRunService";
@@ -22,7 +23,7 @@ export const dutService = USE_MOCK ? mockDutService : realDut;
 export const sitesService = USE_MOCK ? mockSitesService : realSites;
 export const dataQualityService = USE_MOCK ? mockDataQualityService : realDataQuality;
 export const scenarioService = USE_MOCK ? mockScenarioService : realScenario;
-// 牆選擇一律走前端 BroadcastChannel + localStorage(mockSelectionService),
-// 不分 mock/real —— IVT 選擇後端退場中,跨機器同步之後由 RICtester 接手。
-export const selectionService = mockSelectionService;
+// 牆選擇:mock 走前端 BroadcastChannel(單機 demo);real 走後端
+// /api/selection + WS /ws/selection(跨電腦,別團隊左 app 才能連動)。
+export const selectionService = USE_MOCK ? mockSelectionService : realSelection;
 export const validationRunService = USE_MOCK ? mockValidationRunService : realValidationRun;
