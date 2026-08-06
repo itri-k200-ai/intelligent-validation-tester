@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { adapterService } from "@/services/Adapter/adapterService";
 import { useWallSelectionStore } from "@/stores/wallSelectionStore";
+import { runKey, useWallRunStore } from "@/stores/wallRunStore";
 
 export type RunItemState = {
   testcaseId: string;
@@ -31,8 +32,12 @@ const POLL_MS = 2500;
  * 輪詢 adapter testStatus + testResult 直到全部終態。
  */
 export function useAdapterRun(): AdapterRunState {
-  const runnings = useWallSelectionStore((s) => s.selection?.runnings);
-  const startedAt = useWallSelectionStore((s) => s.selection?.runStartedAt ?? null);
+  // 依當前選擇的 DUT+介面查該介面自己的 run(切換選擇不影響其他介面的 run)
+  const dutName = useWallSelectionStore((s) => s.selection?.dutName);
+  const iface = useWallSelectionStore((s) => s.selection?.interface);
+  const entry = useWallRunStore((s) => s.runsByKey[runKey(dutName, iface)]);
+  const runnings = entry?.runnings;
+  const startedAt = entry?.startedAt ?? null;
   const [items, setItems] = useState<RunItemState[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 

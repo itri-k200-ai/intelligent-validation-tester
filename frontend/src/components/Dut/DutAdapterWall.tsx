@@ -3,7 +3,6 @@ import { CheckCircle2, Maximize2, Pause, Play, Video, Volume2, XCircle } from "l
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { selectionService } from "@/services";
 import { adapterService } from "@/services/Adapter/adapterService";
 import type { WallAdapterView } from "@/hooks/Adapter/useWallAdapterView";
 import { useAdapterRun, type RunItemState } from "@/hooks/Adapter/useAdapterRun";
@@ -11,7 +10,7 @@ import { useRicCameras } from "@/hooks/Backend/useRicCameras";
 import { useRicDutDetail } from "@/hooks/Backend/useRicDutDetail";
 import { useRicTestcaseCatalog } from "@/hooks/Backend/useRicTestcaseCatalog";
 import { HlsPlayer } from "@/components/Site/HlsPlayer";
-import { useWallSelectionStore } from "@/stores/wallSelectionStore";
+import { runKey, useWallRunStore } from "@/stores/wallRunStore";
 
 // ── 中牆三帶:即時環境影像 | 測試過程 | 測試結果 ─────────────────────────
 // 中牆 = 動態戰情(跑什麼、結果如何);測項清單(靜態)在右牆。
@@ -21,8 +20,7 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
   const run = useAdapterRun();
   const { cameras } = useRicCameras();
   const { catalog } = useRicTestcaseCatalog();
-  const wallSel = useWallSelectionStore((s) => s.selection);
-  const setWallSelection = useWallSelectionStore((s) => s.setSelection);
+  const setRun = useWallRunStore((s) => s.setRun);
   const [driving, setDriving] = useState(false);
   const [driveErr, setDriveErr] = useState<string | null>(null);
   const [procPage, setProcPage] = useState(0);
@@ -34,14 +32,11 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
     setDriveErr(null);
     try {
       const runnings = await adapterService.drive(view.testcases.map((tc) => tc.testcaseId));
-      const payload = {
-        ...(wallSel ?? {}),
+      // run 狀態依「DUT+介面」保存,跟選擇導覽脫鉤:切走再切回仍看得到。
+      setRun(runKey(view.dutName, view.interface), {
         runnings,
-        runStartedAt: new Date().toISOString(),
-      };
-      // BroadcastChannel 不會回送給自己 → 本分頁手動更新 store,其他分頁走廣播。
-      await selectionService.setSelection(payload).catch(() => {});
-      setWallSelection(payload);
+        startedAt: new Date().toISOString(),
+      });
     } catch (e) {
       setDriveErr(e instanceof Error ? e.message : String(e));
     } finally {
