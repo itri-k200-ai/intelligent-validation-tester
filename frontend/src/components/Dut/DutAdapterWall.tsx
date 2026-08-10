@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { adapterService } from "@/services/Adapter/adapterService";
 import type { WallAdapterView } from "@/hooks/Adapter/useWallAdapterView";
 import { useAdapterRun, type RunItemState } from "@/hooks/Adapter/useAdapterRun";
-import { useRicCameras } from "@/hooks/Backend/useRicCameras";
+import { useIvtCameras } from "@/hooks/Backend/useIvtCameras";
 import { useRicDutDetail } from "@/hooks/Backend/useRicDutDetail";
 import { useRicTestcaseCatalog } from "@/hooks/Backend/useRicTestcaseCatalog";
 import { HlsPlayer } from "@/components/Site/HlsPlayer";
@@ -18,7 +18,7 @@ import { runKey, useWallRunStore } from "@/stores/wallRunStore";
 // 廣播 runnings(其他分頁)+ 更新本分頁 store → 輪詢顯示。
 export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
   const run = useAdapterRun();
-  const { cameras } = useRicCameras();
+  const { cameras } = useIvtCameras();
   const { catalog } = useRicTestcaseCatalog();
   const setRun = useWallRunStore((s) => s.setRun);
   const [driving, setDriving] = useState(false);
@@ -106,11 +106,11 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
       {/* 左帶:即時環境影像(位置不動;來源 = RICtester cameras + mediamtx HLS)*/}
       <div className="dut-wall-band dut-wall-band--env">
         <div className="dut-wall-band-title">
-          即時環境影像{cameras[0] ? ` — ${cameras[0].camera_name}` : ""}
+          即時環境影像{cameras[0] ? ` — ${cameras[0].name}` : ""}
         </div>
         <div className="dut-wall-band-body">
-          {cameras[0] ? (
-            <HlsPlayer src={`/hls/${cameras[0].camera_uuid}/index.m3u8`} />
+          {cameras[0]?.hls_url ? (
+            <HlsPlayer src={cameras[0].hls_url} />
           ) : (
             <div className="video-placeholder">
               <div className="video-screen">

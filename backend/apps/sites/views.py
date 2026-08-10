@@ -3,6 +3,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import BaseStation, Camera, Site, TopologyLink
 from .serializers import (
@@ -13,6 +14,18 @@ from .serializers import (
     TopologyPatchSerializer,
     TopologySerializer,
 )
+
+
+class CameraListView(APIView):
+    """扁平列出所有攝影機(通用「環境影像」用,不綁特定 site)。
+
+    電視牆的「即時環境影像」來源。攝影機是牆的通用能力,各 tester 共用,
+    所以提供這個不綁 site 的清單端點。hls_url 由 serializer 依 ivt-mediamtx 產生。
+    """
+
+    def get(self, request):
+        qs = Camera.objects.select_related("site").all()
+        return Response(CameraSerializer(qs, many=True).data)
 
 
 class SiteViewSet(viewsets.ModelViewSet):
