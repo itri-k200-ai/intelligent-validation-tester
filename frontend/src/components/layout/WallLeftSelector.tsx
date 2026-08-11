@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 
 import { selectionService } from "@/services";
 import { useAdapterTestList } from "@/hooks/Adapter/useAdapterTestList";
+import { pickLocale } from "@/lib/bilingual";
+import { useLocale } from "@/stores/localeStore";
 
 // 上/下方的靜態導覽項(總覽、場域管理);中段「連接介面驗證」改用 adapter
 // 的 DUT → scenario → testcase 真階層。
@@ -38,6 +40,7 @@ function dutInterfaces(dut: { scenarioList: { testcaseList: { testcaseName: stri
 
 export function WallLeftSelector({ embedded = false }: { embedded?: boolean }) {
   const { duts, isLoading } = useAdapterTestList();
+  const locale = useLocale();
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [currentLabel, setCurrentLabel] = useState<string | null>(null);
 
@@ -143,7 +146,7 @@ export function WallLeftSelector({ embedded = false }: { embedded?: boolean }) {
                       : "text-[#c7d2e3] hover:bg-white/5 hover:text-white"
                   }`}
                 >
-                  {d.dutName}
+                  {pickLocale(d.dutNameI18n, locale)}
                 </button>
                 {/* 第二層:選介面(E2 / A1 / O1)*/}
                 {ifaces.map((iface) => {
@@ -152,7 +155,7 @@ export function WallLeftSelector({ embedded = false }: { embedded?: boolean }) {
                     <button
                       key={ifKey}
                       onClick={() =>
-                        broadcast(ifKey, `${d.dutName} · ${iface}`, {
+                        broadcast(ifKey, `${pickLocale(d.dutNameI18n, locale)} · ${iface}`, {
                           dutName: d.dutName,
                           interface: iface,
                         })

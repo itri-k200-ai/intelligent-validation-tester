@@ -6,10 +6,14 @@ import { ricBackend } from "@/services/Backend/ricBackendService";
 export type RicDut = {
   dut_uuid: string;
   dut_name: string;
+  dut_name_en?: string;
+  dut_name_zh?: string;
   dut_kind: string;
   dut_product: string;
   dut_version: string;
   dut_description: string;
+  dut_description_en?: string;
+  dut_description_zh?: string;
   dut_mcc: string;
   dut_mnc: string;
   dut_gnb_id: string;

@@ -1,6 +1,8 @@
 "use client";
 import { useAdapterTestList } from "@/hooks/Adapter/useAdapterTestList";
 import type { AdapterTestcase } from "@/services/Adapter/adapterService";
+import { pickLocale } from "@/lib/bilingual";
+import { useLocale } from "@/stores/localeStore";
 import { useWallSelectionStore } from "@/stores/wallSelectionStore";
 
 export type WallAdapterView = {
@@ -26,6 +28,7 @@ export type WallAdapterView = {
 export function useWallAdapterView(): WallAdapterView {
   const { duts } = useAdapterTestList();
   const sel = useWallSelectionStore((s) => s.selection);
+  const locale = useLocale();
 
   const dutName = sel?.dutName ?? null;
   const iface = sel?.interface ?? null;
@@ -53,7 +56,7 @@ export function useWallAdapterView(): WallAdapterView {
     : allTestcases;
 
   const scenarios = (dut?.scenarioList ?? []).map((s) => ({
-    name: s.scenarioName,
+    name: pickLocale(s.scenarioNameI18n, locale),
     count: s.testcaseList.length,
   }));
 

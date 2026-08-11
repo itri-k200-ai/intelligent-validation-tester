@@ -11,6 +11,8 @@ import { useRicDutDetail } from "@/hooks/Backend/useRicDutDetail";
 import { useRicTestcaseCatalog } from "@/hooks/Backend/useRicTestcaseCatalog";
 import { HlsPlayer } from "@/components/Site/HlsPlayer";
 import { runKey, useWallRunStore } from "@/stores/wallRunStore";
+import { bi, pickLocale } from "@/lib/bilingual";
+import { useLocale } from "@/stores/localeStore";
 
 // ── 中牆三帶:即時環境影像 | 測試過程 | 測試結果 ─────────────────────────
 // 中牆 = 動態戰情(跑什麼、結果如何);測項清單(靜態)在右牆。
@@ -366,6 +368,11 @@ export function useAdapterDutInfoSlots(view: WallAdapterView) {
   const { dutName, interface: iface, allTestcases, scenarios } = view;
   const { detail } = useRicDutDetail(dutName);
   const dut = detail.dut;
+  const locale = useLocale();
+  // 右牆 DUT 標題:back_end 雙語(dut_name_en/_zh)優先,fallback adapter 識別碼
+  const dutTitle = dut
+    ? pickLocale(bi(dut.dut_name_en, dut.dut_name_zh || dut.dut_name), locale)
+    : dutName;
   // 「測試能力」點開某介面 → 展開該介面的測項清單(分頁;再點收合)
   const [openIface, setOpenIface] = useState<string | null>(null);
   const [exPage, setExPage] = useState(0);
@@ -403,7 +410,7 @@ export function useAdapterDutInfoSlots(view: WallAdapterView) {
     dut: (
       <div className="flex h-full w-full min-w-0 flex-col gap-3 overflow-hidden p-2 text-white">
         <div className="text-sm uppercase tracking-widest text-white/50">受測物</div>
-        <div className="text-3xl font-semibold">{dut?.dut_name ?? dutName ?? "—"}</div>
+        <div className="text-3xl font-semibold">{dutTitle ?? "—"}</div>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <Field label="類型" value={dut?.dut_kind} />
           <Field label="狀態" value={dut?.dut_status} />
