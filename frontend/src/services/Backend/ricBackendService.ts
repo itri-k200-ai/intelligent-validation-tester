@@ -68,7 +68,7 @@ export const ricBackend = {
   suites: (filter?: Record<string, unknown>) => ricRead("registry", "suites", filter),
   suiteItems: (filter?: Record<string, unknown>) =>
     ricRead("registry", "suite_items", filter),
-  cameras: (filter?: Record<string, unknown>) => ricRead("registry", "cameras", filter),
+  // 攝影機已移至 IVT 通用層(useIvtCameras → /api/cameras/),RICtester 不再供應
   testRuns: (filter?: Record<string, unknown>) => ricRead("scheduler", "test_runs", filter),
   caseResults: (filter?: Record<string, unknown>) =>
     ricRead("oracle", "case_results", filter),
