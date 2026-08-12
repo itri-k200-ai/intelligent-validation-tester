@@ -72,4 +72,7 @@ export const ricBackend = {
   testRuns: (filter?: Record<string, unknown>) => ricRead("scheduler", "test_runs", filter),
   caseResults: (filter?: Record<string, unknown>) =>
     ricRead("oracle", "case_results", filter),
+  // 每次 run 從探針容器抓的原始 stdout(戰情牆「測試過程」的終端機日誌來源)
+  probeLogs: (filter?: Record<string, unknown>) =>
+    ricRead("provisioner", "probe_logs", filter),
 };

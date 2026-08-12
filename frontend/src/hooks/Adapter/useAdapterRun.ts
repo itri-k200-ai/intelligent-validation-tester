@@ -23,6 +23,8 @@ export type AdapterRunState = {
   passed: number;
   failed: number;
   startedAt: string | null;
+  /** 按執行當下的探針 log 基準 uuid(探針框用來只顯示本次的新 log)*/
+  baselineLogUuid: string | null;
 };
 
 const POLL_MS = 2500;
@@ -38,6 +40,7 @@ export function useAdapterRun(): AdapterRunState {
   const entry = useWallRunStore((s) => s.runsByKey[runKey(dutName, iface)]);
   const runnings = entry?.runnings;
   const startedAt = entry?.startedAt ?? null;
+  const baselineLogUuid = entry?.baselineLogUuid ?? null;
   const [items, setItems] = useState<RunItemState[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -114,5 +117,5 @@ export function useAdapterRun(): AdapterRunState {
       (i) => (i.status === "finished" || i.status === "error") && i.result !== null,
     );
 
-  return { active: items.length > 0, done, items, passed, failed, startedAt };
+  return { active: items.length > 0, done, items, passed, failed, startedAt, baselineLogUuid };
 }
