@@ -109,9 +109,12 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
           <div className="war-room-main-bg" aria-hidden="true">
             <HudOctagon kind="radar" className="war-room-main-bg-asset" />
           </div>
-          <div className="war-room-main-selection px-6 pt-4">
-            <WallSelectionStatus />
-          </div>
+          {/* 總覽頁不顯示「目前檢視」橫幅(它不是被左螢幕選出來的檢視)*/}
+          {!pathname.startsWith("/overview") && (
+            <div className="war-room-main-selection px-6 pt-4">
+              <WallSelectionStatus />
+            </div>
+          )}
           <div className="war-room-main-content">{children}</div>
         </main>
       </section>
