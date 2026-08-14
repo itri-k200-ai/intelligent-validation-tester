@@ -295,7 +295,7 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
 
           {/* 探針日誌:執行後才顯示,只採用本次 run 的原始 stdout(執行前清空)*/}
           <section>
-            <div className="dut-wall-band-title">探針日誌</div>
+            <div className="dut-wall-band-title">執行紀錄</div>
             <div className="dut-wall-band-body min-h-0">
               {run.active ? (
                 <div className="h-full min-h-0 w-full">
@@ -625,7 +625,7 @@ function ProbeConsole({
         </span>
         <Terminal className="ml-1 h-3.5 w-3.5" />
         <span className="font-mono">
-          探針日誌{iface ? ` · ${iface}` : ""}{endpoint ? ` · ${endpoint}` : ""}
+          執行紀錄{iface ? ` · ${iface}` : ""}{endpoint ? ` · ${endpoint}` : ""}
         </span>
         {log?.captured_at && (
           <span className="ml-auto font-mono text-white/35">

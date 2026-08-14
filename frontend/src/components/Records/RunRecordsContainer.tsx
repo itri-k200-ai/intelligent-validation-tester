@@ -267,11 +267,11 @@ function ProbeLogBox({
           <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400/80" />
           <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
         </span>
-        <span className="ml-1 font-mono">探針日誌</span>
+        <span className="ml-1 font-mono">執行紀錄</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap px-3 py-2 font-mono text-sm leading-relaxed text-emerald-300/90">
         {logs.length === 0 ? (
-          <span className="text-white/40">$ 本次無探針日誌</span>
+          <span className="text-white/40">$ 本次無執行紀錄</span>
         ) : (
           logs.map((l) => (
             <div key={l.log_uuid}>
