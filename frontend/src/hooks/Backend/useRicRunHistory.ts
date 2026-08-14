@@ -81,3 +81,24 @@ export function useRicRunResults(runUuid: string | null) {
   });
   return { results: query.data ?? [], isLoading: query.isLoading };
 }
+
+export type RicRunProbeLog = {
+  log_uuid: string;
+  probe_iface: string;
+  probe_endpoint: string;
+  captured_at: string;
+  log_text: string;
+};
+
+// 某次 run 的探針原始 stdout(可能多介面各一筆)
+export function useRicRunProbeLogs(runUuid: string | null) {
+  const query = useQuery({
+    queryKey: ["ric", "run-probe-logs", runUuid],
+    enabled: !!runUuid,
+    queryFn: async () => {
+      const rows = (await ricBackend.probeLogs({ f_run_uuid: runUuid })) as RicRunProbeLog[];
+      return rows.sort((a, b) => a.probe_iface.localeCompare(b.probe_iface));
+    },
+  });
+  return { logs: query.data ?? [] };
+}

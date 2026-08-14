@@ -453,6 +453,37 @@ html.wall-mode .ov-grid {
 html.wall-mode .ov-rate {
   grid-template-columns: repeat(4, 1fr) !important;
 }
+/* 測試紀錄清單卡片格:對齊 6 個 TV 格(每卡 1 格),框線落在欄間 gap。
+   縱向:往下推讓第一排落在中間螢幕格(y1080-2160)、第二排落在下方格
+   (y2160-3240),水平框線(y=1080/2160)落在排與排之間、不切標題。 */
+html.wall-mode .rec-grid {
+  grid-template-columns: repeat(6, 1fr) !important;
+  column-gap: 150px !important;
+  margin-top: 340px !important;
+  row-gap: 600px !important;
+  align-content: start !important;
+}
+/* 明細:結果(左)+ 探針日誌(右),切分點對齊 x=7680 框線。 */
+html.wall-mode .rec-detail-body {
+  gap: 150px !important;
+}
+html.wall-mode .rec-log {
+  width: 3700px !important;
+  margin-top: -150px !important;
+}
+/* 明細左側結果格:維持原本 3 欄呈現(數量剛好),小幅下移避開第一排橫縫。
+   明細已隱藏 DUT 按鈕,整體上移。 */
+html.wall-mode .rec-cases {
+  column-gap: 150px !important;
+  margin-top: 120px !important;
+  row-gap: 80px !important;
+}
+/* 兩種卡片大幅內縮,文字/次數/標題退到格子中央,遠離兩側框線。 */
+html.wall-mode .rec-grid > *,
+html.wall-mode .rec-cases > * {
+  padding-left: 2.5rem !important;
+  padding-right: 2.5rem !important;
+}
 /* 近期執行:把表格整體往下推離上方橫縫,列加高 + 垂直置中,讓橫縫落在列的
    上下留白而非文字上。 */
 html.wall-mode .ov-recent {
