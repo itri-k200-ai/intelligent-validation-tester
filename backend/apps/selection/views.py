@@ -22,7 +22,6 @@ from apps.duts.models import Dut
 
 from . import state
 from .broadcast import broadcast_selection
-from .permissions import HasServiceTokenOrAdmin
 
 
 def _to_card(dut: Dut) -> dict:
@@ -36,9 +35,9 @@ def _to_card(dut: Dut) -> dict:
 
 
 class CatalogView(APIView):
-    """我們提供「有哪些可測項目」給左 app。"""
+    """我們提供「有哪些可測項目」給左 app。內網部署:公開。"""
 
-    permission_classes = [HasServiceTokenOrAdmin]
+    permission_classes = [AllowAny]
 
     def get(self, request):
         duts = Dut.objects.all().order_by("type", "name")
@@ -47,9 +46,7 @@ class CatalogView(APIView):
 
 class CurrentSelectionView(APIView):
     def get_permissions(self):
-        # 讀取(中/右牆補水)公開;寫入(左 app 回報)要服務金鑰。
-        if self.request.method == "POST":
-            return [HasServiceTokenOrAdmin()]
+        # 內網部署:讀寫皆公開,左 app 直接打 POST 切換,不需服務金鑰。
         return [AllowAny()]
 
     def get(self, request):
