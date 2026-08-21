@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, type ReactNode } from "react";
 
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { useWallRegion } from "@/hooks/Wall/useWallRegion";
 import { useUiStore } from "@/stores/uiStore";
 import { useIsWallMode } from "@/stores/wallModeStore";
@@ -23,7 +24,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [region]);
 
   // 左螢幕:全螢幕 selector 選單(不走牆版面 / 不裁切)。
-  if (region === "left") return <WallLeftSelector />;
+  // 這裡在 (dashboard)/layout 之內,同層的 error.tsx 攔不到,所以自己包 boundary。
+  if (region === "left")
+    return (
+      <ErrorBoundary label="左螢幕選單">
+        <WallLeftSelector />
+      </ErrorBoundary>
+    );
 
   // 單螢幕拆分(center/right)一律走牆版面 —— 那才是該 URL 要顯示的那面牆。
   const forceWall = region === "center" || region === "right";
@@ -32,7 +39,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     return (
       <>
         <WallModeApplier />
-        <WallWarRoomLayout>{children}</WallWarRoomLayout>
+        <ErrorBoundary label="戰情牆">
+          <WallWarRoomLayout>{children}</WallWarRoomLayout>
+        </ErrorBoundary>
       </>
     );
   }
@@ -52,7 +61,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+          <ErrorBoundary label="頁面內容">{children}</ErrorBoundary>
+        </main>
       </div>
     </div>
   );
