@@ -73,16 +73,25 @@ docker compose up -d --build
 ### 對外服務埠
 | 服務 | 埠 | 說明 |
 | --- | --- | --- |
-| IVT nginx(唯一入口) | **8080** | `/` 前端、`/api/*` IVT、`/autoTest/*`→adapter、`/api/back_end/*`→back_end、`/hls/*`→mediamtx |
-| RICtester adapter | 5110 | `/autoTest/*` 驅動介面 |
-| RICtester back_end | 5010 | `/api/back_end/*`(登入 `manager_name=admin` / `admin1234`) |
+| IVT nginx(唯一入口) | **8080** | `/` 前端、`/api/*` IVT、`/ric/<來源>/*`→各套 RICtester、`/hls/*`→mediamtx |
+| NearRICTester adapter / back_end | 5100 / 5000 | Lab Near-RT RIC(E2 / A1 / O1) |
+| NonRICTester adapter / back_end | 5110 / 5010 | Lab Non-RT RIC(A1 / EI / SME / R1 / DME / AIML) |
 | RICtester mediamtx | 8890 | 環境攝影機 HLS |
+
+> RICtester 可跑在同機或另一台;位址與埠由 `deploy/.env` 的 `RIC_HOST` /
+> `RIC_*_PORT` 決定(範本見 `deploy/.env.example`),nginx 設定不必改。
+> 要增減一套 tester:改 `frontend/src/config/ricSources.ts` + `deploy/nginx.conf.template` + `.env`。
+
+IVT 自己對外開的埠也全部可由 `deploy/.env` 的 `IVT_*_PORT` 覆寫(見下方坑 4),
+只有 nginx 一定要開,其餘僅供 debug —— 服務之間走 compose 內網以服務名互連。
 
 ### ⚠️ 常見坑
 1. **`.env` 不在 git** → 一定要從 `.env.example` 複製,否則後端起不來。
 2. **DB 資料不隨 git 走**:新機是全新 DB,只有 seed 的 Lab RIC;先前手動加的 DUT(如 116)不會在。要帶資料:舊機 `docker exec <sql-db> pg_dump -U oran oran_tester > d.sql` + `docker exec <no-sql-db> mongodump --db oran_tester --archive > m.archive`,新機 `psql -U oran -d oran_tester < d.sql`、`mongorestore --db oran_tester --drop --archive < m.archive`。
 3. **RICtester 首次務必 `--build`**(不依賴內部 Harbor)。
-4. **埠衝突**:8080 / 5010 / 5110 / 8890 等不能被佔;nmagent 服務會撞 :8001,故只起核心服務。
+4. **埠衝突**:8080 不能被佔。**與 RICtester 同機部署時 3000 與 8001 一定會撞**
+   (3000 ← NearRICTester front_end、8001 ← nmagent nm_backend),在 `deploy/.env` 設
+   `IVT_FRONTEND_PORT=3005`、`IVT_BACKEND_WS_PORT=8011` 即可,不必改 `docker-compose.yml`。
 5. **E2(SCTP)要與受測 RIC 同網段**才連得通(A1/O1 走 TCP 較寬鬆)—— 屬網路拓樸,非部署設定。
 6. **postgres 偶發權限 glitch**(`pg_filenode.map: Permission denied`,常見於機器重開/休眠後)→ `docker restart <該 postgres 容器>` 即修。
 
