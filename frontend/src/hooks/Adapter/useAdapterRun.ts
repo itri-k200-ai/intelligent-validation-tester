@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 
+import { DEFAULT_RIC_SOURCE } from "@/config/ricSources";
 import { adapterService } from "@/services/Adapter/adapterService";
 import { useWallSelectionStore } from "@/stores/wallSelectionStore";
 
@@ -32,6 +33,8 @@ const POLL_MS = 2500;
  */
 export function useAdapterRun(): AdapterRunState {
   const runnings = useWallSelectionStore((s) => s.selection?.runnings);
+  // 輪詢要打回「當初驅動這批測試的那一套 tester」。
+  const source = useWallSelectionStore((s) => s.selection?.source) ?? DEFAULT_RIC_SOURCE;
   const startedAt = useWallSelectionStore((s) => s.selection?.runStartedAt ?? null);
   const [items, setItems] = useState<RunItemState[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -60,8 +63,8 @@ export function useAdapterRun(): AdapterRunState {
     const poll = async () => {
       try {
         const [statuses, results] = await Promise.all([
-          adapterService.testStatus(ids),
-          adapterService.testResult(ids),
+          adapterService.testStatus(source, ids),
+          adapterService.testResult(source, ids),
         ]);
         if (stopped) return;
         const stByRid = new Map(statuses.map((s) => [s.runningId, s]));
@@ -99,7 +102,7 @@ export function useAdapterRun(): AdapterRunState {
       stopped = true;
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [runnings]);
+  }, [runnings, source]);
 
   const passed = items.filter((i) => i.result === "passed").length;
   const failed = items.filter((i) => i.result === "failed" || i.result === "error").length;

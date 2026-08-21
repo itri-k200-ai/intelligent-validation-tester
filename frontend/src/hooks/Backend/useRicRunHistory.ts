@@ -1,7 +1,8 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 
-import { ricBackend } from "@/services/Backend/ricBackendService";
+import { DEFAULT_RIC_SOURCE, type RicSourceId } from "@/config/ricSources";
+import { ricBackend, ricBackendAll } from "@/services/Backend/ricBackendService";
 
 export type RicRun = {
   run_uuid: string;
@@ -15,6 +16,8 @@ export type RicRun = {
   // join 補上
   scenarioName: string;
   dutName: string;
+  /** 這筆 run 來自哪一套 tester(查逐案判決時要打回同一套)。 */
+  source: RicSourceId;
 };
 
 export type RicDutRuns = {
@@ -31,22 +34,33 @@ export function useRicRunHistory() {
     queryKey: ["ric", "run-history"],
     refetchInterval: 10000,
     queryFn: async (): Promise<RicDutRuns[]> => {
+      // 三張表都跨來源撈。UUID 只在各自的 tester 內有意義,
+      // 所以 join 的 key 一律帶上 __source,避免跨套錯接。
       const [runs, projects, duts] = await Promise.all([
-        ricBackend.testRuns() as Promise<RicRun[]>,
-        ricBackend.projects() as Promise<
-          { project_uuid: string; project_name: string; f_dut_uuid: string }[]
+        ricBackendAll.testRuns() as Promise<(RicRun & { __source: RicSourceId })[]>,
+        ricBackendAll.projects() as Promise<
+          {
+            project_uuid: string;
+            project_name: string;
+            f_dut_uuid: string;
+            __source: RicSourceId;
+          }[]
         >,
-        ricBackend.duts() as Promise<{ dut_uuid: string; dut_name: string }[]>,
+        ricBackendAll.duts() as Promise<
+          { dut_uuid: string; dut_name: string; __source: RicSourceId }[]
+        >,
       ]);
-      const projById = new Map(projects.map((p) => [p.project_uuid, p]));
-      const dutById = new Map(duts.map((d) => [d.dut_uuid, d.dut_name]));
+      const key = (src: RicSourceId, uuid: string) => `${src}:${uuid}`;
+      const projById = new Map(projects.map((p) => [key(p.__source, p.project_uuid), p]));
+      const dutById = new Map(duts.map((d) => [key(d.__source, d.dut_uuid), d.dut_name]));
 
       const enriched: RicRun[] = runs.map((r) => {
-        const proj = projById.get(r.f_project_uuid);
+        const proj = projById.get(key(r.__source, r.f_project_uuid));
         return {
           ...r,
+          source: r.__source,
           scenarioName: proj?.project_name ?? "(已刪除案例)",
-          dutName: (proj && dutById.get(proj.f_dut_uuid)) ?? "(未知 DUT)",
+          dutName: (proj && dutById.get(key(r.__source, proj.f_dut_uuid))) ?? "(未知 DUT)",
         };
       });
       // 依時間倒序
@@ -66,12 +80,12 @@ export function useRicRunHistory() {
 }
 
 /** 單一 run 的逐案判決(Mongo case_results) */
-export function useRicRunResults(runUuid: string | null) {
+export function useRicRunResults(runUuid: string | null, source?: RicSourceId) {
   const query = useQuery({
-    queryKey: ["ric", "run-results", runUuid],
+    queryKey: ["ric", "run-results", source ?? DEFAULT_RIC_SOURCE, runUuid],
     enabled: !!runUuid,
     queryFn: async () =>
-      (await ricBackend.caseResults({ f_run_uuid: runUuid })) as {
+      (await ricBackend.caseResults({ f_run_uuid: runUuid }, source)) as {
         result_uuid: string;
         result_verdict: string;
         result_detail: string;

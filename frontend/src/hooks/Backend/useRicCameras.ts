@@ -1,7 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 
-import { ricBackend } from "@/services/Backend/ricBackendService";
+import { ricBackendAll } from "@/services/Backend/ricBackendService";
 
 export type RicCamera = {
   camera_uuid: string;
@@ -20,7 +20,7 @@ export function useRicCameras() {
   const query = useQuery({
     queryKey: ["ric", "cameras"],
     queryFn: async (): Promise<RicCamera[]> =>
-      (await ricBackend.cameras()) as RicCamera[],
+      (await ricBackendAll.cameras()) as unknown as RicCamera[],
     refetchInterval: 30000,
   });
   return {

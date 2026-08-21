@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { selectionService } from "@/services";
+import { DEFAULT_RIC_SOURCE } from "@/config/ricSources";
 import { adapterService } from "@/services/Adapter/adapterService";
 import type { WallAdapterView } from "@/hooks/Adapter/useWallAdapterView";
 import { useAdapterRun, type RunItemState } from "@/hooks/Adapter/useAdapterRun";
@@ -20,7 +21,7 @@ import { useWallSelectionStore } from "@/stores/wallSelectionStore";
 export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
   const run = useAdapterRun();
   const { cameras } = useRicCameras();
-  const { catalog } = useRicTestcaseCatalog();
+  const { catalog } = useRicTestcaseCatalog(view.source ?? undefined);
   const wallSel = useWallSelectionStore((s) => s.selection);
   const setWallSelection = useWallSelectionStore((s) => s.setSelection);
   const [driving, setDriving] = useState(false);
@@ -33,7 +34,11 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
     setDriving(true);
     setDriveErr(null);
     try {
-      const runnings = await adapterService.drive(view.testcases.map((tc) => tc.testcaseId));
+      // 驅動要打回這個 DUT 所屬的那一套 tester。
+      const runnings = await adapterService.drive(
+        view.source ?? DEFAULT_RIC_SOURCE,
+        view.testcases.map((tc) => tc.testcaseId),
+      );
       const payload = {
         ...(wallSel ?? {}),
         runnings,
@@ -368,8 +373,8 @@ function VerdictPill({ item }: { item: RunItemState }) {
 // 右牆 = DUT 整體檔案:換介面「不」跟著變(介面層級的內容歸中牆),
 // 只用當前介面做視覺高亮,避免與中牆重複。
 export function useAdapterDutInfoSlots(view: WallAdapterView) {
-  const { dutName, interface: iface, allTestcases, scenarios } = view;
-  const { detail } = useRicDutDetail(dutName);
+  const { dutName, source, interface: iface, allTestcases, scenarios } = view;
+  const { detail } = useRicDutDetail(dutName, source ?? undefined);
   const dut = detail.dut;
   // 「測試能力」點開某介面 → 展開該介面的測項清單(分頁;再點收合)
   const [openIface, setOpenIface] = useState<string | null>(null);

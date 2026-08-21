@@ -1,3 +1,4 @@
+import type { RicSourceId } from "@/config/ricSources";
 import { apiClient } from "../api/client";
 
 export type CatalogDut = {
@@ -8,6 +9,8 @@ export type CatalogDut = {
 };
 
 export type WallSelectionPayload = {
+  /** DUT 屬於哪一套 RICtester(Near/Non 獨立部署)。 */
+  source?: RicSourceId;
   href?: string;
   label?: string;
   dutId?: string;
