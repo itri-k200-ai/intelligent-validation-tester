@@ -15,6 +15,7 @@ import { HlsPlayer } from "@/components/Site/HlsPlayer";
 import { runKey, useWallRunStore } from "@/stores/wallRunStore";
 import { bi, pickLocale } from "@/lib/bilingual";
 import { useLocale } from "@/stores/localeStore";
+import { DEFAULT_RIC_SOURCE } from "@/config/ricSources";
 
 // ── 中牆三帶:即時環境影像 | 測試過程 | 測試結果 ─────────────────────────
 // 中牆 = 動態戰情(跑什麼、結果如何);測項清單(靜態)在右牆。
@@ -64,7 +65,10 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
       } catch {
         /* 拿不到就當沒有基準 */
       }
-      const runnings = await adapterService.drive(view.testcases.map((tc) => tc.testcaseId));
+      const runnings = await adapterService.drive(
+        view.source ?? DEFAULT_RIC_SOURCE,
+        view.testcases.map((tc) => tc.testcaseId),
+      );
       // run 狀態依「DUT+介面」保存,跟選擇導覽脫鉤:切走再切回仍看得到。
       setRun(runKey(view.dutName, view.interface), {
         runnings,

@@ -1,6 +1,8 @@
 "use client";
 import { create } from "zustand";
 
+import type { RicSourceId } from "@/config/ricSources";
+
 /** 左螢幕驅動測試後,每個測項的 runningId(輪詢狀態/結果用)。 */
 export type WallRunning = {
   testcaseId: string;
@@ -22,7 +24,9 @@ export type WallSelection = {
   type?: string;
   status?: string;
   updatedAt?: string;
-  // RICtester(adapter)識別
+  // RICtester(adapter)識別。source 指出這個 DUT 屬於哪一套 tester
+  // (Near/Non 是獨立部署),中/右牆要用它決定打哪一套的 API。
+  source?: RicSourceId;
   dutName?: string;
   interface?: string;
   testcaseId?: string;

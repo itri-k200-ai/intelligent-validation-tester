@@ -19,11 +19,21 @@ http {
     upstream frontend      { server frontend:3000; }
     upstream backend_web   { server backend-web:8000; }
     upstream backend_ws    { server backend-ws:8001; }
-    # RICtester(另一個 compose,經宿主機埠;nginx 服務需 extra_hosts host-gateway)
-    upstream ric_adapter   { server host.docker.internal:5110; }
-    upstream ric_backend   { server host.docker.internal:5010; }
-    # 環境影像 HLS —— 攝影機拆回 IVT 通用層,走 ivt-mediamtx(不再是 RICtester)
-    upstream ivt_hls       { server mediamtx:8888; }
+    # RICtester —— 同一台主機上跑著數套彼此獨立的 tester(各自一組
+    # front-end / back-end / adapter / DB),依受測物種類分開。位址由
+    # deploy/.env 的 RIC_HOST / RIC_*_PORT 決定,容器啟動時由 nginx 官方
+    # entrypoint 的 envsubst 代入(NGINX_ENVSUBST_FILTER=^RIC_ 只替換 RIC_*)。
+    #
+    #   near → NearRICTester(Lab Near-RT RIC:E2 / A1 / O1)
+    #   non  → NonRICTester (Lab Non-RT RIC:A1 / EI / SME / R1 / DME / AIML)
+    #
+    # 前端 config/ricSources.ts 的 base 必須與下面的路徑前綴一致。
+    upstream ric_near_adapter { server ${RIC_HOST}:${RIC_NEAR_ADAPTER_PORT}; }
+    upstream ric_near_backend { server ${RIC_HOST}:${RIC_NEAR_BACKEND_PORT}; }
+    upstream ric_non_adapter  { server ${RIC_HOST}:${RIC_NON_ADAPTER_PORT}; }
+    upstream ric_non_backend  { server ${RIC_HOST}:${RIC_NON_BACKEND_PORT}; }
+    # 環境影像 HLS —— 攝影機拆回 IVT 通用層,走 ivt-mediamtx(同 compose 網路內)
+    upstream ivt_hls          { server mediamtx:8888; }
 
     # 單一入口。前端一份 image,靠 URL ?wall=left|center|right 切畫面。
     server {
@@ -31,15 +41,28 @@ http {
         server_name _;
 
         # ── RICtester 整合(電視牆資料來源)──
-        # 左牆驅動介面:adapter /autoTest/*
-        location /autoTest/ {
-            proxy_pass         http://ric_adapter;
+        # 每套 tester 一個路徑前綴 /ric/<來源>/,proxy_pass 後面帶 URI 會把
+        # 前綴剝掉,所以上游收到的仍是原本的 /autoTest/* 與 /api/back_end/*。
+        #
+        # NearRICTester
+        location /ric/near/autoTest/ {
+            proxy_pass         http://ric_near_adapter/autoTest/;
             proxy_set_header   Host              $host;
             proxy_set_header   X-Real-IP         $remote_addr;
         }
-        # 中/右牆完整資料:RICtester back_end(比 /api/ 更長的前綴,優先匹配)
-        location /api/back_end/ {
-            proxy_pass         http://ric_backend;
+        location /ric/near/api/back_end/ {
+            proxy_pass         http://ric_near_backend/api/back_end/;
+            proxy_set_header   Host              $host;
+            proxy_set_header   X-Real-IP         $remote_addr;
+        }
+        # NonRICTester
+        location /ric/non/autoTest/ {
+            proxy_pass         http://ric_non_adapter/autoTest/;
+            proxy_set_header   Host              $host;
+            proxy_set_header   X-Real-IP         $remote_addr;
+        }
+        location /ric/non/api/back_end/ {
+            proxy_pass         http://ric_non_backend/api/back_end/;
             proxy_set_header   Host              $host;
             proxy_set_header   X-Real-IP         $remote_addr;
         }

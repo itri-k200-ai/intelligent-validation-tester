@@ -21,11 +21,14 @@ const config: NextConfig = {
     // Next.js strips it from the source before forwarding, which would
     // otherwise create a 301-bounce loop with the backend.
     return [
-      // RICtester adapter(/autoTest/*)—— 左牆(驅動)資料來源。adapter 對外埠 5110。
-      { source: "/autoTest/:path*", destination: "http://localhost:5110/autoTest/:path*" },
-      // RICtester back_end(/api/back_end/*)—— 中/右牆(完整資料)來源。back_end 對外埠 5010。
-      // 這條要排在 /api/:path* 之前,才不會被 IVT 後端那條攔走。
-      { source: "/api/back_end/:path*", destination: "http://localhost:5010/api/back_end/:path*" },
+      // RICtester —— 數套獨立 tester,每套一個 /ric/<來源>/ 前綴(與正式部署
+      // 的 nginx 一致,也與 frontend/src/config/ricSources.ts 的 base 一致)。
+      // near = NearRICTester(adapter 5100 / back_end 5000)
+      { source: "/ric/near/autoTest/:path*", destination: "http://localhost:5100/autoTest/:path*" },
+      { source: "/ric/near/api/back_end/:path*", destination: "http://localhost:5000/api/back_end/:path*" },
+      // non = NonRICTester(adapter 5110 / back_end 5010)
+      { source: "/ric/non/autoTest/:path*", destination: "http://localhost:5110/autoTest/:path*" },
+      { source: "/ric/non/api/back_end/:path*", destination: "http://localhost:5010/api/back_end/:path*" },
       { source: "/api/:path*", destination: "http://localhost:8080/api/:path*/" },
       { source: "/ws/:path*", destination: "http://localhost:8080/ws/:path*" },
       // 環境攝影機 HLS —— RICtester mediamtx(影像已整併過去,host :8890)

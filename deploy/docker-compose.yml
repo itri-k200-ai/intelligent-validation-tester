@@ -10,7 +10,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     # host 5432 留給 near-rt-ric agent、5433 留給 imctrl-db；IVT 用 5434 避免衝突
-    ports: ["5434:5432"]
+    ports: ["${IVT_POSTGRES_PORT:-5434}:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ivt"]
       interval: 5s
@@ -21,7 +21,7 @@ services:
     container_name: ivt-redis
     restart: unless-stopped
     volumes: [redis_data:/data]
-    ports: ["6379:6379"]
+    ports: ["${IVT_REDIS_PORT:-6379}:6379"]
 
   minio:
     image: minio/minio:latest
@@ -32,7 +32,7 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     volumes: [minio_data:/data]
-    ports: ["9000:9000", "9001:9001"]
+    ports: ["${IVT_MINIO_PORT:-9000}:9000", "${IVT_MINIO_CONSOLE_PORT:-9001}:9001"]
 
   mediamtx:
     image: bluenviron/mediamtx:latest
@@ -40,7 +40,10 @@ services:
     restart: unless-stopped
     volumes:
       - ../media-server/mediamtx.yml:/mediamtx.yml
-    ports: ["8554:8554", "8888:8888", "9997:9997"]
+    ports:
+      - "${IVT_MEDIAMTX_RTSP_PORT:-8554}:8554"
+      - "${IVT_MEDIAMTX_HLS_PORT:-8888}:8888"
+      - "${IVT_MEDIAMTX_API_PORT:-9997}:9997"
 
   backend-web:
     build: ../backend
@@ -53,7 +56,7 @@ services:
       redis: { condition: service_started }
       minio: { condition: service_started }
     # host 8000 留給 near-rt-ric agent；正式入口走 nginx :8080
-    ports: ["8002:8000"]
+    ports: ["${IVT_BACKEND_WEB_PORT:-8002}:8000"]
 
   backend-ws:
     build: ../backend
@@ -64,7 +67,9 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_started }
-    ports: ["8001:8001"]
+    # 注意:8001 常被 RICtester 那套的 nmagent 佔用,同機部署要改 IVT_BACKEND_WS_PORT。
+    # nginx 是走 compose 內網 backend-ws:8001,這個對外埠只供 debug。
+    ports: ["${IVT_BACKEND_WS_PORT:-8001}:8001"]
 
   celery-worker:
     build: ../backend
@@ -94,19 +99,35 @@ services:
     restart: unless-stopped
     env_file: ../frontend/.env.local
     depends_on: [backend-web]
-    ports: ["3000:3000"]
+    # 注意:3000 常被 RICtester 那套的 front_end 佔用,同機部署要改 IVT_FRONTEND_PORT。
+    # nginx 是走 compose 內網 frontend:3000,這個對外埠只供 debug。
+    ports: ["${IVT_FRONTEND_PORT:-3000}:3000"]
 
   nginx:
     image: nginx:alpine
     container_name: ivt-nginx
     restart: unless-stopped
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-    # RICtester(adapter/back_end/mediamtx)在另一個 compose,經宿主機埠代理
+      # 樣板:官方 entrypoint 會 envsubst 後輸出成 /etc/nginx/nginx.conf
+      - ./nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
+    environment:
+      NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx
+      # 只替換 RIC_* 前綴,避免動到 nginx 自己的 host / remote_addr 等變數
+      NGINX_ENVSUBST_FILTER: "^RIC_"
+      # RICtester 位址。預設同機,跨主機改 deploy/.env。
+      # 同一台主機上有數套獨立的 tester,各自一組 back_end / adapter:
+      #   near = NearRICTester(Near-RT RIC)、non = NonRICTester(Non-RT RIC)
+      RIC_HOST: ${RIC_HOST:-host.docker.internal}
+      RIC_NEAR_ADAPTER_PORT: ${RIC_NEAR_ADAPTER_PORT:-5100}
+      RIC_NEAR_BACKEND_PORT: ${RIC_NEAR_BACKEND_PORT:-5000}
+      RIC_NON_ADAPTER_PORT: ${RIC_NON_ADAPTER_PORT:-5110}
+      RIC_NON_BACKEND_PORT: ${RIC_NON_BACKEND_PORT:-5010}
+      RIC_HLS_PORT: ${RIC_HLS_PORT:-8890}
+    # RIC_HOST 用預設 host.docker.internal(同機)時才需要
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # 單一入口 :8080 —— ?wall=left / center / right 切畫面
-    ports: ["8080:80"]
+    ports: ["${IVT_NGINX_PORT:-8080}:80"]
     depends_on: [frontend, backend-web, backend-ws, mediamtx]
 
 volumes:

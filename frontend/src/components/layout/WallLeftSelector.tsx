@@ -2,9 +2,13 @@
 import { useEffect, useState } from "react";
 
 import { selectionService } from "@/services";
+import {
+  DEFAULT_RIC_SOURCE,
+  RIC_SOURCES,
+  ricSourceLabel,
+  type RicSourceId,
+} from "@/config/ricSources";
 import { useAdapterTestList } from "@/hooks/Adapter/useAdapterTestList";
-import { pickLocale } from "@/lib/bilingual";
-import { useLocale } from "@/stores/localeStore";
 
 // 上/下方的靜態導覽項(總覽、場域管理);中段「連接介面驗證」改用 adapter
 // 的 DUT → scenario → testcase 真階層。
@@ -18,11 +22,15 @@ const BOTTOM_NAV: NavItem[] = [
   { href: "/site-management/international", label: "國外場域", child: true },
 ];
 
-// adapter 的 DUT 都是 Near-RT RIC → 導到這頁(中/右牆顯示)
-const RIC_HREF = "/interface-validation/near-rt-ric";
+// 各套 tester 的 DUT 導到對應的介面驗證頁(中/右牆顯示)。
+const RIC_HREF: Record<RicSourceId, string> = {
+  near: "/interface-validation/near-rt-ric",
+  non: "/interface-validation/non-rt-ric",
+};
 
 // 介面顯示順序;測項名前綴(e2.setup → e2)決定它屬於哪個介面。
-const IFACE_ORDER = ["E2", "A1", "O1"];
+// 前半是 Near-RT RIC 的介面,後半是 Non-RT RIC 的;不在清單內的排最後。
+const IFACE_ORDER = ["E2", "A1", "O1", "EI", "R1", "SME", "DME", "AIML"];
 
 // 從一個 DUT 的所有測項推出它有哪些介面(去重、排序)。
 function dutInterfaces(dut: { scenarioList: { testcaseList: { testcaseName: string }[] }[] }): string[] {
@@ -40,7 +48,6 @@ function dutInterfaces(dut: { scenarioList: { testcaseList: { testcaseName: stri
 
 export function WallLeftSelector({ embedded = false }: { embedded?: boolean }) {
   const { duts, isLoading } = useAdapterTestList();
-  const locale = useLocale();
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [currentLabel, setCurrentLabel] = useState<string | null>(null);
 
@@ -55,6 +62,8 @@ export function WallLeftSelector({ embedded = false }: { embedded?: boolean }) {
 
   // 統一的選擇廣播:href 讓中牆導航,label 顯示,額外帶 adapter id 供之後用。
   const broadcast = async (
+    // 靜態導覽項(總覽/測試紀錄/場域)不屬於任何一套 tester → 傳 null。
+    source: RicSourceId | null,
     key: string,
     label: string,
     extra: Record<string, string> = {},
@@ -62,7 +71,12 @@ export function WallLeftSelector({ embedded = false }: { embedded?: boolean }) {
     setActiveKey(key);
     setCurrentLabel(label);
     await selectionService
-      .setSelection({ href: RIC_HREF, label, ...extra })
+      .setSelection({
+        href: source ? RIC_HREF[source] : RIC_HREF[DEFAULT_RIC_SOURCE],
+        label,
+        ...(source ? { source } : {}),
+        ...extra,
+      })
       .catch(() => {});
   };
 
@@ -78,7 +92,11 @@ export function WallLeftSelector({ embedded = false }: { embedded?: boolean }) {
     return (
       <button
         key={`${keyPrefix}-${i}`}
-        onClick={() => broadcast(key, item.label ?? "", { href: item.href ?? RIC_HREF } as Record<string, string>)}
+        onClick={() =>
+          broadcast(null, key, item.label ?? "", {
+            href: item.href ?? RIC_HREF[DEFAULT_RIC_SOURCE],
+          } as Record<string, string>)
+        }
         className={`block w-full rounded-lg px-4 py-3 text-left text-base transition-colors ${
           item.child ? "ml-3.5" : ""
         } ${
@@ -132,30 +150,41 @@ export function WallLeftSelector({ embedded = false }: { embedded?: boolean }) {
         ) : duts.length === 0 ? (
           <div className="ml-3.5 px-3 py-2 text-sm text-white/30">（RICtester 尚無 DUT）</div>
         ) : (
-          duts.map((d) => {
-            const dutKey = `dut:${d.dutName}`;
+          // 依來源(各自獨立的一套 tester)分組,組內再列 DUT。
+          RIC_SOURCES.filter((src) => duts.some((d) => d.source === src.id)).flatMap((src) => [
+            <div
+              key={`src:${src.id}`}
+              className="ml-3.5 px-3 pb-1 pt-3 text-xs tracking-widest text-white/35"
+            >
+              {ricSourceLabel(src.id)}
+            </div>,
+            ...duts
+              .filter((d) => d.source === src.id)
+              .map((d) => {
+            // key 要帶 source —— 不同套 tester 可能有同名 DUT。
+            const dutKey = `dut:${d.source}:${d.dutName}`;
             const ifaces = dutInterfaces(d);
             return (
-              <div key={d.dutName}>
+              <div key={dutKey}>
                 {/* 第一層:哪個 RIC(DUT)*/}
                 <button
-                  onClick={() => broadcast(dutKey, d.dutName, { dutName: d.dutName })}
+                  onClick={() => broadcast(d.source, dutKey, d.dutName, { dutName: d.dutName })}
                   className={`ml-3.5 block w-[calc(100%-0.875rem)] rounded-lg px-4 py-3 text-left text-base transition-colors ${
                     activeKey === dutKey
                       ? "bg-emerald-400/15 font-semibold text-emerald-300"
                       : "text-[#c7d2e3] hover:bg-white/5 hover:text-white"
                   }`}
                 >
-                  {pickLocale(d.dutNameI18n, locale)}
+                  {d.dutName}
                 </button>
                 {/* 第二層:選介面(E2 / A1 / O1)*/}
                 {ifaces.map((iface) => {
-                  const ifKey = `if:${d.dutName}:${iface}`;
+                  const ifKey = `if:${d.source}:${d.dutName}:${iface}`;
                   return (
                     <button
                       key={ifKey}
                       onClick={() =>
-                        broadcast(ifKey, `${pickLocale(d.dutNameI18n, locale)} · ${iface}`, {
+                        broadcast(d.source, ifKey, `${d.dutName} · ${iface}`, {
                           dutName: d.dutName,
                           interface: iface,
                         })
@@ -172,14 +201,15 @@ export function WallLeftSelector({ embedded = false }: { embedded?: boolean }) {
                 })}
               </div>
             );
-          })
+              }),
+          ])
         )}
 
         {BOTTOM_NAV.map((item, i) => navBtn(item, i, "bot"))}
       </nav>
 
       <footer className="border-t border-white/10 px-7 py-3 text-xs text-white/40">
-        RICtester · {duts.length} 台 DUT · {testcaseCount} 個測項
+        RICtester ×{RIC_SOURCES.length} · {duts.length} 台 DUT · {testcaseCount} 個測項
       </footer>
     </div>
   );

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { adapterService } from "@/services/Adapter/adapterService";
+import { DEFAULT_RIC_SOURCE } from "@/config/ricSources";
 import { useWallSelectionStore } from "@/stores/wallSelectionStore";
 import { runKey, useWallRunStore } from "@/stores/wallRunStore";
 
@@ -37,6 +38,7 @@ export function useAdapterRun(): AdapterRunState {
   // 依當前選擇的 DUT+介面查該介面自己的 run(切換選擇不影響其他介面的 run)
   const dutName = useWallSelectionStore((s) => s.selection?.dutName);
   const iface = useWallSelectionStore((s) => s.selection?.interface);
+  const source = useWallSelectionStore((s) => s.selection?.source) ?? DEFAULT_RIC_SOURCE;
   const entry = useWallRunStore((s) => s.runsByKey[runKey(dutName, iface)]);
   const runnings = entry?.runnings;
   const startedAt = entry?.startedAt ?? null;
@@ -68,8 +70,8 @@ export function useAdapterRun(): AdapterRunState {
     const poll = async () => {
       try {
         const [statuses, results] = await Promise.all([
-          adapterService.testStatus(ids),
-          adapterService.testResult(ids),
+          adapterService.testStatus(source, ids),
+          adapterService.testResult(source, ids),
         ]);
         if (stopped) return;
         const stByRid = new Map(statuses.map((s) => [s.runningId, s]));
@@ -107,7 +109,7 @@ export function useAdapterRun(): AdapterRunState {
       stopped = true;
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [runnings]);
+  }, [runnings, source]);
 
   const passed = items.filter((i) => i.result === "passed").length;
   const failed = items.filter((i) => i.result === "failed" || i.result === "error").length;

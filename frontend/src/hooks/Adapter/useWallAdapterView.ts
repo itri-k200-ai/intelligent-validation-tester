@@ -1,14 +1,15 @@
 "use client";
+import type { RicSourceId } from "@/config/ricSources";
 import { useAdapterTestList } from "@/hooks/Adapter/useAdapterTestList";
 import type { AdapterTestcase } from "@/services/Adapter/adapterService";
-import { pickLocale } from "@/lib/bilingual";
-import { useLocale } from "@/stores/localeStore";
 import { useWallSelectionStore } from "@/stores/wallSelectionStore";
 
 export type WallAdapterView = {
   /** 左選單有選到 adapter 的 DUT(dutName)時為 true → 中/右牆走 adapter 顯示 */
   active: boolean;
   dutName: string | null;
+  /** 選中的 DUT 屬於哪一套 tester。 */
+  source: RicSourceId | null;
   interface: string | null;
   /** 該 DUT + 該介面的測項(跨 scenario 攤平);沒選介面則列全部。中牆用。 */
   testcases: AdapterTestcase[];
@@ -28,13 +29,16 @@ export type WallAdapterView = {
 export function useWallAdapterView(): WallAdapterView {
   const { duts } = useAdapterTestList();
   const sel = useWallSelectionStore((s) => s.selection);
-  const locale = useLocale();
 
   const dutName = sel?.dutName ?? null;
+  const source = sel?.source ?? null;
   const iface = sel?.interface ?? null;
   const active = !!dutName;
 
-  const dut = dutName ? duts.find((d) => d.dutName === dutName) : undefined;
+  // 不同 tester 可能有同名 DUT,一定要連 source 一起比對。
+  const dut = dutName
+    ? duts.find((d) => d.dutName === dutName && (!source || d.source === source))
+    : undefined;
 
   // DUT 全部測項(跨案例集攤平 + 以 testcaseId 去重)
   const seen = new Set<string>();
@@ -56,12 +60,21 @@ export function useWallAdapterView(): WallAdapterView {
     : allTestcases;
 
   const scenarios = (dut?.scenarioList ?? []).map((s) => ({
-    name: pickLocale(s.scenarioNameI18n, locale),
+    name: s.scenarioName,
     count: s.testcaseList.length,
   }));
 
   const selectedTestcase =
     (sel?.testcaseId && testcases.find((tc) => tc.testcaseId === sel.testcaseId)) || null;
 
-  return { active, dutName, interface: iface, testcases, allTestcases, scenarios, selectedTestcase };
+  return {
+    active,
+    dutName,
+    source: dut?.source ?? source,
+    interface: iface,
+    testcases,
+    allTestcases,
+    scenarios,
+    selectedTestcase,
+  };
 }
