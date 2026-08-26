@@ -2,6 +2,7 @@ services:
   postgres:
     image: timescale/timescaledb:latest-pg16
     container_name: ivt-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ivt
       POSTGRES_USER: ivt
@@ -18,12 +19,14 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ivt-redis
+    restart: unless-stopped
     volumes: [redis_data:/data]
     ports: ["6379:6379"]
 
   minio:
     image: minio/minio:latest
     container_name: ivt-minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -34,6 +37,7 @@ services:
   mediamtx:
     image: bluenviron/mediamtx:latest
     container_name: ivt-mediamtx
+    restart: unless-stopped
     volumes:
       - ../media-server/mediamtx.yml:/mediamtx.yml
     ports: ["8554:8554", "8888:8888", "9997:9997"]
@@ -41,6 +45,7 @@ services:
   backend-web:
     build: ../backend
     container_name: ivt-backend-web
+    restart: unless-stopped
     command: gunicorn config.wsgi --bind 0.0.0.0:8000 --workers 3
     env_file: ../backend/.env
     depends_on:
@@ -53,6 +58,7 @@ services:
   backend-ws:
     build: ../backend
     container_name: ivt-backend-ws
+    restart: unless-stopped
     command: daphne -b 0.0.0.0 -p 8001 config.asgi:application
     env_file: ../backend/.env
     depends_on:
@@ -63,6 +69,7 @@ services:
   celery-worker:
     build: ../backend
     container_name: ivt-celery
+    restart: unless-stopped
     command: celery -A config worker -l info
     env_file: ../backend/.env
     depends_on:
@@ -72,6 +79,7 @@ services:
   celery-beat:
     build: ../backend
     container_name: ivt-celery-beat
+    restart: unless-stopped
     command: celery -A config beat -l info
     env_file: ../backend/.env
     depends_on:
@@ -83,6 +91,7 @@ services:
   frontend:
     build: ../frontend
     container_name: ivt-frontend
+    restart: unless-stopped
     env_file: ../frontend/.env.local
     depends_on: [backend-web]
     ports: ["3000:3000"]
@@ -90,6 +99,7 @@ services:
   nginx:
     image: nginx:alpine
     container_name: ivt-nginx
+    restart: unless-stopped
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     # RICtester(adapter/back_end/mediamtx)在另一個 compose,經宿主機埠代理
