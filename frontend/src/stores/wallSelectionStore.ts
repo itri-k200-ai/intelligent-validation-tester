@@ -12,9 +12,14 @@ export type WallRunning = {
 /**
  * 戰情牆「目前檢視」全域狀態。
  *
- * 選擇來自左螢幕(選單/操作台),經 BroadcastChannel + localStorage 跨分頁
- * 廣播過來;中/右牆只「讀」這裡。除了導覽目標 { href, label },也帶
- * RICtester 的識別(dutName / interface / testcaseId)與驅動後的 runnings。
+ * 選擇來自左螢幕,寫進 IVT 後端的共享狀態(Redis),再由後端經
+ * /ws/selection/ 推給中牆;中牆只「讀」這裡,不寫。右副牆是靜態內容,
+ * 不看這裡。
+ *
+ * href 現在的語意是「要顯示哪種內容」而不是導覽目標 —— 中牆固定停在
+ * /wall,由該頁依這個值切換渲染。另外帶 RICtester 的識別
+ * (source / dutName / interface / testcaseId)與 runnings(左螢幕呼叫
+ * tester adapter 驅動測試後回填,中牆據此輪詢狀態與判決)。
  */
 export type WallSelection = {
   href?: string;

@@ -3,16 +3,12 @@ import { CheckCircle2, Maximize2, Pause, Play, Video, Volume2, XCircle } from "l
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { selectionService } from "@/services";
-import { DEFAULT_RIC_SOURCE } from "@/config/ricSources";
-import { adapterService } from "@/services/Adapter/adapterService";
 import type { WallAdapterView } from "@/hooks/Adapter/useWallAdapterView";
 import { useAdapterRun, type RunItemState } from "@/hooks/Adapter/useAdapterRun";
 import { useRicCameras } from "@/hooks/Backend/useRicCameras";
 import { useRicDutDetail } from "@/hooks/Backend/useRicDutDetail";
 import { useRicTestcaseCatalog } from "@/hooks/Backend/useRicTestcaseCatalog";
 import { HlsPlayer } from "@/components/Site/HlsPlayer";
-import { useWallSelectionStore } from "@/stores/wallSelectionStore";
 
 // ── 中牆三帶:即時環境影像 | 測試過程 | 測試結果 ─────────────────────────
 // 中牆 = 動態戰情(跑什麼、結果如何);測項清單(靜態)在右牆。
@@ -22,37 +18,11 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
   const run = useAdapterRun();
   const { cameras } = useRicCameras();
   const { catalog } = useRicTestcaseCatalog(view.source ?? undefined);
-  const wallSel = useWallSelectionStore((s) => s.selection);
-  const setWallSelection = useWallSelectionStore((s) => s.setSelection);
-  const [driving, setDriving] = useState(false);
-  const [driveErr, setDriveErr] = useState<string | null>(null);
   const [procPage, setProcPage] = useState(0);
   const [resPage, setResPage] = useState(0);
 
-  const runTest = async () => {
-    if (driving || view.testcases.length === 0) return;
-    setDriving(true);
-    setDriveErr(null);
-    try {
-      // 驅動要打回這個 DUT 所屬的那一套 tester。
-      const runnings = await adapterService.drive(
-        view.source ?? DEFAULT_RIC_SOURCE,
-        view.testcases.map((tc) => tc.testcaseId),
-      );
-      const payload = {
-        ...(wallSel ?? {}),
-        runnings,
-        runStartedAt: new Date().toISOString(),
-      };
-      // BroadcastChannel 不會回送給自己 → 本分頁手動更新 store,其他分頁走廣播。
-      await selectionService.setSelection(payload).catch(() => {});
-      setWallSelection(payload);
-    } catch (e) {
-      setDriveErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setDriving(false);
-    }
-  };
+  // 中牆是純顯示 —— 測試由左螢幕直接呼叫該套 tester adapter 的 API 觸發,
+  // 再把 runnings 寫進 IVT 的 selection;這裡只讀 selection 並輪詢狀態/判決。
   // runningId → 測項名稱(顯示用)
   const nameById = new Map(view.testcases.map((tc) => [tc.testcaseId, tc.testcaseName]));
   const finished = run.items.filter(
@@ -156,23 +126,11 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
                 測試過程
                 {run.active ? `（${finished}/${run.items.length} 完成）` : ""}
               </span>
-              <button
-                onClick={runTest}
-                disabled={driving || view.testcases.length === 0 || (run.active && !run.done)}
-                className={`rounded-item px-4 py-1.5 text-sm font-bold tracking-widest transition-colors ${
-                  driving || (run.active && !run.done)
-                    ? "cursor-wait bg-white/10 text-white/40"
-                    : "bg-emerald-500/90 text-[#06281c] hover:bg-emerald-400"
-                }`}
-              >
-                {driving
-                  ? "啟動中…"
-                  : run.active && !run.done
-                    ? "執行中…"
-                    : run.done
-                      ? "↻ 重新執行"
-                      : "▶ 執行測試"}
-              </button>
+              {/* 中牆不觸發測試 —— 由左螢幕呼叫 tester adapter 的 API 驅動,
+                  這裡只顯示狀態。 */}
+              <span className="text-sm tracking-widest text-white/40">
+                {run.active ? (run.done ? "已完成" : "執行中…") : "待命"}
+              </span>
             </div>
             {/* 整體進度條 */}
             <div className="mb-2 px-1">
@@ -192,7 +150,6 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
                   <span>起跑:{new Date(run.startedAt).toLocaleTimeString()}</span>
                 )}
               </div>
-              {driveErr && <p className="mt-1 text-sm text-rose-400">驅動失敗:{driveErr}</p>}
             </div>
             <div className="dut-wall-band-body">
               <div className="flex h-full flex-col">

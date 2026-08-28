@@ -8,7 +8,7 @@ import { mockOverviewService } from "./Overview/mockOverviewService";
 import { overviewService as realOverview } from "./Overview/overviewService";
 import { mockScenarioService } from "./Scenario/mockScenarioService";
 import { scenarioService as realScenario } from "./Scenario/scenarioService";
-import { mockSelectionService } from "./Selection/mockSelectionService";
+import { selectionService as realSelection } from "./Selection/selectionService";
 import { mockSitesService } from "./Site/mockSitesService";
 import { sitesService as realSites } from "./Site/sitesService";
 import { mockValidationRunService } from "./ValidationRun/mockValidationRunService";
@@ -22,7 +22,8 @@ export const dutService = USE_MOCK ? mockDutService : realDut;
 export const sitesService = USE_MOCK ? mockSitesService : realSites;
 export const dataQualityService = USE_MOCK ? mockDataQualityService : realDataQuality;
 export const scenarioService = USE_MOCK ? mockScenarioService : realScenario;
-// 牆選擇一律走前端 BroadcastChannel + localStorage(mockSelectionService),
-// 不分 mock/real —— IVT 選擇後端退場中,跨機器同步之後由 RICtester 接手。
-export const selectionService = mockSelectionService;
+// 牆選擇走 IVT 後端共享狀態(Redis)+ WebSocket 推播,不分 mock/real:
+// 左螢幕寫 POST /api/selection/current/,中牆訂閱 /ws/selection/ 讀。
+// 不用 BroadcastChannel —— 那只在同一個瀏覽器內有效,三面牆分機部署會失效。
+export const selectionService = realSelection;
 export const validationRunService = USE_MOCK ? mockValidationRunService : realValidationRun;
