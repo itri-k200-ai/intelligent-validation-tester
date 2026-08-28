@@ -93,5 +93,11 @@ export function getPageMeta(pathname: string): PageMeta {
     return { title: REGION_LABEL[seg[1]] ?? "場域管理" };
   }
 
+  // 中牆的固定 URL —— 顯示什麼由 selection 決定,標題不隨內容變。
+  // (右副牆自己的標題是「智慧網路實驗室簡介」,見 war-room-lab-title。)
+  if (seg[0] === "wall") {
+    return { title: "智慧網路實驗室" };
+  }
+
   return { title: "" };
 }

@@ -36,6 +36,17 @@ input, select, textarea { color-scheme: dark; }
    ======================================================================== */
 
 html.wall-mode {
+  /* 實際牆面解析度:中間 3840×1080、左右各 1920×1080(實體由 1920×1080
+     的電視拼接,接縫位置就是 6×3 那組格線)。
+     這裡的畫布刻意做成實際解析度的 3 倍(11520×3240 + 兩翼),
+     WallModeApplier 再用 transform: scale(1/3) 縮回去 —— 顯示結果相同,
+     但保留了既有那套依 1920×1080 分格的 bezel 計算。
+
+     --wall 就是這個倍率:拿到規格上的實際像素時直接寫成
+         height: calc(169px * var(--wall));
+     一眼看得出數字出處,也不必自己換算。 */
+  --wall: 3;
+
   /* Tailwind sizes are mostly rem-based.  Bumping root size 16→48 grows all
      `text-sm` / `p-4` / `gap-4` / `text-3xl` / etc. by 3× automatically. */
   font-size: 48px;
@@ -681,17 +692,16 @@ html.wall-mode .dut-wall-band-split > section {
 html.wall-mode .dut-wall-band {
   display: flex;
   flex-direction: column;
-  border-radius: 1.5rem;
+  border-radius: calc(21px * var(--wall));   /* 規範 03:Sections 21px */
   padding: 2rem;
   overflow: hidden;
   /* 漸層框 — 跟 war-room-lab-* 共用,維持整面牆每張卡片視覺一致 */
   /* Figma 規範:92deg, #497784 14%, #0A172F 83%, 兩 stop 都 40% 透明,
      卡片半透明疊在主牆 navy 背景上,跟整體融合。 */
-  background: linear-gradient(
-    92deg,
-    rgba(73, 119, 132, 0.40) 14%,
-    rgba(10, 23, 47, 0.40) 83%
-  );
+  /* 設計規範 02 Color:卡片(Surface)底為 rgba(255,255,255,0.05),
+     讓底圖透出來;原本那組 91.56deg 漸層在規範裡是「頁面底」不是卡片底。
+     分隔線 / 框線色 #72B6C9(= rgba(114,182,201))。 */
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(114, 182, 201, 0.28);
 }
 html.wall-mode .dut-wall-band-title {
@@ -1284,25 +1294,78 @@ html.wall-mode .war-room-main {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #000000;
+  /* 主牆底圖 —— 原圖 11520×3240,跟這個區塊 1:1 對應(= 實際 3840×1080 的
+     3 倍)。底色留黑,圖沒載到時不會透出 body 的 navy 漸層。 */
+  background-color: #000000;
+  background-image: url("/images/background/center-wall-bg.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
+/* ── 戰情室標題規格(2026-08-27)────────────────────────────────────
+   Topbar 高度 169px、padding: 0 12px、文字高度置中
+   標題 56px / font-weight 600
+   右側圖標 gap 51px、margin-right 20px、ITRI 高 55px、6G 高 70px
+   數字都是實際螢幕像素,乘 --wall 換算到 3× 畫布。 */
 html.wall-mode .war-room-main-topbar {
-  /* grid template + align-items 在 base rule(下方)定義,wall-mode 只蓋
-     padding。不另外給背景色 / border,讓 topbar 直接融入主牆背景。 */
-  padding: 0.75rem 2rem;
+  /* grid template 在 base rule(下方)定義,wall-mode 只蓋高度與 padding。
+     不另外給背景色 / border,讓 topbar 融入主牆背景。 */
+  height: calc(169px * var(--wall));
+  padding: 0 calc(12px * var(--wall));
+  align-items: center;
 }
 html.wall-mode .war-room-main-title-text {
-  font-size: 3.5rem !important;        /* 168px */
-  line-height: 1.1 !important;
+  font-size: calc(56px * var(--wall)) !important;
+  font-weight: 600 !important;
+  line-height: 1.15 !important;
 }
 html.wall-mode .war-room-main-subtitle-text {
-  font-size: 1.5rem !important;        /* 72px */
-  margin-top: 0.5rem;
+  /* 規範 01 Typography:Body Text 24px / 400 / 130%
+     顏色 Secondary Text = #FFFFFF 60% */
+  font-size: calc(24px * var(--wall)) !important;
+  font-weight: 400;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: calc(4px * var(--wall));
+}
+/* 標題下方的專案列 */
+html.wall-mode .war-room-project-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(8px * var(--wall));
+}
+/* 斷線才出現的紅點 —— 規範 02:Error Red #FF5F5A */
+html.wall-mode .war-room-project-offline {
+  width: calc(8px * var(--wall));
+  height: calc(8px * var(--wall));
+  border-radius: 50%;
+  background: #FF5F5A;
+  flex-shrink: 0;
 }
 /* utility 區(框線 / 電視牆 / user / logout)— Header 的放大規則只認 <header>,
    按鈕搬到 .war-room-main-topbar-actions 裡要另外給字級 / icon / padding */
 html.wall-mode .war-room-main-topbar-actions {
   gap: 1.5rem;
+}
+/* 右上 logo 區塊 —— 兩個 logo 高度不同,寬度自然撐開,不釘死總寬 */
+html.wall-mode .war-room-top-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: calc(51px * var(--wall));
+  margin-right: calc(20px * var(--wall));
+  flex-shrink: 0;
+}
+html.wall-mode .war-room-top-right img {
+  width: auto;
+  object-fit: contain;
+}
+html.wall-mode .war-room-top-right .logo-itri {
+  height: calc(55px * var(--wall));
+}
+html.wall-mode .war-room-top-right .logo-6g {
+  height: calc(70px * var(--wall));
 }
 html.wall-mode .war-room-main-topbar-actions button {
   font-size: 2rem !important;          /* 96px */
@@ -1558,18 +1621,54 @@ html.wall-mode .war-room-right {
   width: 5760px;
   height: 3240px;
   padding: 0;
-  /* 跟主牆一致的純黑底,蓋掉 body 的 warning 橘 tint + navy gradient。
-     6 個 cell(上排 3 個 lab-top + 下排 3 個 lab-tall)的卡片漸層在上面渲染。 */
-  background: #000000;
+  /* 右副牆底圖 —— 原圖 5760×3240,跟這個區塊 1:1 對應(= 實際 1920×1080 的
+     3 倍)。底色留黑,蓋掉 body 的 warning 橘 tint + navy gradient;
+     上排 3 個 lab-top 與下排 3 個 lab-tall 的卡片漸層疊在上面。 */
+  background-color: #000000;
+  background-image: url("/images/background/right-wing-bg.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 html.wall-mode .war-room-lab-info {
   width: 100%;
   height: 100%;
   display: grid;
   grid-template-columns: repeat(3, 1920px);
-  grid-template-rows: 1080px 1080px 1080px;
+  /* 四列:標題列 + 上排三格 + 下排兩列(三個高長條各跨 2 列)。
+     四列相加固定 3240px = 右副牆高度;要調高度只動 --lab-title-h 與
+     --lab-top-h,最後兩列自動平分剩下的。
+     注意:列的分界因此不再落在實體 bezel(y=1080 / 2160)上,是刻意的
+     取捨 —— 下排內容會跨過接縫。 */
+  --lab-title-h: 200px;
+  --lab-top-h: 760px;
+  grid-template-rows:
+    var(--lab-title-h)
+    var(--lab-top-h)
+    calc((3240px - var(--lab-title-h) - var(--lab-top-h)) / 2)
+    calc((3240px - var(--lab-title-h) - var(--lab-top-h)) / 2);
   gap: 0;
 }
+/* 右副牆頂端的置中標題 —— 跨滿三欄,所以文字會落在中間那台螢幕上。 */
+html.wall-mode .war-room-lab-title {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-align: center;
+}
+html.wall-mode .war-room-lab-title-text {
+  /* 與中牆主標題(.war-room-main-title-text)採同一組排版,兩面牆的標題
+     看起來是同一個系統 —— 參考圖的「通感融合實驗網」就是這個處理。 */
+  font-size: 3.5rem;                   /* 168px,與主牆標題同級 */
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  color: white;
+}
+
 /* 上排 3 格:實驗室簡介 / 測試目標 / 合作夥伴 — 各占 1 TV cell
    跟下排 lab-tall 跟主牆 dut-wall-band 共用同一個漸層框視覺 */
 html.wall-mode .war-room-lab-top {
@@ -1581,13 +1680,12 @@ html.wall-mode .war-room-lab-top {
   color: rgba(255, 255, 255, 0.92);
   /* Figma 規範:92deg, #497784 14%, #0A172F 83%, 兩 stop 都 40% 透明,
      卡片半透明疊在主牆 navy 背景上,跟整體融合。 */
-  background: linear-gradient(
-    92deg,
-    rgba(73, 119, 132, 0.40) 14%,
-    rgba(10, 23, 47, 0.40) 83%
-  );
+  /* 設計規範 02 Color:卡片(Surface)底為 rgba(255,255,255,0.05),
+     讓底圖透出來;原本那組 91.56deg 漸層在規範裡是「頁面底」不是卡片底。
+     分隔線 / 框線色 #72B6C9(= rgba(114,182,201))。 */
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(114, 182, 201, 0.28);
-  border-radius: 1.5rem;
+  border-radius: calc(21px * var(--wall));   /* 規範 03:Sections 21px */
   margin: 1rem;
 }
 /* 實驗室簡介:左 logo + 右 (名稱 + 描述),覆寫 lab-top 預設的純文字置中
@@ -1597,11 +1695,13 @@ html.wall-mode .war-room-lab-top--intro {
   align-items: center;
   justify-content: flex-start;
   gap: 2rem;
-  padding: 2rem 2.5rem 2rem 0.5rem;
+  padding: 1.25rem 2.5rem 1.25rem 0.5rem;
   text-align: left;
 }
 html.wall-mode .war-room-lab-intro-logo {
-  height: 600px;
+  /* 上排壓成 760px 後,扣掉 margin(1rem×2)與 padding(2rem×2)可用約 664px,
+     圖等比縮小才不會頂到邊框。 */
+  height: 420px;
   width: auto;
   max-width: 50%;
   flex-shrink: 0;
@@ -1621,6 +1721,9 @@ html.wall-mode .war-room-lab-intro-title {
   margin: 0;
   letter-spacing: 0.03em;
   line-height: 1.2;
+  /* 標題與內文之間的分隔線(與下排三格一致) */
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(114, 182, 201, 0.35);
 }
 html.wall-mode .war-room-lab-intro-desc {
   font-size: 1.5rem;
@@ -1636,11 +1739,11 @@ html.wall-mode .war-room-lab-top--icon {
   align-items: center;
   justify-content: flex-start;
   gap: 2rem;
-  padding: 2rem 2.5rem 2rem 1.5rem;
+  padding: 1.25rem 2.5rem 1.25rem 1.5rem;
   text-align: left;
 }
 html.wall-mode .war-room-lab-icon {
-  height: 400px;
+  height: 300px;
   width: auto;
   max-width: 40%;
   flex-shrink: 0;
@@ -1663,6 +1766,8 @@ html.wall-mode .war-room-lab-icon-title {
   font-weight: 700;
   color: white;
   margin: 0;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(114, 182, 201, 0.35);
   letter-spacing: 0.03em;
   line-height: 1.2;
 }
@@ -1682,18 +1787,100 @@ html.wall-mode .war-room-lab-tall {
   align-items: center;            /* 水平置中於螢幕 */
   padding: 2rem 2.5rem;
   margin: 1rem;
-  border-radius: 1.5rem;
+  border-radius: calc(21px * var(--wall));   /* 規範 03:Sections 21px */
   overflow: hidden;
   color: rgba(255, 255, 255, 0.95);
   /* Figma 規範:92deg, #497784 14%, #0A172F 83%, 兩 stop 都 40% 透明,
      卡片半透明疊在主牆 navy 背景上,跟整體融合。 */
-  background: linear-gradient(
-    92deg,
-    rgba(73, 119, 132, 0.40) 14%,
-    rgba(10, 23, 47, 0.40) 83%
-  );
+  /* 設計規範 02 Color:卡片(Surface)底為 rgba(255,255,255,0.05),
+     讓底圖透出來;原本那組 91.56deg 漸層在規範裡是「頁面底」不是卡片底。
+     分隔線 / 框線色 #72B6C9(= rgba(114,182,201))。 */
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(114, 182, 201, 0.28);
 }
+/* ── 右副牆下排三格(待測物 / 測試設備 / 測試方法)的內文排版 ──────────
+   牆版面沒有對 .war-room-lab-tall 的子元素做字級縮放,所以這裡不能用
+   Tailwind 的 text-sm / text-xs(14px / 12px)—— 在 11520px 畫布上等於
+   看不見。一律用 rem(1rem = 48px)明確給,級距對齊參考圖:
+   卡片標題 > 主要數值 > 次要數值 > 標籤/註記。 */
+html.wall-mode .war-room-slot {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  overflow: hidden;
+  text-align: left;
+}
+/* 標題與內文之間的分隔線(參考圖的卡片:標題列 → 細線 → 內容) */
+html.wall-mode .war-room-slot-title {
+  font-size: 2.5rem;                 /* 120px */
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  color: #fff;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid rgba(114, 182, 201, 0.35);
+}
+html.wall-mode .war-room-slot-lead {
+  font-size: 2.75rem;                /* 132px —— 該格最重要的一個值 */
+  font-weight: 700;
+  line-height: 1.15;
+  color: #fff;
+}
+html.wall-mode .war-room-slot-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem 2rem;
+}
+html.wall-mode .war-room-slot-label {
+  font-size: 1.25rem;                /* 60px */
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.55);
+}
+html.wall-mode .war-room-slot-value {
+  font-size: 1.75rem;                /* 84px */
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.95);
+}
+html.wall-mode .war-room-slot-mono {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 1.5rem;                 /* 72px */
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.8);
+}
+/* 介面/測項的列 —— 參考圖裡卡片內的次級區塊 */
+html.wall-mode .war-room-slot-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid rgba(114, 182, 201, 0.22);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+html.wall-mode .war-room-slot-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+html.wall-mode .war-room-slot-iface {
+  font-size: 2rem;                   /* 96px */
+  font-weight: 700;
+  color: #6ee7b7;
+}
+html.wall-mode .war-room-slot-note {
+  font-size: 1.25rem;                /* 60px */
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.55);
+}
+html.wall-mode .war-room-slot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 /* 沒被頁面覆寫時的預設 placeholder — 現在放 HudOctagon (War_Room Page 13)。
    垂直置中於 lab-tall 容器,讓八角形 + 標籤居中顯示。 */
 html.wall-mode .war-room-slot-placeholder {

@@ -3,8 +3,14 @@
 import { useWallSelectionStore } from "@/stores/wallSelectionStore";
 
 /**
- * 中牆頂部橫幅:顯示「左 app(左螢幕)目前切到哪個檢視」+ 廣播連線狀態。
- * 這是拆分後跨 app 連動的可視證明 —— 左 app 點選單,這裡與整個中牆即時跟換。
+ * 中牆標題下方的專案列 —— 顯示左螢幕目前選到哪一項。
+ *
+ * 版位參考「戰情室標題規格」與通感融合實驗網的主牆:標題底下一行
+ * 「專案:XXX」。內容來自 IVT selection(左螢幕寫入 → WS 推播)。
+ *
+ * 連線中斷時在前面補一個紅點 —— 牆是無人看顧的,斷線若沒有任何提示,
+ * 現場只會看到一個「不再更新」的畫面而不知道出事。正常連線時不顯示,
+ * 維持規格圖乾淨的樣子。
  */
 export function WallSelectionStatus() {
   const selection = useWallSelectionStore((s) => s.selection);
@@ -13,21 +19,11 @@ export function WallSelectionStatus() {
   const label = selection?.label || selection?.name || null;
 
   return (
-    <div className="wall-selection-banner flex items-center gap-4 rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-white backdrop-blur">
-      <span
-        className={`inline-block h-2.5 w-2.5 rounded-full ${
-          connected ? "bg-emerald-400" : "bg-rose-400"
-        }`}
-        title={connected ? "已連上左螢幕廣播" : "未連上"}
-      />
-      <span className="text-sm uppercase tracking-widest text-white/50">
-        目前檢視
-      </span>
-      {label ? (
-        <span className="text-xl font-semibold">{label}</span>
-      ) : (
-        <span className="text-white/40">等待左螢幕選擇…</span>
+    <div className="war-room-main-subtitle-text war-room-project-line">
+      {!connected && (
+        <span className="war-room-project-offline" title="與左螢幕的連線中斷" />
       )}
+      <span>專案：{label ?? "尚未選擇"}</span>
     </div>
   );
 }

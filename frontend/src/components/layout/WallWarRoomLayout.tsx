@@ -1,15 +1,18 @@
 "use client";
-import { ChevronLeft, LogOut, SquareDashed, Tv, Tv2 } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { SquareDashed, Tv, Tv2 } from "lucide-react";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { HudOctagon } from "@/components/ui/hud-octagon";
-import { useAuth } from "@/hooks/Auth/useAuth";
 import { useWallRegion } from "@/hooks/Wall/useWallRegion";
 import { useWallSelection } from "@/hooks/WallSelection/useWallSelection";
 import { getPageMeta } from "@/lib/pageMeta";
-import { useRightWingSlotsStore } from "@/stores/rightWingSlotsStore";
+import {
+  RightWingDut,
+  RightWingEquip,
+  RightWingMethod,
+} from "./RightWingStatic";
 import { useWallModeStore } from "@/stores/wallModeStore";
 
 import { Sidebar } from "./Sidebar";
@@ -25,11 +28,9 @@ import { WallSelectionStatus } from "./WallSelectionStatus";
  * 在電視牆預覽下,主牆放畫面上方,兩個副牆「折」到下面並排。
  */
 export function WallWarRoomLayout({ children }: { children: ReactNode }) {
-  const router = useRouter();
   const pathname = usePathname() ?? "";
-  const { title, accent } = getPageMeta(pathname);
-  const slots = useRightWingSlotsStore((s) => s.slots);
-  const { user, logout } = useAuth();
+  const { title, subtitle, accent } = getPageMeta(pathname);
+
   const isWall = useWallModeStore((s) => s.isWall);
   const toggleWall = useWallModeStore((s) => s.toggle);
   const showBezels = useWallModeStore((s) => s.showBezels);
@@ -45,23 +46,23 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
       <section className="war-room-main">
         {/* 3 欄 grid:[上一頁(left)] [標題置中(center)] [utility(right)]
             War-room layout 下不再 render <Header />,所有最上層的
-            action(框線 / 電視牆切換 / user / 登出)都集中在 topbar
-            右側,維持單一橫條。 */}
+            action(框線 / 電視牆切換)都集中在 topbar 右側,維持單一橫條。
+            牆面是展示用途,不放上一頁 / 使用者 / 登出。 */}
         <div className="war-room-main-topbar">
-          <button
-            type="button"
-            className="war-room-back"
-            onClick={() => router.back()}
-            title="回上一頁(三個螢幕一起回到主視覺)"
-          >
-            <ChevronLeft className="w-8 h-8" /> 上一頁
-          </button>
+          {/* 牆上不放「上一頁」—— 顯示什麼由左螢幕決定,牆面本身沒有導覽動作。
+              仍留一個空的第一欄,topbar 是 3 欄 grid,少一欄標題就不置中了。 */}
+          <div aria-hidden="true" />
           <div className="war-room-main-title">
             {title && (
               <div className={`war-room-main-title-text ${accent ?? "text-white"}`}>
                 {title}
               </div>
             )}
+            {subtitle && (
+              <div className="war-room-main-subtitle-text text-white/60">{subtitle}</div>
+            )}
+            {/* 標題下方的「專案:XXX」—— 原本是 main 裡的獨立橫幅,依規格圖搬上來 */}
+            <WallSelectionStatus />
           </div>
           <div className="war-room-main-topbar-actions">
             {isWall && (
@@ -91,15 +92,11 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
                 </>
               )}
             </Button>
-            {user && (
-              <span className="text-sm text-white/70 hidden sm:inline">
-                {user.email}{" "}
-                <span className="text-white/40">({user.role})</span>
-              </span>
-            )}
-            <Button variant="ghost" size="icon" onClick={logout} title="登出">
-              <LogOut className="h-4 w-4" />
-            </Button>
+            {/* 規格:gap 51px、margin-right 20px、ITRI 高 55px、6G 高 70px */}
+            <div className="war-room-top-right">
+              <img className="logo-itri" src="/images/logo/itri-logo.png" alt="工業技術研究院" />
+              <img className="logo-6g" src="/images/logo/6g-logo.png" alt="6G Network" />
+            </div>
           </div>
         </div>
         <main className="war-room-main-body">
@@ -108,9 +105,6 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
               現在先用 inline HudOctagon 給氛圍。 */}
           <div className="war-room-main-bg" aria-hidden="true">
             <HudOctagon kind="radar" className="war-room-main-bg-asset" />
-          </div>
-          <div className="war-room-main-selection px-6 pt-4">
-            <WallSelectionStatus />
           </div>
           <div className="war-room-main-content">{children}</div>
         </main>
@@ -128,7 +122,12 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
       {/* === 右副牆:實驗室概要 + page slots === */}
       <section className="war-room-right">
         <div className="war-room-lab-info">
-          {/* 上排:3 格,各占一個 TV 螢幕(1920×1080) */}
+          {/* 右副牆頂端:跨三欄的置中標題。主牆掛「智慧網路實驗室」,
+              這面牆是它的簡介,所以標題是「智慧網路實驗室簡介」。 */}
+          <div className="war-room-lab-title">
+            <div className="war-room-lab-title-text">智慧網路實驗室簡介</div>
+          </div>
+          {/* 上排:3 格,各占一個 TV 螢幕寬 */}
           <div className="war-room-lab-top war-room-lab-top--intro">
             <img
               src="/images/%E6%99%BA%E6%85%A7%E7%B6%B2%E8%B7%AF%E5%AF%A6%E9%A9%97%E5%AE%A4LOGO-nobg.png"
@@ -171,28 +170,16 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
               </p>
             </div>
           </div>
-          {/* 下半部:3 個高長條(各跨 2 row),內容由各頁面透過
-              <RightWingSlots> 設定;沒設的話顯示分類標題 placeholder。 */}
+          {/* 下半部:3 個高長條(各跨 2 row)。右副牆是靜態說明牆 ——
+              不隨選中的 DUT 變動、也不跟左螢幕溝通,文案見 RightWingStatic。 */}
           <div className="war-room-lab-tall war-room-lab-tall--dut">
-            {slots.dut ?? (
-              <div className="war-room-slot-placeholder">
-                <HudOctagon kind="radar" label="待測物" />
-              </div>
-            )}
+            <RightWingDut />
           </div>
           <div className="war-room-lab-tall war-room-lab-tall--equip">
-            {slots.equip ?? (
-              <div className="war-room-slot-placeholder">
-                <HudOctagon kind="tower" label="測試設備" />
-              </div>
-            )}
+            <RightWingEquip />
           </div>
           <div className="war-room-lab-tall war-room-lab-tall--method">
-            {slots.method ?? (
-              <div className="war-room-slot-placeholder">
-                <HudOctagon kind="neural" label="測試方法" />
-              </div>
-            )}
+            <RightWingMethod />
           </div>
         </div>
       </section>
