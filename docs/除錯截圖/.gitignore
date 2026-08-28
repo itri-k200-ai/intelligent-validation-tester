@@ -1,0 +1,4 @@
+# 截圖是一次性的溝通素材,不進版控;保留目錄與 README。
+*
+!.gitignore
+!README.md
