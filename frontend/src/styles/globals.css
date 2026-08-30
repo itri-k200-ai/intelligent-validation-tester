@@ -1708,7 +1708,7 @@ html.wall-mode .war-room-lab-title-text {
   /* 與中牆主標題(.war-room-main-title-text)採同一組排版,兩面牆的標題
      看起來是同一個系統 —— 參考圖的「通感融合實驗網」就是這個處理。 */
   font-size: 3.5rem;                   /* 168px,與主牆標題同級 */
-  font-weight: 700;
+  font-weight: 500;              /* 規範 01:Heading 一律 500,不用粗體 */
   line-height: 1.1;
   letter-spacing: 0.01em;
   color: white;
@@ -1763,7 +1763,7 @@ html.wall-mode .war-room-lab-intro-text {
 }
 html.wall-mode .war-room-lab-intro-title {
   font-size: 3rem;
-  font-weight: 700;
+  font-weight: 500;              /* 規範 01:Heading 500 */
   color: white;
   margin: 0;
   letter-spacing: 0.03em;
@@ -1810,7 +1810,7 @@ html.wall-mode .war-room-lab-icon-text {
 }
 html.wall-mode .war-room-lab-icon-title {
   font-size: 3rem;
-  font-weight: 700;
+  font-weight: 500;              /* 規範 01:Heading 500 */
   color: white;
   margin: 0;
   padding-bottom: 0.75rem;
@@ -1864,7 +1864,7 @@ html.wall-mode .war-room-slot {
 /* 標題與內文之間的分隔線(參考圖的卡片:標題列 → 細線 → 內容) */
 html.wall-mode .war-room-slot-title {
   font-size: 2.5rem;                 /* 120px */
-  font-weight: 700;
+  font-weight: 500;              /* 規範 01:Heading 500 */
   line-height: 1.15;
   letter-spacing: 0.02em;
   color: #fff;
@@ -1873,7 +1873,7 @@ html.wall-mode .war-room-slot-title {
 }
 html.wall-mode .war-room-slot-lead {
   font-size: 2.75rem;                /* 132px —— 該格最重要的一個值 */
-  font-weight: 700;
+  font-weight: 500;              /* 規範 01:Heading 500 */
   line-height: 1.15;
   color: #fff;
 }
@@ -1916,7 +1916,7 @@ html.wall-mode .war-room-slot-row-head {
 }
 html.wall-mode .war-room-slot-iface {
   font-size: 2rem;                   /* 96px */
-  font-weight: 700;
+  font-weight: 500;              /* 規範 01:Heading 500 */
   color: var(--c-primary-green);     /* 規範 02:Primary Green */
 }
 html.wall-mode .war-room-slot-note {
@@ -1924,6 +1924,79 @@ html.wall-mode .war-room-slot-note {
   line-height: 1.3;
   color: rgba(255, 255, 255, 0.55);
 }
+/* 待測物那格 —— 版式仿參考圖:分組標題 → 該組項目,每項是
+   圖示 + 名稱 + 一行細節。 */
+html.wall-mode .war-room-cat-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+html.wall-mode .war-room-cat-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+/* 分組標題(網路平台 / 智慧應用) */
+html.wall-mode .war-room-cat-group-name {
+  font-size: 1.5rem;                 /* 72px */
+  font-weight: 500;                  /* 規範 01:Heading 500 */
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.45);
+}
+html.wall-mode .war-room-cat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+/* 不分組的清單(測試設備)—— 撐滿卡片剩餘高度並平均分佈,
+   項目少時不會擠在上面、下面空一大塊。 */
+html.wall-mode .war-room-cat-list--fill {
+  flex: 1;
+  min-height: 0;
+  justify-content: space-between;
+}
+html.wall-mode .war-room-cat {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+/* 圖示欄 —— 規範 13 的設備 icon 是 80×80,這裡收小一點讓五項排得下。
+   之後換成真的圖檔時尺寸不用改。 */
+html.wall-mode .war-room-cat-icon {
+  width: calc(64px * var(--wall));
+  height: calc(64px * var(--wall));
+  flex-shrink: 0;
+  object-fit: contain;
+}
+/* 待補圖的佔位框:虛線 + 該類代表色,一眼看得出還缺哪幾張 */
+html.wall-mode .war-room-cat-icon--todo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: calc(2px * var(--wall)) dashed rgba(255, 255, 255, 0.35);
+  border-radius: calc(var(--r-item) * var(--wall));
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.35);
+}
+html.wall-mode .war-room-cat-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+html.wall-mode .war-room-cat-name {
+  font-size: 1.875rem;               /* 90px */
+  font-weight: 500;              /* 規範 01:Heading 3(29px/500) */
+  line-height: 1.2;
+  color: var(--c-text);              /* 一律白,不用各類代表色 */
+}
+html.wall-mode .war-room-cat-items {
+  font-size: 1.25rem;                /* 60px */
+  line-height: 1.35;
+  color: var(--c-text-secondary);
+}
+
 html.wall-mode .war-room-slot-list {
   display: flex;
   flex-direction: column;
