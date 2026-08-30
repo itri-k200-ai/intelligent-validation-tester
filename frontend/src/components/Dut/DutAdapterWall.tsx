@@ -134,9 +134,10 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
             </div>
             {/* 整體進度條 */}
             <div className="mb-2 px-1">
-              <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10">
+              {/* 規範 09:軌道 rgba(255,255,255,0.15)、進度 Primary Green */}
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/15">
                 <div
-                  className="h-full rounded-full bg-emerald-400 transition-all duration-500"
+                  className="h-full rounded-full bg-mint transition-all duration-500"
                   style={{ width: `${overallPct}%` }}
                 />
               </div>
@@ -211,7 +212,7 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
                           </div>
                           {/* 這項在驗什麼(型錄中文通過條件) */}
                           {cat?.testcase_pass_criteria && (
-                            <div className="mt-0.5 truncate text-xs text-emerald-300/80">
+                            <div className="mt-0.5 truncate text-xs text-mint/80">
                               通過條件:{cat.testcase_pass_criteria}
                             </div>
                           )}
@@ -297,28 +298,29 @@ const STATUS_LABEL: Record<ProcStatus, string> = {
 };
 
 function StatusDot({ status }: { status: ProcStatus }) {
+  // 規範 10 State:Normal #80FFE8 / Error #FF5F5A / Warning #FFC56B
   const cls =
     status === "finished"
-      ? "bg-emerald-400"
+      ? "bg-mint"
       : status === "running"
-        ? "bg-sky-400 animate-pulse"
+        ? "bg-teal animate-pulse"
         : status === "error"
-          ? "bg-rose-400"
-          : "bg-zinc-500";
+          ? "bg-danger"
+          : "bg-white/30";
   return <span className={`inline-block h-2.5 w-2.5 flex-none rounded-full ${cls}`} />;
 }
 
 function VerdictPill({ item }: { item: RunItemState }) {
   if (item.result === "passed")
     return (
-      <span className="flex items-center gap-2 font-semibold text-emerald-400">
+      <span className="flex items-center gap-2 font-semibold text-mint">
         <CheckCircle2 className="h-9 w-9" strokeWidth={2.2} />
         <span>通過</span>
       </span>
     );
   if (item.result === "failed" || item.result === "error")
     return (
-      <span className="flex items-center gap-2 font-semibold text-rose-400">
+      <span className="flex items-center gap-2 font-semibold text-danger">
         <XCircle className="h-9 w-9" strokeWidth={2.2} />
         <span>失敗</span>
       </span>
@@ -407,7 +409,7 @@ export function useAdapterDutInfoSlots(view: WallAdapterView) {
                   key={e.dut_endpoint_uuid}
                   className={`rounded-item border px-3 py-2 ${
                     isCurrent
-                      ? "border-emerald-400/50 bg-emerald-400/[0.06]"
+                      ? "border-mint/50 bg-mint/[0.06]"
                       : "border-white/10 bg-white/[0.03]"
                   }`}
                 >
@@ -415,7 +417,7 @@ export function useAdapterDutInfoSlots(view: WallAdapterView) {
                     <Badge tone="blue">{e.dut_endpoint_interface.toUpperCase()}</Badge>
                     <span className="text-xs text-white/50">{e.dut_endpoint_status}</span>
                     {isCurrent && (
-                      <span className="ml-auto text-xs text-emerald-300/80">測試中介面</span>
+                      <span className="ml-auto text-xs text-mint/80">測試中介面</span>
                     )}
                   </div>
                   {/* 位址可折行,不撐爆格寬 */}
@@ -449,7 +451,7 @@ export function useAdapterDutInfoSlots(view: WallAdapterView) {
                   isOpen
                     ? "border-white/40 bg-white/10 text-white"
                     : isCurrent
-                      ? "border-emerald-400/50 bg-emerald-400/[0.08] text-emerald-300"
+                      ? "border-mint/50 bg-mint/[0.08] text-mint"
                       : "border-white/10 bg-white/[0.03] text-white/80 hover:bg-white/[0.07]"
                 }`}
               >

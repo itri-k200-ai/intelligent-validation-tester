@@ -2,6 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── 設計 token(依 docs/外部文件/前端UI建議/2026-08-28_Figma設計規範總整理.md)
+   顏色與圓角集中在這裡,元件一律引用,規範改動只要改這一處。
+   規範的 px 都是實際開發值;牆版面要用時乘 var(--wall)(見 html.wall-mode)。 */
+:root {
+  /* 02 Color — Primary / Secondary */
+  --c-primary-green: #80FFE8;
+  --c-secondary-navy: #0A172F;
+  --c-secondary-green: #72B6C9;
+  --c-dark-text: #132951;
+
+  /* 02 Color — Functional */
+  --c-error: #FF5F5A;
+  --c-warning: #FFC56B;
+
+  /* 02 Color — Text */
+  --c-text: #FFFFFF;
+  --c-text-secondary: rgba(255, 255, 255, 0.6);
+
+  /* 02 Color — Surface(常用透明度白) */
+  --surface-1: rgba(255, 255, 255, 0.05);   /* 欄位 / 卡片 / 表格列 */
+  --surface-2: rgba(255, 255, 255, 0.10);   /* 表格列第二層 */
+  --surface-3: rgba(255, 255, 255, 0.15);   /* 表格標題列 / checkbox 底 */
+  --surface-hover: rgba(255, 255, 255, 0.15);
+  --divider: #72B6C9;                       /* 分隔線 1px */
+
+  /* 02 Color — Gradient(規範原值 91.56deg / 14.7% / 83.57%)
+     兩個 stop 共用 --card-alpha,底圖接上後要調整透明度只改這一個數字。 */
+  --card-alpha: 0.4;
+  --card-gradient: linear-gradient(
+    91.56deg,
+    rgba(73, 119, 132, var(--card-alpha)) 14.7%,
+    rgba(10, 23, 47, var(--card-alpha)) 83.57%
+  );
+  /* 毛玻璃 —— 參考圖裡卡片之間的縫隙可看到清晰底圖,卡片內部的底圖是糊的。
+     規範的 Dropdown Hover / Tooltip 都是 backdrop-filter: blur(13px),
+     卡片沿用同一組視覺語言。牆版面要乘 --wall(見下方)。 */
+  --card-blur: 13px;
+
+  /* 03 Corner Radius(實際開發值) */
+  --r-section: 21px;   /* > 400×400 的卡片 */
+  --r-item: 14px;      /* 按鈕 / 欄位 / 圖片 */
+  --r-small: 8px;      /* pagination item / table row */
+}
+
 html, body { height: 100%; }
 
 body {
@@ -55,25 +99,23 @@ html.wall-mode {
   overflow: hidden;
 }
 
-/* Many cards in wall mode have hard-pinned widths (3840px map, 1900px stations
-   pane, etc.) that are *more* than 3× their regular-mode counterparts, so the
-   3× rem scale on rounded-section / rounded-item ends up looking proportionally
-   sharper. Bump them further so the curve reads at the same visual softness as
-   regular mode on the scaled-down preview. */
+/* 卡片圓角與底色改吃規範 03 / 02 的值(乘 --wall 換算到 3× 畫布)。
+   原本是 126px / 72px,約規範的 2 倍 —— 當時為了在縮圖預覽下看起來夠柔和
+   而手動加大,現在規範明確就以規範為準。 */
 html.wall-mode .rounded-section {
-  border-radius: 2.625rem !important;   /* 126px */
-  /* 所有 .rounded-section 級別的卡片(<Card/>、KpiCard 等)在 wall-mode 下
-     共用 Figma 規範漸層 + 一致的微 teal 邊框。border shorthand 會蓋掉
-     KpiCard 的 tone-based border-l-4 (彩色左邊條) 跟 base Card 的 navy 純色。 */
-  background: linear-gradient(
-    92deg,
-    rgba(73, 119, 132, 0.40) 14%,
-    rgba(10, 23, 47, 0.40) 83%
-  ) !important;
+  border-radius: calc(var(--r-section) * var(--wall)) !important;
+  /* 所有 .rounded-section 級別的卡片(<Card/>、KpiCard 等)共用同一個底。
+     規範 02 的 91.56deg 漸層。兩個 stop 都帶 --card-alpha,底圖在後面
+     透出來,透明度靠那一個變數調。
+     border shorthand 會蓋掉 KpiCard 的 tone-based border-l-4 與 base Card
+     的 navy 純色 —— 這是刻意的,牆上每張卡片視覺要一致。 */
+  background: var(--card-gradient) !important;
+  backdrop-filter: blur(calc(var(--card-blur) * var(--wall))) !important;
+  -webkit-backdrop-filter: blur(calc(var(--card-blur) * var(--wall))) !important;
   border: 1px solid rgba(114, 182, 201, 0.28) !important;
 }
 html.wall-mode .rounded-item {
-  border-radius: 1.5rem !important;     /* 72px */
+  border-radius: calc(var(--r-item) * var(--wall)) !important;
 }
 
 html.wall-mode body {
@@ -692,16 +734,18 @@ html.wall-mode .dut-wall-band-split > section {
 html.wall-mode .dut-wall-band {
   display: flex;
   flex-direction: column;
-  border-radius: calc(21px * var(--wall));   /* 規範 03:Sections 21px */
+  border-radius: calc(var(--r-section) * var(--wall));
   padding: 2rem;
   overflow: hidden;
   /* 漸層框 — 跟 war-room-lab-* 共用,維持整面牆每張卡片視覺一致 */
   /* Figma 規範:92deg, #497784 14%, #0A172F 83%, 兩 stop 都 40% 透明,
      卡片半透明疊在主牆 navy 背景上,跟整體融合。 */
-  /* 設計規範 02 Color:卡片(Surface)底為 rgba(255,255,255,0.05),
-     讓底圖透出來;原本那組 91.56deg 漸層在規範裡是「頁面底」不是卡片底。
+  /* 設計規範 02 Color — Gradient:91.56deg,兩個 stop 各帶 --card-alpha。
+     底圖在卡片後面透出來,要調透明度改 :root 的 --card-alpha 即可。
      分隔線 / 框線色 #72B6C9(= rgba(114,182,201))。 */
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--card-gradient);
+  backdrop-filter: blur(calc(var(--card-blur) * var(--wall)));
+  -webkit-backdrop-filter: blur(calc(var(--card-blur) * var(--wall)));
   border: 1px solid rgba(114, 182, 201, 0.28);
 }
 html.wall-mode .dut-wall-band-title {
@@ -919,9 +963,9 @@ html.wall-mode .aggregate-status--online {
   background: rgba(128, 255, 232, 0.12);
   border-color: rgba(128, 255, 232, 0.4);
 }
-html.wall-mode .aggregate-status--online .aggregate-status-value { color: #80FFE8; }
+html.wall-mode .aggregate-status--online .aggregate-status-value { color: var(--c-primary-green); }
 html.wall-mode .aggregate-status--offline {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-1);
   border-color: rgba(255, 255, 255, 0.2);
 }
 html.wall-mode .aggregate-status--offline .aggregate-status-value { color: rgba(255,255,255,0.7); }
@@ -1340,7 +1384,7 @@ html.wall-mode .war-room-project-offline {
   width: calc(8px * var(--wall));
   height: calc(8px * var(--wall));
   border-radius: 50%;
-  background: #FF5F5A;
+  background: var(--c-error);
   flex-shrink: 0;
 }
 /* utility 區(框線 / 電視牆 / user / logout)— Header 的放大規則只認 <header>,
@@ -1517,11 +1561,12 @@ html.wall-region .war-room-left {
 }
 /* 中牆「適用測試案例」清單:hover / 選中列。 */
 .dut-wall-table--cases tbody tr:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-1);
 }
+/* 選中列:規範 02 的 Primary Green,取代原本的 emerald #34d399 */
 .dut-wall-table--cases tbody tr.dut-wall-case-row--active {
-  background: rgba(52, 211, 153, 0.14);
-  box-shadow: inset 3px 0 0 #34d399;
+  background: rgba(128, 255, 232, 0.14);
+  box-shadow: inset 3px 0 0 var(--c-primary-green);
 }
 /* Sidebar (<aside>) 自己有 bg-navy-600/70 半透明底,在 wall-mode 下覆寫成
    透明,讓 .war-room-left 的純黑能透出來;右側 border-r 也拿掉避免出現
@@ -1680,12 +1725,14 @@ html.wall-mode .war-room-lab-top {
   color: rgba(255, 255, 255, 0.92);
   /* Figma 規範:92deg, #497784 14%, #0A172F 83%, 兩 stop 都 40% 透明,
      卡片半透明疊在主牆 navy 背景上,跟整體融合。 */
-  /* 設計規範 02 Color:卡片(Surface)底為 rgba(255,255,255,0.05),
-     讓底圖透出來;原本那組 91.56deg 漸層在規範裡是「頁面底」不是卡片底。
+  /* 設計規範 02 Color — Gradient:91.56deg,兩個 stop 各帶 --card-alpha。
+     底圖在卡片後面透出來,要調透明度改 :root 的 --card-alpha 即可。
      分隔線 / 框線色 #72B6C9(= rgba(114,182,201))。 */
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--card-gradient);
+  backdrop-filter: blur(calc(var(--card-blur) * var(--wall)));
+  -webkit-backdrop-filter: blur(calc(var(--card-blur) * var(--wall)));
   border: 1px solid rgba(114, 182, 201, 0.28);
-  border-radius: calc(21px * var(--wall));   /* 規範 03:Sections 21px */
+  border-radius: calc(var(--r-section) * var(--wall));
   margin: 1rem;
 }
 /* 實驗室簡介:左 logo + 右 (名稱 + 描述),覆寫 lab-top 預設的純文字置中
@@ -1723,7 +1770,7 @@ html.wall-mode .war-room-lab-intro-title {
   line-height: 1.2;
   /* 標題與內文之間的分隔線(與下排三格一致) */
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid rgba(114, 182, 201, 0.35);
+  border-bottom: 1px solid rgba(114, 182, 201, 0.35);   /* 規範:分隔線 #72B6C9 */
 }
 html.wall-mode .war-room-lab-intro-desc {
   font-size: 1.5rem;
@@ -1767,7 +1814,7 @@ html.wall-mode .war-room-lab-icon-title {
   color: white;
   margin: 0;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid rgba(114, 182, 201, 0.35);
+  border-bottom: 1px solid rgba(114, 182, 201, 0.35);   /* 規範:分隔線 #72B6C9 */
   letter-spacing: 0.03em;
   line-height: 1.2;
 }
@@ -1787,15 +1834,17 @@ html.wall-mode .war-room-lab-tall {
   align-items: center;            /* 水平置中於螢幕 */
   padding: 2rem 2.5rem;
   margin: 1rem;
-  border-radius: calc(21px * var(--wall));   /* 規範 03:Sections 21px */
+  border-radius: calc(var(--r-section) * var(--wall));
   overflow: hidden;
   color: rgba(255, 255, 255, 0.95);
   /* Figma 規範:92deg, #497784 14%, #0A172F 83%, 兩 stop 都 40% 透明,
      卡片半透明疊在主牆 navy 背景上,跟整體融合。 */
-  /* 設計規範 02 Color:卡片(Surface)底為 rgba(255,255,255,0.05),
-     讓底圖透出來;原本那組 91.56deg 漸層在規範裡是「頁面底」不是卡片底。
+  /* 設計規範 02 Color — Gradient:91.56deg,兩個 stop 各帶 --card-alpha。
+     底圖在卡片後面透出來,要調透明度改 :root 的 --card-alpha 即可。
      分隔線 / 框線色 #72B6C9(= rgba(114,182,201))。 */
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--card-gradient);
+  backdrop-filter: blur(calc(var(--card-blur) * var(--wall)));
+  -webkit-backdrop-filter: blur(calc(var(--card-blur) * var(--wall)));
   border: 1px solid rgba(114, 182, 201, 0.28);
 }
 /* ── 右副牆下排三格(待測物 / 測試設備 / 測試方法)的內文排版 ──────────
@@ -1820,7 +1869,7 @@ html.wall-mode .war-room-slot-title {
   letter-spacing: 0.02em;
   color: #fff;
   padding-bottom: 1.25rem;
-  border-bottom: 1px solid rgba(114, 182, 201, 0.35);
+  border-bottom: 1px solid rgba(114, 182, 201, 0.35);   /* 規範:分隔線 #72B6C9 */
 }
 html.wall-mode .war-room-slot-lead {
   font-size: 2.75rem;                /* 132px —— 該格最重要的一個值 */
@@ -1856,8 +1905,8 @@ html.wall-mode .war-room-slot-row {
   gap: 0.5rem;
   padding: 1.25rem 1.5rem;
   border: 1px solid rgba(114, 182, 201, 0.22);
-  border-radius: 0.75rem;
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: calc(var(--r-item) * var(--wall));
+  background: var(--surface-1);
 }
 html.wall-mode .war-room-slot-row-head {
   display: flex;
@@ -1868,7 +1917,7 @@ html.wall-mode .war-room-slot-row-head {
 html.wall-mode .war-room-slot-iface {
   font-size: 2rem;                   /* 96px */
   font-weight: 700;
-  color: #6ee7b7;
+  color: var(--c-primary-green);     /* 規範 02:Primary Green */
 }
 html.wall-mode .war-room-slot-note {
   font-size: 1.25rem;                /* 60px */

@@ -101,7 +101,7 @@ export function WallLeftSelector({ embedded = false }: { embedded?: boolean }) {
           item.child ? "ml-3.5" : ""
         } ${
           activeKey === key
-            ? "bg-emerald-400/15 font-semibold text-emerald-300"
+            ? "bg-mint/15 font-semibold text-mint"
             : "text-[#c7d2e3] hover:bg-white/5 hover:text-white"
         }`}
       >
@@ -128,7 +128,7 @@ export function WallLeftSelector({ embedded = false }: { embedded?: boolean }) {
         <div className="mt-1 text-xs text-white/40">
           左螢幕控制台 · 資料來自 RICtester · 點選後中‧右牆即時切換
         </div>
-        <div className="mt-4 flex min-h-12 items-center gap-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3">
+        <div className="mt-4 flex min-h-12 items-center gap-3 rounded-xl border border-mint/30 bg-mint/10 px-4 py-3">
           <span className="text-xs tracking-widest text-white/50">目前檢視</span>
           {currentLabel ? (
             <span className="text-lg font-semibold">{currentLabel}</span>
@@ -171,7 +171,7 @@ export function WallLeftSelector({ embedded = false }: { embedded?: boolean }) {
                   onClick={() => broadcast(d.source, dutKey, d.dutName, { dutName: d.dutName })}
                   className={`ml-3.5 block w-[calc(100%-0.875rem)] rounded-lg px-4 py-3 text-left text-base transition-colors ${
                     activeKey === dutKey
-                      ? "bg-emerald-400/15 font-semibold text-emerald-300"
+                      ? "bg-mint/15 font-semibold text-mint"
                       : "text-[#c7d2e3] hover:bg-white/5 hover:text-white"
                   }`}
                 >
@@ -191,7 +191,7 @@ export function WallLeftSelector({ embedded = false }: { embedded?: boolean }) {
                       }
                       className={`ml-9 flex w-[calc(100%-2.25rem)] items-center gap-2 rounded-r-lg border-l border-white/10 px-3.5 py-2 text-left text-sm transition-colors ${
                         activeKey === ifKey
-                          ? "bg-emerald-400/10 font-semibold text-emerald-300"
+                          ? "bg-mint/10 font-semibold text-mint"
                           : "text-[#9fb3d1] hover:bg-white/5 hover:text-white"
                       }`}
                     >
