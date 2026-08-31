@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import { DEFAULT_RIC_SOURCE } from "@/config/ricSources";
+import { useRicActiveRun } from "@/hooks/Backend/useRicActiveRun";
+import { useRicRunCases } from "@/hooks/Backend/useRicRunCases";
 import { adapterService } from "@/services/Adapter/adapterService";
 import { useWallSelectionStore } from "@/stores/wallSelectionStore";
 
@@ -32,6 +34,13 @@ const POLL_MS = 2500;
  * 輪詢 adapter testStatus + testResult 直到全部終態。
  */
 export function useAdapterRun(): AdapterRunState {
+  // 兩條來源:
+  //  1) 自己(左螢幕模擬器)驅動 → selection 裡有 runnings → 打 adapter 輪詢
+  //  2) 別的團隊在他們那邊驅動 → 我們拿不到 runningId → 改讀 RICtester
+  //     back_end 的 case_results,一樣能顯示逐項判決
+  const { activeRun } = useRicActiveRun();
+  const { cases } = useRicRunCases(activeRun?.runUuid ?? null, activeRun?.source ?? null);
+
   const runnings = useWallSelectionStore((s) => s.selection?.runnings);
   // 輪詢要打回「當初驅動這批測試的那一套 tester」。
   const source = useWallSelectionStore((s) => s.selection?.source) ?? DEFAULT_RIC_SOURCE;
@@ -103,6 +112,27 @@ export function useAdapterRun(): AdapterRunState {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [runnings, source]);
+
+  // 跟隨外部執行時,用 back_end 的判決取代 adapter 輪詢的結果
+  if (activeRun) {
+    const followed: RunItemState[] = cases.map((c) => ({
+      testcaseId: c.testcaseId,
+      runningId: "",
+      status: "finished",
+      progress: 100,
+      result: c.verdict === "pass" ? "passed" : "failed",
+      resultDescription: c.detail || c.criteria,
+    }));
+    const done = !activeRun.live && followed.length >= activeRun.total;
+    return {
+      active: true,
+      done,
+      items: followed,
+      passed: followed.filter((i) => i.result === "passed").length,
+      failed: followed.filter((i) => i.result === "failed").length,
+      startedAt: activeRun.startedAt || null,
+    };
+  }
 
   const passed = items.filter((i) => i.result === "passed").length;
   const failed = items.filter((i) => i.result === "failed" || i.result === "error").length;

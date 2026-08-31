@@ -126,9 +126,14 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
                 測試過程
                 {run.active ? `（${finished}/${run.items.length} 完成）` : ""}
               </span>
-              {/* 中牆不觸發測試 —— 由左螢幕呼叫 tester adapter 的 API 驅動,
-                  這裡只顯示狀態。 */}
-              <span className="text-sm tracking-widest text-white/40">
+              {/* 中牆不觸發測試 —— 由左螢幕或其他團隊的平台驅動,這裡只顯示狀態。
+                  跟隨外部執行時標示出來,現場才知道畫面為什麼自己換了。 */}
+              <span className="flex items-center gap-3 text-sm tracking-widest text-white/40">
+                {view.followingRun && (
+                  <span className="rounded-item bg-mint/15 px-2 py-0.5 text-mint">
+                    跟隨執行中 · {view.followingRun.scenarioName}
+                  </span>
+                )}
                 {run.active ? (run.done ? "已完成" : "執行中…") : "待命"}
               </span>
             </div>

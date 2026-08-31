@@ -33,6 +33,8 @@ export type WallSelection = {
   // (Near/Non 是獨立部署),中/右牆要用它決定打哪一套的 API。
   source?: RicSourceId;
   dutName?: string;
+  /** 選中的案例;沒帶代表看整台 DUT 的所有案例。 */
+  scenarioId?: string;
   interface?: string;
   testcaseId?: string;
   // 左螢幕按「執行測試」後的每測項 runningId + 起跑時間
