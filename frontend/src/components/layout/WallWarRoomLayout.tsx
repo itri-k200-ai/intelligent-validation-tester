@@ -16,7 +16,7 @@ import {
 import { useWallModeStore } from "@/stores/wallModeStore";
 
 import { Sidebar } from "./Sidebar";
-import { WallLeftSelector } from "./WallLeftSelector";
+import { WallLeftSimulator } from "./WallLeftSimulator";
 import { WallSelectionStatus } from "./WallSelectionStatus";
 
 /**
@@ -113,7 +113,7 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
       {/* === 左副牆 === 全貌預覽原生嵌 selector 選單;region build 由 CSS 裁掉。 */}
       <section className="war-room-left">
         {region === "all" ? (
-          <WallLeftSelector embedded />
+          <WallLeftSimulator embedded />
         ) : (
           <Sidebar className="war-room-sidebar flex flex-col" />
         )}

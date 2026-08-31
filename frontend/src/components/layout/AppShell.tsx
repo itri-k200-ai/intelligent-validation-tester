@@ -8,8 +8,9 @@ import { useIsWallMode } from "@/stores/wallModeStore";
 
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
-import { WallLeftSelector } from "./WallLeftSelector";
+import { WallLeftSimulator } from "./WallLeftSimulator";
 import { WallModeApplier } from "./WallModeApplier";
+import { WallModeOff } from "./WallModeOff";
 import { WallWarRoomLayout } from "./WallWarRoomLayout";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -23,13 +24,17 @@ export function AppShell({ children }: { children: ReactNode }) {
     document.title = `智慧驗證 tester${suffix}`;
   }, [region]);
 
-  // 左螢幕:全螢幕 selector 選單(不走牆版面 / 不裁切)。
+  // 左螢幕:全螢幕的共通性測試平台模擬器(不走牆版面 / 不裁切)。
   // 這裡在 (dashboard)/layout 之內,同層的 error.tsx 攔不到,所以自己包 boundary。
   if (region === "left")
     return (
-      <ErrorBoundary label="左螢幕選單">
-        <WallLeftSelector />
-      </ErrorBoundary>
+      <>
+        {/* 確保沒有殘留的牆面畫布縮放 —— 左螢幕是一般頁面 */}
+        <WallModeOff />
+        <ErrorBoundary label="左螢幕模擬器">
+          <WallLeftSimulator />
+        </ErrorBoundary>
+      </>
     );
 
   // 單螢幕拆分(center/right)一律走牆版面 —— 那才是該 URL 要顯示的那面牆。

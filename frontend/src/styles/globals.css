@@ -2151,3 +2151,195 @@ html.wall-mode .hud-octagon-label {
   font-size: 2rem !important;
   margin-top: 1.25rem;
 }
+
+/* ── 左螢幕:共通性測試平台模擬器 ──────────────────────────────────
+   左螢幕實際解析度 1920×1080(畫布 5760×3240),不走 wall-mode 的裁切,
+   所以尺寸直接用畫布 px,不乘 --wall。 */
+.sim-root {
+  /* 左螢幕是 1920×1080 遠看,不走 wall-mode 的縮放,所以這裡自己把基準
+     字級拉大;底下一律用 em,改這一個數字整個面板等比縮放。 */
+  font-size: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25em;
+  /* 用 min-height 而不是固定 height,整頁自然捲動 —— 視窗再小也不會把
+     下面的操作按鈕裁掉(先前固定 100vh + 內部捲動,視窗一小就看不到)。 */
+  min-height: 100vh;
+  padding: 1.5em 1.75em;
+  background: #070b14;
+  color: #e8edf6;
+}
+/* 嵌在全貌預覽的左副牆時:高度吃容器,而且畫布本身已放大 3 倍,
+   基準字級要收回來,否則會大到爆版。 */
+.sim-root--embedded { min-height: 0; height: 100%; overflow: auto; font-size: 42px; }
+.sim-header { display: flex; flex-direction: column; gap: 0.5em; }
+
+/* 取得測試案例後出現:把某台 DUT 設為中牆的檢視目標 */
+.sim-view { display: flex; flex-direction: column; gap: 0.4em; }
+.sim-view-label { font-size: 0.8em; letter-spacing: 0.12em; color: rgba(255, 255, 255, 0.4); }
+.sim-view-list { display: flex; flex-wrap: wrap; gap: 0.5em; }
+.sim-view-btn {
+  padding: 0.35em 0.85em;
+  font-size: 0.85em;
+  border-radius: 999px;
+  border: 1px solid rgba(114, 182, 201, 0.35);
+  color: rgba(255, 255, 255, 0.75);
+}
+.sim-view-btn:hover { background: rgba(255, 255, 255, 0.08); }
+.sim-view-btn.is-active {
+  background: rgba(128, 255, 232, 0.15);
+  border-color: var(--c-primary-green);
+  color: var(--c-primary-green);
+}
+.sim-title { font-size: 1.75em; font-weight: 500; letter-spacing: 0.04em; }
+.sim-sub { font-size: 0.875em; color: rgba(255, 255, 255, 0.45); line-height: 1.4; }
+.sim-sources { display: flex; gap: 0.75em; margin-top: 0.25em; }
+.sim-source {
+  padding: 0.4em 1em;
+  font-size: 0.9em;
+  border-radius: 999px;
+  border: 1px solid rgba(114, 182, 201, 0.35);
+  color: rgba(255, 255, 255, 0.7);
+  transition: background-color 0.15s, color 0.15s;
+}
+.sim-source:hover { background: rgba(255, 255, 255, 0.06); }
+.sim-source.is-active {
+  background: var(--c-primary-green);
+  border-color: var(--c-primary-green);
+  color: var(--c-dark-text);
+  font-weight: 600;
+}
+
+/* 參數列 —— 佔位參數(scenarioId 等)在這裡填,操作缺參數就停用 */
+.sim-params {
+  display: grid;
+  /* 放大之後 5 欄會太窄,改 3 欄兩排 */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5em 0.75em;
+}
+.sim-param { display: flex; flex-direction: column; gap: 0.25em; min-width: 0; }
+.sim-param-label {
+  font-size: 0.75em;
+  color: rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+}
+/* 「可選 N」—— 一眼看出這欄已經有清單可挑,不用手打 */
+.sim-param-hint {
+  font-size: 0.85em;
+  color: var(--c-primary-green);
+  opacity: 0.8;
+}
+.sim-param-input option { background: #101826; color: #fff; }
+.sim-param-input {
+  background: var(--surface-1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--r-item);
+  padding: 0.4em 0.6em;
+  font-size: 0.85em;
+  font-family: ui-monospace, Menlo, monospace;
+  color: #fff;
+  min-width: 0;
+}
+.sim-param-input:focus {
+  outline: none;
+  border-color: rgba(128, 255, 232, 0.45);
+  box-shadow: 0 0 10px rgba(128, 255, 232, 0.12);
+}
+
+/* 操作清單 */
+/* 操作清單不自己捲動,高度由內容決定,交給整頁捲 */
+.sim-ops { display: flex; flex-direction: column; gap: 0.9em; }
+.sim-group { display: flex; flex-direction: column; gap: 0.35em; }
+.sim-group-name {
+  font-size: 0.8em;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.4);
+  padding-left: 0.2em;
+}
+.sim-op {
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+  width: 100%;
+  padding: 0.55em 0.8em;
+  border-radius: var(--r-item);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--surface-1);
+  text-align: left;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.sim-op:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(114, 182, 201, 0.4);
+}
+.sim-op:disabled { opacity: 0.3; }
+.sim-op.is-last { border-color: var(--c-primary-green); }
+.sim-op-no {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.75em;
+  color: rgba(255, 255, 255, 0.35);
+  width: 2.2em;
+  flex-shrink: 0;
+}
+.sim-method {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.7em;
+  font-weight: 600;
+  padding: 0.15em 0.45em;
+  border-radius: 4px;
+  width: 4.2em;
+  text-align: center;
+  flex-shrink: 0;
+}
+.sim-method--get { background: rgba(114, 182, 201, 0.22); color: #9fd8e6; }
+.sim-method--post { background: rgba(128, 255, 232, 0.18); color: var(--c-primary-green); }
+.sim-method--put { background: rgba(255, 197, 107, 0.18); color: var(--c-warning); }
+.sim-method--delete { background: rgba(255, 95, 90, 0.18); color: var(--c-error); }
+.sim-op-label { flex: 1; font-size: 0.95em; min-width: 0; }
+.sim-op-err {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.72em;
+  color: rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+}
+
+/* 回應區 */
+.sim-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  border-top: 1px solid rgba(114, 182, 201, 0.3);
+  padding-top: 0.75em;
+}
+.sim-result-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1em; }
+.sim-result-title { font-size: 1em; font-weight: 500; }
+.sim-status {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.85em;
+  font-weight: 600;
+}
+.sim-status.is-ok { color: var(--c-primary-green); }
+.sim-status.is-fail { color: var(--c-error); }
+.sim-result-url {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.78em;
+  color: rgba(255, 255, 255, 0.45);
+  word-break: break-all;
+}
+.sim-result-body {
+  /* 回應內容自己捲,不撐爆整頁 */
+  max-height: 40vh;
+  overflow: auto;
+  margin: 0;
+  padding: 0.7em 0.85em;
+  border-radius: var(--r-item);
+  background: rgba(0, 0, 0, 0.35);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.8em;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
