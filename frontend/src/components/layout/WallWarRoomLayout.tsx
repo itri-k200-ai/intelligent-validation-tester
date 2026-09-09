@@ -1,5 +1,5 @@
 "use client";
-import { SquareDashed, Tv, Tv2 } from "lucide-react";
+import { SquareDashed } from "lucide-react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
@@ -42,7 +42,6 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
   const { title, subtitle, accent } = getPageMeta(pathname);
 
   const isWall = useWallModeStore((s) => s.isWall);
-  const toggleWall = useWallModeStore((s) => s.toggle);
   const fieldScenarioActive = useFieldScenarioStore((s) => s.active);
   const showBezels = useWallModeStore((s) => s.showBezels);
   const toggleBezels = useWallModeStore((s) => s.toggleBezels);
@@ -57,7 +56,7 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
       <section className="war-room-main">
         {/* 3 欄 grid:[上一頁(left)] [標題置中(center)] [utility(right)]
             War-room layout 下不再 render <Header />,所有最上層的
-            action(框線 / 電視牆切換)都集中在 topbar 右側,維持單一橫條。
+            action(框線)都集中在 topbar 右側,維持單一橫條。
             牆面是展示用途,不放上一頁 / 使用者 / 登出。 */}
         <div className="war-room-main-topbar">
           {/* 牆上不放「上一頁」—— 顯示什麼由左螢幕決定,牆面本身沒有導覽動作。
@@ -89,26 +88,6 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
               >
                 <SquareDashed className="h-4 w-4 mr-2" />
                 {showBezels ? "框線中" : "框線"}
-              </Button>
-            )}
-            {/* 實體牆(?wall=center / right)固定是牆模式,按了也會被 WallModeApplier
-                設回去,不顯示;全貌預覽仍保留,才切得回一般模式。 */}
-            {region !== "center" && region !== "right" && (
-              <Button
-                variant={isWall ? "default" : "ghost"}
-                size="sm"
-                onClick={toggleWall}
-                title={isWall ? "切回一般模式" : "切換到電視牆模式"}
-              >
-                {isWall ? (
-                  <>
-                    <Tv2 className="h-4 w-4 mr-2" /> 牆面中
-                  </>
-                ) : (
-                  <>
-                    <Tv className="h-4 w-4 mr-2" /> 電視牆
-                  </>
-                )}
               </Button>
             )}
             {/* 規格:gap 51px、margin-right 20px、ITRI 高 55px、6G 高 70px */}

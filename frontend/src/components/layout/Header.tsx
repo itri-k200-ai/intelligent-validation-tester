@@ -1,5 +1,5 @@
 "use client";
-import { LogOut, Menu, SquareDashed, Tv, Tv2 } from "lucide-react";
+import { LogOut, Menu, SquareDashed } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,6 @@ export function Header() {
   const { user, logout } = useAuth();
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const isWall = useWallModeStore((s) => s.isWall);
-  const toggleWall = useWallModeStore((s) => s.toggle);
   const showBezels = useWallModeStore((s) => s.showBezels);
   const toggleBezels = useWallModeStore((s) => s.toggleBezels);
   const pathname = usePathname() ?? "";
@@ -47,22 +46,6 @@ export function Header() {
             {showBezels ? "框線中" : "框線"}
           </Button>
         )}
-        <Button
-          variant={isWall ? "default" : "ghost"}
-          size="sm"
-          onClick={toggleWall}
-          title={isWall ? "切回一般模式" : "切換到電視牆模式"}
-        >
-          {isWall ? (
-            <>
-              <Tv2 className="h-4 w-4 mr-2" /> 牆面中
-            </>
-          ) : (
-            <>
-              <Tv className="h-4 w-4 mr-2" /> 電視牆
-            </>
-          )}
-        </Button>
         {user && (
           <span className="text-sm text-white/70 hidden sm:inline">
             {user.email} <span className="text-white/40">({user.role})</span>
