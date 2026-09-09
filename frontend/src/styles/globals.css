@@ -574,9 +574,11 @@ html.wall-mode .slot-panel-subtitle {
   font-size: 1.75rem !important;        /* 84px */
   text-align: center;
 }
-/* 副牆內所有 button(非 nav row Link)放大 — 刷新 / 新增 / 執行測試 之類 */
-html.wall-mode .war-room-left button,
-html.wall-mode .war-room-right button {
+/* 副牆內所有 button(非 nav row Link)放大 — 刷新 / 新增 / 執行測試 之類。
+   排除翻頁箭頭與頁碼點 —— 它們有自己的尺寸與圓角,被這條 !important
+   蓋到會變成一排圓角方塊。 */
+html.wall-mode .war-room-left button:not(.war-room-pager-arrow):not(.war-room-pager-dot),
+html.wall-mode .war-room-right button:not(.war-room-pager-arrow):not(.war-room-pager-dot) {
   font-size: 1.75rem !important;        /* 84px */
   padding: 1rem 1.75rem !important;
   min-height: 4.5rem !important;        /* 216px */
@@ -1924,38 +1926,42 @@ html.wall-mode .war-room-slot-note {
   line-height: 1.3;
   color: rgba(255, 255, 255, 0.55);
 }
-/* 待測物那格 —— 版式仿參考圖:分組標題 → 該組項目,每項是
-   圖示 + 名稱 + 一行細節。 */
-html.wall-mode .war-room-cat-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 1.75rem;
-}
-html.wall-mode .war-room-cat-group {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
+/* 待測物 / 測試設備 —— 版式仿參考圖:每項是標題一行,
+   底下 icon + 一行細節。 */
 /* 分組標題(網路平台 / 智慧應用) */
-html.wall-mode .war-room-cat-group-name {
-  font-size: 1.5rem;                 /* 72px */
-  font-weight: 500;                  /* 規範 01:Heading 500 */
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.45);
-}
 html.wall-mode .war-room-cat-list {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
 }
-/* 不分組的清單(測試設備)—— 撐滿卡片剩餘高度並平均分佈,
-   項目少時不會擠在上面、下面空一大塊。 */
+/* 撐滿卡片剩餘高度、內容垂直置中。項目數不同要用不同密度 ——
+   置中溢出時會上下都被裁掉,所以項目多的那格要收緊。 */
 html.wall-mode .war-room-cat-list--fill {
   flex: 1;
   min-height: 0;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 2rem;
 }
+/* 待測物:合併 xApp / rApp 後只剩 4 項,間距放開、icon 一併放大 */
+html.wall-mode .war-room-cat-list--tight {
+  gap: 2.5rem;
+}
+html.wall-mode .war-room-cat-list--tight .war-room-cat-icon {
+  width: calc(72px * var(--wall));
+  height: calc(72px * var(--wall));
+}
+/* 測試設備:只有 3 項,icon 放大讓版面不空 */
+html.wall-mode .war-room-cat-list--lg .war-room-cat-icon {
+  width: calc(72px * var(--wall));
+  height: calc(72px * var(--wall));
+}
+/* 一個項目:標題一行,底下 icon + 內容並排(仿參考圖) */
 html.wall-mode .war-room-cat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+html.wall-mode .war-room-cat-row {
   display: flex;
   align-items: center;
   gap: 1.25rem;
@@ -1963,8 +1969,8 @@ html.wall-mode .war-room-cat {
 /* 圖示欄 —— 規範 13 的設備 icon 是 80×80,這裡收小一點讓五項排得下。
    之後換成真的圖檔時尺寸不用改。 */
 html.wall-mode .war-room-cat-icon {
-  width: calc(64px * var(--wall));
-  height: calc(64px * var(--wall));
+  width: calc(48px * var(--wall));
+  height: calc(48px * var(--wall));
   flex-shrink: 0;
   object-fit: contain;
 }
@@ -1979,23 +1985,102 @@ html.wall-mode .war-room-cat-icon--todo {
   font-weight: 600;
   color: rgba(255, 255, 255, 0.35);
 }
-html.wall-mode .war-room-cat-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
 html.wall-mode .war-room-cat-name {
   font-size: 1.875rem;               /* 90px */
-  font-weight: 500;              /* 規範 01:Heading 3(29px/500) */
+  /* 500(不加粗)—— 參考圖的項目標題看起來偏粗,但依 PM 決定右牆一律
+     不用粗體,字級差異已足以分出層次。 */
+  font-weight: 500;
   line-height: 1.2;
   color: var(--c-text);              /* 一律白,不用各類代表色 */
 }
 html.wall-mode .war-room-cat-items {
+  flex: 1;
+  min-width: 0;
   font-size: 1.25rem;                /* 60px */
   line-height: 1.35;
   color: var(--c-text-secondary);
 }
+
+/* ── 測試方法:名稱 → 說明 → 示意圖(左右翻頁)→ 頁碼點 ─────────────
+   版式對齊參考圖:那格大半是示意圖,說明文字比一般內文亮一階拉層次。
+   註:牆面若沒有輸入裝置,箭頭與頁碼點都點不到 —— 屆時改成定時輪播即可
+   (RightWingMethod 裡加 setInterval),這裡的樣式不用動。 */
+html.wall-mode .war-room-method-name {
+  font-size: 1.875rem;               /* 90px,與待測物的項目標題同級 */
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--c-text);
+}
+html.wall-mode .war-room-method-desc {
+  display: flex;
+  flex-direction: column;
+  /* 行距統一:介面測試那頁是多個獨立段落、室內外是一整段自動換行。
+     若靠 gap 拉開段落間距,自動換行的那幾行就會比較擠(它只有行高)。
+     所以 gap 歸零、行高加大 —— 兩種寫法的行間節奏才一致。 */
+  gap: 0;
+  line-height: 1.8;
+  font-size: 1.25rem;                /* 60px */
+  color: rgba(255, 255, 255, 0.9);   /* 比一般內文亮,對應參考圖的強調段 */
+  /* 吸收文字長度的差異,讓底下的翻頁箭頭與頁碼點位置固定 */
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+html.wall-mode .war-room-method-todo {
+  font-size: 1.25rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.35);
+}
+/* 示意圖區 —— 固定四成高度,左右各一個箭頭。
+   高度固定 + 上方說明用 flex:1 吸收長度差異 → 箭頭與頁碼點永遠在同一個
+   位置,不會因為某頁文字比較多就整組往下移。 */
+html.wall-mode .war-room-pager {
+  flex: 0 0 38%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+html.wall-mode .war-room-pager-arrow {
+  flex-shrink: 0;
+  width: calc(24px * var(--wall));
+  font-size: 2.5rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.55);
+  transition: color 0.15s;
+}
+html.wall-mode .war-room-pager-arrow:hover { color: var(--c-primary-green); }
+html.wall-mode .war-room-method-figure {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  object-fit: contain;
+  border-radius: calc(var(--r-item) * var(--wall));
+}
+html.wall-mode .war-room-method-figure--todo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: calc(2px * var(--wall)) dashed rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 1.25rem;
+  color: rgba(255, 255, 255, 0.35);
+}
+/* 底部頁碼圓點 —— 固定在卡片底部 */
+html.wall-mode .war-room-pager-dots {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  gap: calc(8px * var(--wall));
+}
+html.wall-mode .war-room-pager-dot {
+  width: calc(8px * var(--wall));
+  height: calc(8px * var(--wall));
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transition: background-color 0.15s;
+}
+html.wall-mode .war-room-pager-dot.is-current { background: var(--c-primary-green); }
 
 html.wall-mode .war-room-slot-list {
   display: flex;
