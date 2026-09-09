@@ -125,10 +125,21 @@ export function WallLeftSimulator({ embedded = false }: { embedded?: boolean }) 
       .catch(() => {});
   };
 
+  /**
+   * 目前選定案例底下的所有測項 —— 「驅動測試」以案例為單位,body 要帶整包
+   * testcaseId(見 adapterOps #15)。目錄要先按過「取得測試案例與項目」
+   * 才有,沒有就是空陣列,按鈕會被停用。
+   */
+  const scenarioTestcases =
+    catalog
+      .flatMap((d) => d.scenarios)
+      .find((sc) => sc.id === params.scenarioId)?.testcases ?? [];
+  const scenarioTestcaseIds = scenarioTestcases.map((tc) => tc.id).filter(Boolean);
+
   const fire = async (op: AdapterOp) => {
     setRunning(op.no);
     setLastOp(op);
-    const res = await runAdapterOp(source, op, params);
+    const res = await runAdapterOp(source, op, params, { scenarioTestcaseIds });
     setResult(res);
     setRunning(null);
 
@@ -152,7 +163,13 @@ export function WallLeftSimulator({ embedded = false }: { embedded?: boolean }) 
         }
         if (runnings.length) {
           await selectionService
-            .setSelection({ source, runnings, runStartedAt: new Date().toISOString() })
+            .setSelection({
+              source,
+              // 中牆的測試項目是以案例分組顯示的,要知道跑的是哪一個案例
+              ...(params.scenarioId ? { scenarioId: params.scenarioId } : {}),
+              runnings,
+              runStartedAt: new Date().toISOString(),
+            })
             .catch(() => {});
         }
       } catch {
@@ -162,8 +179,13 @@ export function WallLeftSimulator({ embedded = false }: { embedded?: boolean }) 
   };
 
   // 這支操作缺哪些必填參數 —— 缺就把按鈕停用,避免送出必然失敗的請求
-  const missing = (op: AdapterOp) =>
-    (op.needs ?? []).filter((k) => !params[k]?.trim());
+  const missing = (op: AdapterOp) => {
+    const lack = (op.needs ?? []).filter((k) => !params[k]?.trim());
+    // 驅動是整個案例送出去,案例裡沒有測項就沒東西可送
+    if (op.no === 15 && lack.length === 0 && scenarioTestcaseIds.length === 0)
+      return ["該案例沒有測項"];
+    return lack;
+  };
 
   // 取得測試案例後,可直接把某台 DUT 設成中牆的檢視目標 —— 中牆是讀
   // selection 的 dutName/source 決定要顯示誰,這條路徑等於模擬左端的
@@ -314,7 +336,13 @@ export function WallLeftSimulator({ embedded = false }: { embedded?: boolean }) 
                 >
                   <span className="sim-op-no">#{op.no}</span>
                   <span className={`sim-method ${METHOD_TONE[op.method]}`}>{op.method}</span>
-                  <span className="sim-op-label">{op.label}</span>
+                  <span className="sim-op-label">
+                    {op.label}
+                    {/* 驅動是整包送出,先讓操作者看到這次會跑幾項 */}
+                    {op.no === 15 && scenarioTestcaseIds.length > 0 && (
+                      <span className="sim-op-count"> · {scenarioTestcaseIds.length} 項</span>
+                    )}
+                  </span>
                   <span className="sim-op-err">{op.errorCode}</span>
                 </button>
               );

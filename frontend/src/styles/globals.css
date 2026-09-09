@@ -833,6 +833,29 @@ html.wall-mode .dut-wall-band-body--chart {
 /* 主牆 3 條 band 的標題統一白色 — base .dut-wall-band-title 沒設色,
    繼承 white,不再以 env/status/result 給標題上 teal/mint/purple */
 
+/* ── 測試案例時序圖(TestcaseSequenceDiagram 的 SVG 文字)──────────
+   SVG 裡的 <text> 吃不到 Tailwind 的 text-* class,字級/字重只能用 CSS。
+   數值沿用 RICtester 的手刻版面(viewBox 720×196),牆面靠 SVG 自身縮放
+   放大,所以這裡不乘 --wall。 */
+.seq-actor {
+  font-size: 15px;
+  font-weight: 600;
+  fill: #ffffff;
+}
+.seq-actor-sub {
+  font-size: 11px;
+  fill: rgba(255, 255, 255, 0.55);
+}
+.seq-msg {
+  font-size: 15px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  fill: rgba(255, 255, 255, 0.9);
+}
+.seq-note {
+  font-size: 11px;
+  fill: rgba(255, 255, 255, 0.45);
+}
+
 /* 主牆色帶內的小表格 + status / result 標籤 */
 html.wall-mode .dut-wall-band-body {
   /* 內容靠左上、子元素撐滿格寬 —— 原本 center 會讓字少的內容縮在正中間 */
@@ -2441,6 +2464,8 @@ html.wall-mode .hud-octagon-label {
 .sim-method--put { background: rgba(255, 197, 107, 0.18); color: var(--c-warning); }
 .sim-method--delete { background: rgba(255, 95, 90, 0.18); color: var(--c-error); }
 .sim-op-label { flex: 1; font-size: 0.95em; min-width: 0; }
+/* 驅動測試按鈕上的「· N 項」—— 這次會送出幾個測項 */
+.sim-op-count { color: var(--c-primary-green); font-size: 0.9em; }
 .sim-op-err {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 0.72em;

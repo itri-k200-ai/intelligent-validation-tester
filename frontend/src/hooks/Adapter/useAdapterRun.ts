@@ -11,6 +11,18 @@ import { runKey, useWallRunStore } from "@/stores/wallRunStore";
 export type RunItemState = {
   testcaseId: string;
   runningId: string;
+  /**
+   * 測項代碼(如 a1.query_policy_types)—— 只有「跟隨外部執行」那條路徑
+   * 帶得出來(來自 back_end suite_items.suite_item_name)。自己驅動時是空
+   * 的,由中牆拿 adapter testList 反查。
+   *
+   * 為什麼需要它:跟隨外部執行時只拿得到 adapter 的 testcaseId(如
+   * 4bEllDo88J),要靠 DUT 名字回頭比對 adapter testList 才換得到代碼,而
+   * 兩套 tester 的 DUT 命名並不一致(near 的 back_end dut_name 是中文、
+   * 對到 adapter 的 dutName_zh;non 的是英文、對到 dutName_en),比對會落
+   * 空。back_end 這邊本來就有代碼,直接帶著走最可靠。
+   */
+  code?: string;
   status: "running" | "finished" | "error" | "pending";
   progress: number | null;
   result: "passed" | "failed" | "error" | null;
@@ -42,7 +54,11 @@ export function useAdapterRun(): AdapterRunState {
   //  2) 別的團隊在他們那邊驅動 → 我們拿不到 runningId → 改讀 RICtester
   //     back_end 的 case_results,一樣能顯示逐項判決
   const { activeRun } = useRicActiveRun();
-  const { cases } = useRicRunCases(activeRun?.runUuid ?? null, activeRun?.source ?? null);
+  const { cases } = useRicRunCases(
+    activeRun?.runUuid ?? null,
+    activeRun?.source ?? null,
+    activeRun?.suiteUuid ?? null,
+  );
 
   // 依當前選擇的 DUT+介面查該介面自己的 run(切換選擇不影響其他介面的 run)
   const dutName = useWallSelectionStore((s) => s.selection?.dutName);
@@ -127,17 +143,38 @@ export function useAdapterRun(): AdapterRunState {
     };
   }, [runnings, source]);
 
-  // 跟隨外部執行時,用 back_end 的判決取代 adapter 輪詢的結果
+  // 跟隨外部執行時,用 back_end 的資料取代 adapter 輪詢的結果。
+  //
+  // cases 是「本次套件的完整名單」(見 useRicRunCases),還沒跑到的項目
+  // verdict 是空的 —— 那些要顯示成待測而不是從清單消失,否則執行途中總數
+  // 會由小長到大,牆上看起來像少了幾項。
   if (activeRun) {
-    const followed: RunItemState[] = cases.map((c) => ({
-      testcaseId: c.testcaseId,
-      runningId: "",
-      status: "finished",
-      progress: 100,
-      result: c.verdict === "pass" ? "passed" : "failed",
-      resultDescription: c.detail || c.criteria,
-    }));
-    const done = !activeRun.live && followed.length >= activeRun.total;
+    // RICtester 是照 suite_item_order 依序跑的,所以「第一個還沒有判決的」
+    // 就是正在跑的那一項。back_end 沒有逐項的執行中旗標,這是推斷出來的,
+    // 只在整批還沒結束(live)時才這樣標。
+    const firstPending = cases.findIndex((c) => !c.verdict);
+    const followed: RunItemState[] = cases.map((c, idx) => {
+      if (!c.verdict)
+        return {
+          testcaseId: c.testcaseId,
+          runningId: "",
+          code: c.name,
+          status: activeRun.live && idx === firstPending ? "running" : "pending",
+          progress: null,
+          result: null,
+          resultDescription: "",
+        };
+      return {
+        testcaseId: c.testcaseId,
+        runningId: "",
+        code: c.name,
+        status: "finished",
+        progress: 100,
+        result: c.verdict === "pass" ? "passed" : "failed",
+        resultDescription: c.detail || c.criteria,
+      };
+    });
+    const done = !activeRun.live && firstPending === -1;
     return {
       active: true,
       done,

@@ -1,5 +1,5 @@
 "use client";
-import { CheckCircle2, Maximize2, Pause, Play, Terminal, Video, Volume2, XCircle } from "lucide-react";
+import { CheckCircle2, Maximize2, Pause, Play, Video, Volume2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -7,9 +7,9 @@ import type { WallAdapterView } from "@/hooks/Adapter/useWallAdapterView";
 import { useAdapterRun, type RunItemState } from "@/hooks/Adapter/useAdapterRun";
 import { useIvtCameras } from "@/hooks/Backend/useIvtCameras";
 import { useRicDutDetail } from "@/hooks/Backend/useRicDutDetail";
-import { useRicProbeLog, type RicProbeLog } from "@/hooks/Backend/useRicProbeLog";
 import { ricBackend } from "@/services/Backend/ricBackendService";
 import { useRicTestcaseCatalog } from "@/hooks/Backend/useRicTestcaseCatalog";
+import { TestcaseSequenceDiagram } from "@/components/Dut/TestcaseSequenceDiagram";
 import { HlsPlayer } from "@/components/Site/HlsPlayer";
 import { bi, pickLocale } from "@/lib/bilingual";
 import { useLocale } from "@/stores/localeStore";
@@ -28,48 +28,90 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
   // 執行中列變高(多了結果說明)時,每頁自動變少、出現換頁。
   const listRef = useRef<HTMLDivElement>(null);
   const [pageSize, setPageSize] = useState(ITEM_PAGE_SIZE);
-  // 探針原始 stdout:選了介面 → 該介面端點;沒選 → 該 DUT 全部端點。
-  const { detail } = useRicDutDetail(view.dutName);
-  const ifaceEndpoint = detail.endpoints.find(
-    (e) => e.dut_endpoint_interface === (view.interface ?? "").toLowerCase(),
-  )?.dut_endpoint_address;
-  const probeEndpoints = ifaceEndpoint
-    ? [ifaceEndpoint]
-    : detail.endpoints.map((e) => e.dut_endpoint_address);
-  // 探針 log:run.active 才顯示(執行前空);只顯示「本次執行後才出現」的新 log
-  // —— 用執行當下記下的基準 uuid 分辨,不靠時鐘。
-  const { log: probeLog } = useRicProbeLog(probeEndpoints, {
-    enabled: run.active,
-    baselineUuid: run.baselineLogUuid,
-  });
+  // 時序圖那格顯示哪一項:預設自動跟隨執行中的測項,有人翻頁就先停在該項,
+  // 閒置 SEQ_MANUAL_MS 後回到自動跟隨(牆面無人值守,不能永遠卡在手動)。
+  const [seqManual, setSeqManual] = useState<number | null>(null);
+  const seqTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pickSeqPage = useCallback((i: number) => {
+    setSeqManual(i);
+    if (seqTimer.current) clearTimeout(seqTimer.current);
+    seqTimer.current = setTimeout(() => setSeqManual(null), SEQ_MANUAL_MS);
+  }, []);
+  useEffect(() => () => {
+    if (seqTimer.current) clearTimeout(seqTimer.current);
+  }, []);
 
   // 中牆是純顯示 —— 測試由左螢幕直接呼叫該套 tester adapter 的 API 觸發,
   // 再把 runnings 寫進 IVT 的 selection;這裡只讀 selection 並輪詢狀態/判決。
   // runningId → 測項名稱(顯示用)
   const nameById = new Map(view.testcases.map((tc) => [tc.testcaseId, tc.testcaseName]));
 
-  // 測試項目清單:執行前先列出本次要測的項目(未執行),執行後同一份接上
-  // 各項的狀態 / 進度 / 通過判決。
-  const itemRows: ItemRow[] = run.active
-    ? run.items.map((i) => ({
-        key: i.runningId || i.testcaseId,
-        code: nameById.get(i.testcaseId) ?? i.testcaseId,
-        status: i.status,
-        progress: i.progress,
-        result: i.result,
-        resultDescription: i.resultDescription,
-      }))
-    : view.testcases.map((tc) => ({
-        key: tc.testcaseId,
-        code: tc.testcaseName,
-        status: "idle" as const,
-        progress: null,
-        result: null,
-        resultDescription: "",
+  // 測試項目清單 —— 以**案例**為單位分組(其他團隊就是整個案例驅動的),
+  // 案例名底下再列該案例的測項。執行前列出待測項,執行後同一份接上狀態 /
+  // 進度 / 判決。
+  //
+  // 執行中只會有一個案例(一次驅動 = 一個案例),案例名取自 view.scenarioName;
+  // 待命時則列出該 DUT(或已鎖定案例)底下的每一個案例。
+  const groups: { key: string; name: string; rows: ItemRow[] }[] = run.active
+    ? [
+        {
+          key: "run",
+          name: view.scenarioName ?? "本次執行",
+          rows: run.items.map((i) => ({
+            key: i.runningId || i.testcaseId,
+            // back_end 直接給的代碼優先;自己驅動時才靠 testList 反查。
+            code: i.code || nameById.get(i.testcaseId) || i.testcaseId,
+            status: i.status,
+            progress: i.progress,
+            result: i.result,
+            resultDescription: i.resultDescription,
+          })),
+        },
+      ]
+    : view.testcaseGroups.map((g) => ({
+        key: g.scenarioId,
+        name: g.scenarioName,
+        rows: g.testcases.map((tc) => ({
+          key: tc.testcaseId,
+          code: tc.testcaseName,
+          status: "idle" as const,
+          progress: null,
+          result: null,
+          resultDescription: "",
+        })),
       }));
-  const totalItemPages = Math.max(1, Math.ceil(itemRows.length / pageSize));
+
+  // 攤平成「案例標題 + 測項」的一維清單 —— 換頁是對這份清單分頁,標題跟著
+  // 內容走。itemRows 只收測項,時序圖的選取索引以它為準。
+  const itemRows: ItemRow[] = groups.flatMap((g) => g.rows);
+  const entries: ItemEntry[] = [];
+  let flatIdx = 0;
+  groups.forEach((g) => {
+    entries.push({ kind: "group", key: `g:${g.key}`, name: g.name, count: g.rows.length });
+    g.rows.forEach((row) => {
+      entries.push({ kind: "item", key: row.key, row, index: flatIdx });
+      flatIdx += 1;
+    });
+  });
+
+  const totalItemPages = Math.max(1, Math.ceil(entries.length / pageSize));
   const safePage = Math.min(resPage, totalItemPages - 1);
-  const pagedItems = itemRows.slice(safePage * pageSize, (safePage + 1) * pageSize);
+  const pagedEntries = entries.slice(safePage * pageSize, (safePage + 1) * pageSize);
+
+  // 自動跟隨:優先跟正在跑的那項;沒有 running(剛跑完一項的空檔、或整批
+  // 已結束)就停在最後一個有結果的,執行前則停在第一項。
+  const autoSeqIdx = (() => {
+    if (!run.active) return 0;
+    const running = itemRows.findIndex((i) => i.status === "running");
+    if (running >= 0) return running;
+    for (let i = itemRows.length - 1; i >= 0; i -= 1) {
+      if (itemRows[i].status === "finished" || itemRows[i].status === "error") return i;
+    }
+    return 0;
+  })();
+  const seqIdx = Math.min(seqManual ?? autoSeqIdx, Math.max(0, itemRows.length - 1));
+  const seqRow = itemRows[seqIdx];
+  const seqCat = seqRow ? catalog.get(seqRow.code) : undefined;
 
   // 依可用高度與實際列高,動態決定每頁項數(換頁而非捲動)。列高在執行中
   // 會變高(多了結果說明),量測後每頁自動變少。
@@ -78,7 +120,7 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
     if (!el) return;
     const rows = Array.from(el.children) as HTMLElement[];
     if (rows.length === 0) return;
-    const gap = 8; // space-y-2 = 0.5rem
+    const gap = 6; // space-y-1.5 = 0.375rem
     const maxRow = Math.max(...rows.map((r) => r.offsetHeight)) + gap;
     const fit = Math.max(1, Math.floor((el.clientHeight + gap) / maxRow));
     setPageSize((prev) => (prev === fit ? prev : fit));
@@ -157,7 +199,7 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
         </div>
       </div>
 
-      {/* 右側兩帶:測試結果 | 探針日誌 */}
+      {/* 右側兩帶:測試項目 | 測試時序 */}
       <div className="dut-wall-band dut-wall-band--status dut-wall-band--merged">
         <div className="dut-wall-band-split">
           {/* 測試項目:執行前列出待測項;執行後同一份接上狀態/進度/判決 */}
@@ -167,16 +209,12 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
                 測試項目
                 {run.active
                   ? ` — 通過 ${run.passed} / 失敗 ${run.failed} / 共 ${run.items.length}`
-                  : ` — 共 ${view.testcases.length} 項`}
+                  : ` — ${groups.length} 個案例 / 共 ${itemRows.length} 項`}
               </span>
               {/* 中牆不觸發測試 —— 由左螢幕或其他團隊的平台驅動,這裡只顯示狀態。
-                  跟隨外部執行時標示出來,現場才知道畫面為什麼自己換了。 */}
+                  自動跟隨外部執行是背景行為,不在牆上標示(案例名已經是分組
+                  標題,再標一次是重複)。 */}
               <span className="flex items-center gap-3 text-sm tracking-widest text-white/40">
-                {view.followingRun && (
-                  <span className="rounded-item bg-mint/15 px-2 py-0.5 text-mint">
-                    跟隨執行中 · {view.followingRun.scenarioName}
-                  </span>
-                )}
                 {run.active ? (run.done ? "已完成" : "執行中…") : "待命"}
               </span>
             </div>
@@ -193,7 +231,7 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
                 <span>
                   {run.active
                     ? `整體進度 ${overallPct}%`
-                    : `本次將執行 ${view.testcases.length} 項`}
+                    : "選定案例後由左螢幕整案驅動"}
                 </span>
                 {run.startedAt && (
                   <span>起跑:{new Date(run.startedAt).toLocaleTimeString()}</span>
@@ -205,13 +243,37 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
                 <p className="p-2 text-sm text-white/40">此介面尚無測試項目</p>
               ) : (
                 <div className="flex h-full min-h-0 flex-col">
-                  <div ref={listRef} className="min-h-0 flex-1 space-y-2 overflow-hidden p-1">
-                    {pagedItems.map((it) => {
+                  <div ref={listRef} className="min-h-0 flex-1 space-y-1.5 overflow-hidden p-1">
+                    {pagedEntries.map((e) => {
+                      // 案例標題列 —— 底下才是該案例的測項
+                      if (e.kind === "group")
+                        return (
+                          <div
+                            key={e.key}
+                            className="flex items-baseline gap-2 px-1 pt-1 text-teal"
+                          >
+                            <span className="truncate font-semibold">{e.name}</span>
+                            <span className="flex-none text-xs text-white/40">
+                              {e.count} 項
+                            </span>
+                            <span className="ml-2 h-px flex-1 bg-white/10" />
+                          </div>
+                        );
+                      const it = e.row;
                       const cat = catalog.get(it.code);
+                      // 點這一列 → 右邊時序圖切到該測項(見 pickSeqPage)。
+                      const isSeq = e.index === seqIdx;
                       return (
-                        <div
-                          key={it.key}
-                          className="rounded-item border border-white/10 bg-white/[0.03] px-3 py-2"
+                        <button
+                          key={e.key}
+                          type="button"
+                          onClick={() => pickSeqPage(e.index)}
+                          aria-pressed={isSeq}
+                          className={`ml-3 block w-[calc(100%-0.75rem)] rounded-item border px-3 py-2 text-left transition-colors ${
+                            isSeq
+                              ? "border-mint/60 bg-mint/10"
+                              : "border-white/10 bg-white/[0.03] hover:bg-white/[0.07]"
+                          }`}
                         >
                           {/* 狀態燈 + 測項代碼 + 程序名 + 進度/判決 */}
                           <div className="flex items-center gap-2">
@@ -242,7 +304,7 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
                               結果:{it.resultDescription}
                             </div>
                           )}
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -254,20 +316,34 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
             </div>
           </section>
 
-          {/* 探針日誌:執行後才顯示,只採用本次 run 的原始 stdout(執行前清空)*/}
+          {/* 測試時序:該測項送出什麼、預期收到什麼(取代原本的探針日誌;
+              探針原始 stdout 仍可在「測試紀錄」頁看到)。 */}
           <section>
-            <div className="dut-wall-band-title">執行紀錄</div>
+            {/* 標題用程序名(Query All Policy Types),不放 testcase_code ——
+                代碼在左邊測試項目清單已經有了,兩邊重複反而難讀。 */}
+            <div className="dut-wall-band-title flex items-center justify-between gap-3">
+              <span>
+                測試時序
+                {seqCat?.testcase_procedure && (
+                  <span className="ml-2 text-mint/90">{seqCat.testcase_procedure}</span>
+                )}
+              </span>
+              {/* 自動跟隨 / 手動選擇是背景行為,不在牆上標示 —— 哪一項被選中
+                  看左邊清單的高亮就知道了。 */}
+              <span className="flex items-center gap-3 text-sm tracking-widest text-white/40">
+                {seqRow?.result && <VerdictPill result={seqRow.result} />}
+              </span>
+            </div>
             <div className="dut-wall-band-body min-h-0">
-              {run.active ? (
-                <div className="h-full min-h-0 w-full">
-                  <ProbeConsole
-                    log={probeLog}
-                    iface={view.interface}
-                    endpoint={ifaceEndpoint}
-                  />
-                </div>
+              {seqRow && seqCat ? (
+                <TestcaseSequenceDiagram
+                  procedure={seqCat.testcase_procedure}
+                  interfaceName={seqCat.testcase_interface}
+                />
               ) : (
-                <p className="p-2 text-sm text-white/40">執行後顯示探針輸出</p>
+                <p className="p-2 text-sm text-white/40">
+                  {itemRows.length === 0 ? "此介面尚無測試項目" : "此測項尚無時序資料"}
+                </p>
               )}
             </div>
           </section>
@@ -312,6 +388,8 @@ function Pager({
 
 // 測試項目卡片含通過條件/結果說明多行,每頁 5 項留空間給分頁列
 const ITEM_PAGE_SIZE = 5;
+// 時序圖手動翻頁後,閒置多久回到自動跟隨(牆面無人值守)。
+const SEQ_MANUAL_MS = 30_000;
 // 右牆各介面統計的顯示順序
 const SLOT_IFACE_ORDER = ["E2", "A1", "O1"];
 // 右牆「測試能力」展開清單:每頁測項數
@@ -319,6 +397,11 @@ const EXPAND_PAGE_SIZE = 6;
 
 // 測試項目清單一列(執行前=idle 待測,執行後=帶狀態/進度/判決)
 type ItemStatus = RunItemState["status"] | "idle";
+/** 清單上的一列:案例標題,或案例底下的一個測項。 */
+type ItemEntry =
+  | { kind: "group"; key: string; name: string; count: number }
+  | { kind: "item"; key: string; row: ItemRow; index: number };
+
 type ItemRow = {
   key: string;
   code: string;
@@ -559,53 +642,6 @@ export function useAdapterDutInfoSlots(view: WallAdapterView) {
       </div>
     ),
   };
-}
-
-// 終端機風格的探針日誌框：深色、等寬字、自動捲到底,像 command line 在跑。
-function ProbeConsole({
-  log,
-  iface,
-  endpoint,
-}: {
-  log: RicProbeLog | null;
-  iface: string | null;
-  endpoint?: string | null;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
-  }, [log?.log_text]);
-  const dot = "inline-block h-2.5 w-2.5 rounded-full";
-  return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-item border border-white/15 bg-black/70">
-      {/* 標題列(仿終端機視窗)*/}
-      <div className="flex flex-none items-center gap-2 border-b border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/55">
-        <span className="flex items-center gap-1.5">
-          <span className={`${dot} bg-rose-400/80`} />
-          <span className={`${dot} bg-amber-400/80`} />
-          <span className={`${dot} bg-emerald-400/80`} />
-        </span>
-        <Terminal className="ml-1 h-3.5 w-3.5" />
-        <span className="font-mono">
-          執行紀錄{iface ? ` · ${iface}` : ""}{endpoint ? ` · ${endpoint}` : ""}
-        </span>
-        {log?.captured_at && (
-          <span className="ml-auto font-mono text-white/35">
-            {new Date(log.captured_at).toLocaleTimeString()}
-          </span>
-        )}
-      </div>
-      {/* 內容 */}
-      <div
-        ref={ref}
-        className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap px-3 py-2 font-mono text-sm leading-relaxed text-emerald-300/90"
-      >
-        {log?.log_text?.trimEnd() || (
-          <span className="text-white/40">$ 測試執行中,等待探針輸出…</span>
-        )}
-      </div>
-    </div>
-  );
 }
 
 function Field({ label, value }: { label: string; value?: string }) {

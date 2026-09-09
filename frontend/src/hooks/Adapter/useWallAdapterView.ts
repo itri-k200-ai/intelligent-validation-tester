@@ -18,6 +18,14 @@ export type WallAdapterView = {
   interface: string | null;
   /** 該 DUT + 該介面的測項(跨 scenario 攤平);沒選介面則列全部。中牆用。 */
   testcases: AdapterTestcase[];
+  /**
+   * 同一批測項,但保留案例層級 —— 其他團隊是以**案例**為單位驅動的,
+   * 中牆的測試項目也照案例分組顯示(案例名 → 底下的測項)。
+   * 空案例(該介面下沒有測項)不會出現在這裡。
+   */
+  testcaseGroups: { scenarioId: string; scenarioName: string; testcases: AdapterTestcase[] }[];
+  /** 目前鎖定的案例名(選了案例、或正在跟隨某次執行時才有)。 */
+  scenarioName: string | null;
   /** 該 DUT 的全部測項(不分介面,去重)。右牆 DUT 層級統計用。 */
   allTestcases: AdapterTestcase[];
   /** 該 DUT 的案例集摘要(名稱 + 測項數)。右牆顯示。 */
@@ -73,10 +81,28 @@ export function useWallAdapterView(): WallAdapterView {
       )
     : allTestcases;
 
+  // 案例分組(套用與 testcases 相同的介面過濾),空的案例不列出
+  const testcaseGroups = scopedScenarios
+    .map((s) => ({
+      scenarioId: s.scenarioId,
+      scenarioName: s.scenarioName,
+      testcases: iface
+        ? s.testcaseList.filter((tc) =>
+            tc.testcaseName.toLowerCase().startsWith(iface.toLowerCase() + "."),
+          )
+        : s.testcaseList,
+    }))
+    .filter((g) => g.testcases.length > 0);
+
   const scenarios = scopedScenarios.map((s) => ({
     name: s.scenarioName,
     count: s.testcaseList.length,
   }));
+
+  // 跟隨外部執行時,案例名直接用該次執行的;否則看有沒有鎖定單一案例。
+  const scenarioName =
+    activeRun?.scenarioName ||
+    (scenarioId ? (scopedScenarios[0]?.scenarioName ?? null) : null);
 
   const selectedTestcase =
     (sel?.testcaseId && testcases.find((tc) => tc.testcaseId === sel.testcaseId)) || null;
@@ -89,6 +115,8 @@ export function useWallAdapterView(): WallAdapterView {
     followingRun: activeRun,
     interface: iface,
     testcases,
+    testcaseGroups,
+    scenarioName,
     allTestcases,
     scenarios,
     selectedTestcase,

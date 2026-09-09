@@ -12,6 +12,16 @@
 
 import { ricSourceBase, type RicSourceId } from "@/config/ricSources";
 
+/**
+ * 送出時的額外脈絡 —— 有些操作光靠扁平的字串參數組不出 body。
+ * 目前只有「驅動測試」需要:它以**案例**為單位,body 要帶該案例底下
+ * 全部測項的 id,而那份清單要查目錄才知道。
+ */
+export type OpContext = {
+  /** 目前選定案例底下的所有 testcaseId(依 testList 的順序)。 */
+  scenarioTestcaseIds?: string[];
+};
+
 export type AdapterOp = {
   /** 規格文件裡的測項編號,對照用 */
   no: number;
@@ -25,7 +35,7 @@ export type AdapterOp = {
   /** 這支需要哪些參數(佔位或 body 用) */
   needs?: ("scenarioId" | "testcaseId" | "runningId" | "dutName" | "name")[];
   /** 依參數組出 request body;回 undefined 代表不帶 body */
-  body?: (p: Record<string, string>) => unknown;
+  body?: (p: Record<string, string>, ctx?: OpContext) => unknown;
 };
 
 export const ADAPTER_OPS: AdapterOp[] = [
@@ -106,14 +116,19 @@ export const ADAPTER_OPS: AdapterOp[] = [
     body: (p) => [p.testcaseId],
   },
   {
+    // 驅動以**案例**為單位 —— 其他團隊的共通性測試平台是整個案例送過來,
+    // 不會單獨驅動一個測項,左螢幕的模擬器照這個行為模擬。adapter 的
+    // /autoTest/test 本來就收 testcaseList 陣列,送整包不需要改 tester。
     no: 15,
     group: "驅動與查詢",
-    label: "驅動測試",
+    label: "驅動測試(整個案例)",
     method: "POST",
     path: "/autoTest/test",
     errorCode: "0x110",
-    needs: ["testcaseId"],
-    body: (p) => ({ testcaseList: [{ testcaseId: p.testcaseId }] }),
+    needs: ["scenarioId"],
+    body: (_p, ctx) => ({
+      testcaseList: (ctx?.scenarioTestcaseIds ?? []).map((id) => ({ testcaseId: id })),
+    }),
   },
   {
     no: 21,
@@ -169,10 +184,11 @@ export async function runAdapterOp(
   source: RicSourceId,
   op: AdapterOp,
   params: Record<string, string>,
+  ctx?: OpContext,
 ): Promise<OpResult> {
   const path = op.path.replace(/\{(\w+)\}/g, (_, k: string) => params[k] ?? `{${k}}`);
   const url = ricSourceBase(source) + path;
-  const body = op.body?.(params);
+  const body = op.body?.(params, ctx);
   const started = performance.now();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);

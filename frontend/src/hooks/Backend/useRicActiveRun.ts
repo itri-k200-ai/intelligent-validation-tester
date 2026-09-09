@@ -32,6 +32,11 @@ export type RicActiveRun = {
   /** = adapter 的 scenarioId(projects.project_external_id) */
   scenarioId: string;
   scenarioName: string;
+  /**
+   * 這次執行用的套件 —— 中牆要靠它拿到「本次應該跑哪幾項」的完整名單
+   * (suite_items),而不是只看已經寫出判決的那幾筆。
+   */
+  suiteUuid: string;
   status: string;
   total: number;
   passed: number;
@@ -52,7 +57,13 @@ type RunRow = {
   run_finished_at: string;
   f_project_uuid: string;
 };
-type ProjRow = { project_uuid: string; project_name: string; project_external_id: string; f_dut_uuid: string };
+type ProjRow = {
+  project_uuid: string;
+  project_name: string;
+  project_external_id: string;
+  f_dut_uuid: string;
+  f_suite_uuid: string;
+};
 type DutRow = { dut_uuid: string; dut_name: string };
 
 const num = (v: unknown) => Number(v) || 0;
@@ -84,6 +95,7 @@ async function activeRunOf(source: RicSourceId): Promise<RicActiveRun | null> {
     dutName: dut?.dut_name ?? "",
     scenarioId: proj?.project_external_id ?? "",
     scenarioName: proj?.project_name ?? "",
+    suiteUuid: proj?.f_suite_uuid ?? "",
     status: latest.run_status,
     total: num(latest.run_total),
     passed: num(latest.run_passed),
