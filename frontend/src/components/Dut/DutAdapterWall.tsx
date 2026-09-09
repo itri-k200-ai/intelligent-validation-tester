@@ -113,22 +113,37 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
   const seqRow = itemRows[seqIdx];
   const seqCat = seqRow ? catalog.get(seqRow.code) : undefined;
 
-  // 依可用高度與實際列高,動態決定每頁項數(換頁而非捲動)。列高在執行中
-  // 會變高(多了結果說明),量測後每頁自動變少。
+  // 依可用高度與實際列高,動態決定每頁項數(換頁而非捲動)。
+  //
+  // ⚠ 這裡有一個會抖動的陷阱:每頁項數決定要渲染哪幾列,而量到的列高又
+  //   決定每頁項數 —— 執行中某一列多出「結果」說明變高 → 每頁變少 → 換
+  //   掉的那列不再被量到 → 量到的最大列高變矮 → 每頁又變多 → 無限來回,
+  //   畫面就一直在 1 項/2 項之間閃。
+  //
+  //   解法:記住「至今看過的最高列」,只增不減。列高只會往上收斂,每頁項數
+  //   就只會變少不會變多,一定收斂、不會抖。換 DUT / 介面 / 換一批測項時
+  //   才重設(見下方 useEffect)。
+  const maxRowRef = useRef(0);
   const fitPageSize = useCallback(() => {
     const el = listRef.current;
     if (!el) return;
     const rows = Array.from(el.children) as HTMLElement[];
     if (rows.length === 0) return;
     const gap = 6; // space-y-1.5 = 0.375rem
-    const maxRow = Math.max(...rows.map((r) => r.offsetHeight)) + gap;
-    const fit = Math.max(1, Math.floor((el.clientHeight + gap) / maxRow));
+    const tallest = Math.max(...rows.map((r) => r.offsetHeight));
+    if (tallest <= 0) return;
+    maxRowRef.current = Math.max(maxRowRef.current, tallest);
+    const fit = Math.max(1, Math.floor((el.clientHeight + gap) / (maxRowRef.current + gap)));
     setPageSize((prev) => (prev === fit ? prev : fit));
   }, []);
-  // 內容變動(執行中列高變化)時重新量測
+
+  // 內容變動時重新量測。刻意不把 itemRows 當相依 —— 它每次 render 都是新
+  // 陣列,會讓 effect 每次 render 都跑。改用「有哪些列、各自什麼狀態」的
+  // 簽章,真的變了才重量。
+  const rowsSignature = itemRows.map((r) => `${r.key}:${r.status}:${r.result ?? ""}`).join("|");
   useEffect(() => {
     fitPageSize();
-  }, [itemRows, fitPageSize]);
+  }, [rowsSignature, fitPageSize]);
   // 容器尺寸變動(視窗 / 牆模式)時重新量測
   useEffect(() => {
     const el = listRef.current;
@@ -159,9 +174,11 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
         )
       : 0;
 
-  // 換 DUT / 介面時回到第一頁
+  // 換 DUT / 介面時回到第一頁,並重設列高基準(不同批測項的列高不一樣,
+  // 沿用上一批的最高列會讓每頁項數偏少)
   useEffect(() => {
     setResPage(0);
+    maxRowRef.current = 0;
   }, [view.dutName, view.interface]);
 
   return (
