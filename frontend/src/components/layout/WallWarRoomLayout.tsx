@@ -27,6 +27,14 @@ import { WallSelectionStatus } from "./WallSelectionStatus";
  *
  * 在電視牆預覽下,主牆放畫面上方,兩個副牆「折」到下面並排。
  */
+/** 合作夥伴名單 —— 要增減改這裡即可。 */
+const PARTNERS = [
+  "Pegatron 和碩",
+  "Groundhog 現觀科",
+  "Auray 耀睿",
+  "NTUST 台灣科技大學",
+];
+
 export function WallWarRoomLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
   const { title, subtitle, accent } = getPageMeta(pathname);
@@ -122,23 +130,23 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
       {/* === 右副牆:實驗室概要 + page slots === */}
       <section className="war-room-right">
         <div className="war-room-lab-info">
-          {/* 右副牆頂端:跨三欄的置中標題。主牆掛「智慧網路實驗室」,
-              這面牆是它的簡介,所以標題是「智慧網路實驗室簡介」。 */}
+          {/* 右副牆頂端:跨三欄的置中標題。主牆掛「智慧網路」,
+              這面牆是它的簡介,所以標題是「智慧網路簡介」。 */}
           <div className="war-room-lab-title">
-            <div className="war-room-lab-title-text">智慧網路實驗室簡介</div>
+            <div className="war-room-lab-title-text">智慧網路簡介</div>
           </div>
           {/* 上排:3 格,各占一個 TV 螢幕寬 */}
           <div className="war-room-lab-top war-room-lab-top--intro">
             <img
               src="/images/%E6%99%BA%E6%85%A7%E7%B6%B2%E8%B7%AF%E5%AF%A6%E9%A9%97%E5%AE%A4LOGO-nobg.png"
-              alt="智慧網路實驗室 logo"
+              alt="智慧網路 logo"
               className="war-room-lab-intro-logo"
             />
             <div className="war-room-lab-intro-text">
-              <h3 className="war-room-lab-intro-title">智慧網路實驗室</h3>
+              <h3 className="war-room-lab-intro-title">智慧網路</h3>
               <p className="war-room-lab-intro-desc">
-                專注於 O-RAN 開放網路架構驗證、xApp / rApp 智慧應用測試,
-                以及多廠商互通與場域整合驗測。
+                自動化驗測平台:SMO / RIC 介面測試、xApp / rApp 效能測試,
+                提供室內外及虛擬場域實測。
               </p>
             </div>
           </div>
@@ -151,8 +159,8 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
             <div className="war-room-lab-icon-text">
               <h3 className="war-room-lab-icon-title">測試目標</h3>
               <p className="war-room-lab-icon-desc">
-                完成 O-RAN 各介面(O1 / A1 / E2 / F1)互通性、效能與韌性驗證,
-                確保多廠商設備在實驗場域整合無虞。
+                依據 3GPP 標準驗測 SMO / RIC 介面與 xApp / rApp 效能,自動化產出
+                驗測報告,加速智慧網路技術落地。
               </p>
             </div>
           </div>
@@ -164,10 +172,7 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
             />
             <div className="war-room-lab-icon-text">
               <h3 className="war-room-lab-icon-title">合作夥伴</h3>
-              <p className="war-room-lab-icon-desc">
-                聯合國內外電信業者、O-RAN 開源社群與 xApp / rApp 開發團隊,
-                共同推動標準導向的網路驗證生態。
-              </p>
+              <p className="war-room-lab-icon-desc">{PARTNERS.join("、")}</p>
             </div>
           </div>
           {/* 下半部:3 個高長條(各跨 2 row)。右副牆是靜態說明牆 ——
