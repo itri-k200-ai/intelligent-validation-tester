@@ -2,7 +2,6 @@
 import { useState } from "react";
 
 import { RIC_SOURCES, type RicSourceId } from "@/config/ricSources";
-import { selectionService } from "@/services";
 import {
   ADAPTER_OPS,
   runAdapterOp,
@@ -89,11 +88,11 @@ export function WallLeftSimulator({ embedded = false }: { embedded?: boolean }) 
   const [runIds, setRunIds] = useState<string[]>([]);
 
   /**
-   * 改參數。dutName / scenarioId / testcaseId 這三個同時也是「中牆要顯示
-   * 什麼」的識別,所以一改就寫進 selection —— 中牆立刻跟著換,不用等到
-   * 驅動測試。其餘欄位(名稱、執行 ID)只是 request 參數,不同步。
+   * 改參數。這裡純粹是 request 參數 —— 這個畫面等同 Postman,只負責把請求
+   * 打進 tester adapter,**不會影響中牆顯示什麼**。中牆是自己去 RICtester
+   * back_end 撈「現在有沒有測試在跑」來決定畫面(見 useRicActiveRun),
+   * 與這個模擬器完全脫鉤:別的團隊直接打 API 驅動時,牆一樣會跟過去。
    */
-  const VIEW_KEYS = ["dutName", "scenarioId", "testcaseId"];
   const setParam = (k: string, v: string) => {
     setParams((prev) => {
       const next = { ...prev, [k]: v };
@@ -104,25 +103,9 @@ export function WallLeftSimulator({ embedded = false }: { embedded?: boolean }) 
       } else if (k === "scenarioId") {
         next.testcaseId = "";
       }
-      if (VIEW_KEYS.includes(k)) syncView(next);
+      if (k === "dutName") setViewing(v);
       return next;
     });
-  };
-
-  /** 把目前的檢視選擇寫進 IVT selection(中牆訂閱這個)。 */
-  const syncView = (p: Record<string, string>) => {
-    if (!p.dutName) return;
-    setViewing(p.dutName);
-    void selectionService
-      .setSelection({
-        source,
-        dutName: p.dutName,
-        ...(p.scenarioId ? { scenarioId: p.scenarioId } : {}),
-        ...(p.testcaseId ? { testcaseId: p.testcaseId } : {}),
-        href: `/interface-validation/${source === "near" ? "near-rt-ric" : "non-rt-ric"}`,
-        label: p.dutName,
-      })
-      .catch(() => {});
   };
 
   /**
@@ -146,31 +129,17 @@ export function WallLeftSimulator({ embedded = false }: { embedded?: boolean }) 
     // 取得測試案例 → 存成目錄,下面的 ID 欄位就能改用下拉挑選
     if (op.no === 1) setCatalog(res.ok ? catalogFrom(res.full) : []);
 
-    // 驅動測試成功 → 把 runningId 帶回,並寫進 selection 讓中牆接手輪詢。
+    // 驅動測試成功 → 把回傳的 runningId 帶進「執行 ID」欄,方便接著查狀態
+    // 與結果。**不寫 selection** —— 中牆是自己去 back_end 撈執行狀態的,
+    // 不靠這個畫面通知,別的團隊直接打 API 時行為才會一致。
     if (op.no === 15 && res.ok) {
       try {
         const data = JSON.parse(res.full);
-        const list: { testCaseId?: string; testcaseId?: string; runningId: string }[] =
-          data.testProject ?? [];
-        const runnings = list.map((p) => ({
-          testcaseId: p.testCaseId ?? p.testcaseId ?? "",
-          runningId: p.runningId,
-        }));
-        const ids = runnings.map((r) => r.runningId).filter(Boolean);
+        const list: { runningId: string }[] = data.testProject ?? [];
+        const ids = list.map((p) => p.runningId).filter(Boolean);
         if (ids.length) {
           setRunIds((prev) => [...new Set([...ids, ...prev])].slice(0, 20));
           setParam("runningId", ids[0]);
-        }
-        if (runnings.length) {
-          await selectionService
-            .setSelection({
-              source,
-              // 中牆的測試項目是以案例分組顯示的,要知道跑的是哪一個案例
-              ...(params.scenarioId ? { scenarioId: params.scenarioId } : {}),
-              runnings,
-              runStartedAt: new Date().toISOString(),
-            })
-            .catch(() => {});
         }
       } catch {
         /* 回應格式不如預期就只顯示原始內容 */

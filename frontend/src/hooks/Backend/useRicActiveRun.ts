@@ -17,12 +17,11 @@ import { ricRead } from "@/services/Backend/ricBackendService";
  *          f_dut_uuid          → registry/duts → DUT 名稱
  *   oracle/case_results        逐項判決(顯示用,由 useRicRunCases 另外抓)
  *
- * 行為:有執行在跑就自動跟過去顯示;結束後再等一小段時間(讓現場看得到
- * 判決)才放手,回到左螢幕手動選的目標。
+ * 行為:一律回報「最近一次執行」,跑完之後也不放手 —— 牆上要停在那次的
+ * 判決,直到下一次被驅動為止。中牆與左螢幕已經脫鉤,沒有「該回去顯示什麼」
+ * 的目標,結束後切回總覽只會讓現場看不到剛跑完的結果。
  */
 
-/** 執行結束後仍然「跟著看」的時間 —— 讓現場來得及看到判決。 */
-const HOLD_AFTER_FINISH_MS = 90_000;
 const POLL_MS = 5_000;
 
 export type RicActiveRun = {
@@ -79,8 +78,6 @@ async function activeRunOf(source: RicSourceId): Promise<RicActiveRun | null> {
   // 最近一筆(以開始時間排序);跑完太久就不跟了
   const latest = [...runs].sort((a, b) => ms(b.run_started_at) - ms(a.run_started_at))[0];
   const live = latest.run_status === "running";
-  const finishedAgo = Date.now() - ms(latest.run_finished_at || latest.run_started_at);
-  if (!live && finishedAgo > HOLD_AFTER_FINISH_MS) return null;
 
   const [projects, duts] = await Promise.all([
     ricRead<ProjRow>("registry", "projects", { project_uuid: latest.f_project_uuid }, source),
