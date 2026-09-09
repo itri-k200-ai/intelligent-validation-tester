@@ -1,14 +1,18 @@
 "use client";
-import { CheckCircle2, Maximize2, Pause, Play, Video, Volume2, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CheckCircle2, Maximize2, Pause, Play, Terminal, Video, Volume2, XCircle } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import type { WallAdapterView } from "@/hooks/Adapter/useWallAdapterView";
 import { useAdapterRun, type RunItemState } from "@/hooks/Adapter/useAdapterRun";
-import { useRicCameras } from "@/hooks/Backend/useRicCameras";
+import { useIvtCameras } from "@/hooks/Backend/useIvtCameras";
 import { useRicDutDetail } from "@/hooks/Backend/useRicDutDetail";
+import { useRicProbeLog, type RicProbeLog } from "@/hooks/Backend/useRicProbeLog";
+import { ricBackend } from "@/services/Backend/ricBackendService";
 import { useRicTestcaseCatalog } from "@/hooks/Backend/useRicTestcaseCatalog";
 import { HlsPlayer } from "@/components/Site/HlsPlayer";
+import { bi, pickLocale } from "@/lib/bilingual";
+import { useLocale } from "@/stores/localeStore";
 
 // ── 中牆三帶:即時環境影像 | 測試過程 | 測試結果 ─────────────────────────
 // 中牆 = 動態戰情(跑什麼、結果如何);測項清單(靜態)在右牆。
@@ -16,41 +20,85 @@ import { HlsPlayer } from "@/components/Site/HlsPlayer";
 // 廣播 runnings(其他分頁)+ 更新本分頁 store → 輪詢顯示。
 export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
   const run = useAdapterRun();
-  const { cameras } = useRicCameras();
+  const { cameras } = useIvtCameras();
   const { catalog } = useRicTestcaseCatalog(view.source ?? undefined);
   const [procPage, setProcPage] = useState(0);
   const [resPage, setResPage] = useState(0);
+  // 測試項目清單:量測可用高度 + 最高列高 → 動態算每頁項數(換頁,不捲動)。
+  // 執行中列變高(多了結果說明)時,每頁自動變少、出現換頁。
+  const listRef = useRef<HTMLDivElement>(null);
+  const [pageSize, setPageSize] = useState(ITEM_PAGE_SIZE);
+  // 探針原始 stdout:選了介面 → 該介面端點;沒選 → 該 DUT 全部端點。
+  const { detail } = useRicDutDetail(view.dutName);
+  const ifaceEndpoint = detail.endpoints.find(
+    (e) => e.dut_endpoint_interface === (view.interface ?? "").toLowerCase(),
+  )?.dut_endpoint_address;
+  const probeEndpoints = ifaceEndpoint
+    ? [ifaceEndpoint]
+    : detail.endpoints.map((e) => e.dut_endpoint_address);
+  // 探針 log:run.active 才顯示(執行前空);只顯示「本次執行後才出現」的新 log
+  // —— 用執行當下記下的基準 uuid 分辨,不靠時鐘。
+  const { log: probeLog } = useRicProbeLog(probeEndpoints, {
+    enabled: run.active,
+    baselineUuid: run.baselineLogUuid,
+  });
 
   // 中牆是純顯示 —— 測試由左螢幕直接呼叫該套 tester adapter 的 API 觸發,
   // 再把 runnings 寫進 IVT 的 selection;這裡只讀 selection 並輪詢狀態/判決。
   // runningId → 測項名稱(顯示用)
   const nameById = new Map(view.testcases.map((tc) => [tc.testcaseId, tc.testcaseName]));
-  const finished = run.items.filter(
-    (i) => i.status === "finished" || i.status === "error",
-  ).length;
 
-  // 過程清單:執行前就先列出本次會跑的測項(未執行),執行後接輪詢狀態。
-  const procItems: ProcItem[] = run.active
+  // 測試項目清單:執行前先列出本次要測的項目(未執行),執行後同一份接上
+  // 各項的狀態 / 進度 / 通過判決。
+  const itemRows: ItemRow[] = run.active
     ? run.items.map((i) => ({
         key: i.runningId || i.testcaseId,
-        name: nameById.get(i.testcaseId) ?? i.testcaseId,
+        code: nameById.get(i.testcaseId) ?? i.testcaseId,
         status: i.status,
         progress: i.progress,
+        result: i.result,
+        resultDescription: i.resultDescription,
       }))
     : view.testcases.map((tc) => ({
         key: tc.testcaseId,
-        name: tc.testcaseName,
+        code: tc.testcaseName,
         status: "idle" as const,
         progress: null,
+        result: null,
+        resultDescription: "",
       }));
+  const totalItemPages = Math.max(1, Math.ceil(itemRows.length / pageSize));
+  const safePage = Math.min(resPage, totalItemPages - 1);
+  const pagedItems = itemRows.slice(safePage * pageSize, (safePage + 1) * pageSize);
 
-  const totalProcPages = Math.max(1, Math.ceil(procItems.length / PAGE_SIZE));
-  const pagedProc = procItems.slice(procPage * PAGE_SIZE, (procPage + 1) * PAGE_SIZE);
-  const totalResPages = Math.max(1, Math.ceil(run.items.length / RES_PAGE_SIZE));
-  const pagedResults = run.items.slice(
-    resPage * RES_PAGE_SIZE,
-    (resPage + 1) * RES_PAGE_SIZE,
-  );
+  // 依可用高度與實際列高,動態決定每頁項數(換頁而非捲動)。列高在執行中
+  // 會變高(多了結果說明),量測後每頁自動變少。
+  const fitPageSize = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const rows = Array.from(el.children) as HTMLElement[];
+    if (rows.length === 0) return;
+    const gap = 8; // space-y-2 = 0.5rem
+    const maxRow = Math.max(...rows.map((r) => r.offsetHeight)) + gap;
+    const fit = Math.max(1, Math.floor((el.clientHeight + gap) / maxRow));
+    setPageSize((prev) => (prev === fit ? prev : fit));
+  }, []);
+  // 內容變動(執行中列高變化)時重新量測
+  useEffect(() => {
+    fitPageSize();
+  }, [itemRows, fitPageSize]);
+  // 容器尺寸變動(視窗 / 牆模式)時重新量測
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => fitPageSize());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fitPageSize]);
+  // 頁數變少時把當前頁夾回範圍
+  useEffect(() => {
+    if (resPage > totalItemPages - 1) setResPage(totalItemPages - 1);
+  }, [totalItemPages, resPage]);
 
   // 整體進度:完成/錯誤算 100%,執行中算該項 progress
   const overallPct =
@@ -69,15 +117,8 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
         )
       : 0;
 
-  // 執行中自動翻到目前項目那一頁
-  const runningIdx = run.items.findIndex((i) => i.status === "running");
-  useEffect(() => {
-    if (run.active && runningIdx >= 0) setProcPage(Math.floor(runningIdx / PAGE_SIZE));
-  }, [run.active, runningIdx]);
-
   // 換 DUT / 介面時回到第一頁
   useEffect(() => {
-    setProcPage(0);
     setResPage(0);
   }, [view.dutName, view.interface]);
 
@@ -86,11 +127,11 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
       {/* 左帶:即時環境影像(位置不動;來源 = RICtester cameras + mediamtx HLS)*/}
       <div className="dut-wall-band dut-wall-band--env">
         <div className="dut-wall-band-title">
-          即時環境影像{cameras[0] ? ` — ${cameras[0].camera_name}` : ""}
+          即時環境影像{cameras[0] ? ` — ${cameras[0].name}` : ""}
         </div>
         <div className="dut-wall-band-body">
-          {cameras[0] ? (
-            <HlsPlayer src={`/hls/${cameras[0].camera_uuid}/index.m3u8`} />
+          {cameras[0]?.hls_url ? (
+            <HlsPlayer src={cameras[0].hls_url} />
           ) : (
             <div className="video-placeholder">
               <div className="video-screen">
@@ -116,15 +157,17 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
         </div>
       </div>
 
-      {/* 右側兩帶:過程 | 結果 */}
+      {/* 右側兩帶:測試結果 | 探針日誌 */}
       <div className="dut-wall-band dut-wall-band--status dut-wall-band--merged">
         <div className="dut-wall-band-split">
-          {/* 測試過程:執行前就列出本次會跑的測項;執行鈕在右上角 */}
+          {/* 測試項目:執行前列出待測項;執行後同一份接上狀態/進度/判決 */}
           <section>
             <div className="dut-wall-band-title flex items-center justify-between gap-3">
               <span>
-                測試過程
-                {run.active ? `（${finished}/${run.items.length} 完成）` : ""}
+                測試項目
+                {run.active
+                  ? ` — 通過 ${run.passed} / 失敗 ${run.failed} / 共 ${run.items.length}`
+                  : ` — 共 ${view.testcases.length} 項`}
               </span>
               {/* 中牆不觸發測試 —— 由左螢幕或其他團隊的平台驅動,這裡只顯示狀態。
                   跟隨外部執行時標示出來,現場才知道畫面為什麼自己換了。 */}
@@ -157,62 +200,34 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
                 )}
               </div>
             </div>
-            <div className="dut-wall-band-body">
-              <div className="flex h-full flex-col">
-                <div className="flex-1 space-y-2 p-1">
-                  {pagedProc.map((i) => (
-                    <div
-                      key={i.key}
-                      className="flex items-center gap-3 rounded-item border border-white/10 px-3 py-2"
-                    >
-                      <StatusDot status={i.status} />
-                      <span className="font-mono text-sm">{i.name}</span>
-                      <span className="min-w-0 truncate text-xs text-white/40">
-                        {catalog.get(i.name)?.testcase_procedure}
-                      </span>
-                      <span className="ml-auto flex-none text-xs text-white/50">
-                        {i.status === "running" && i.progress != null
-                          ? `${i.progress}%`
-                          : STATUS_LABEL[i.status]}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <Pager page={procPage} total={totalProcPages} onChange={setProcPage} />
-              </div>
-            </div>
-          </section>
-
-          {/* 測試結果 */}
-          <section>
-            <div className="dut-wall-band-title">
-              測試結果
-              {run.active
-                ? ` — 通過 ${run.passed} / 失敗 ${run.failed} / 共 ${run.items.length}`
-                : ""}
-            </div>
-            <div className="dut-wall-band-body">
-              {!run.active ? (
-                <p className="p-2 text-sm text-white/40">執行後顯示逐項判決</p>
+            <div className="dut-wall-band-body min-h-0">
+              {itemRows.length === 0 ? (
+                <p className="p-2 text-sm text-white/40">此介面尚無測試項目</p>
               ) : (
                 <div className="flex h-full min-h-0 flex-col">
-                  <div className="min-h-0 flex-1 space-y-2 overflow-hidden p-1">
-                    {pagedResults.map((i) => {
-                      const code = nameById.get(i.testcaseId) ?? i.testcaseId;
-                      const cat = catalog.get(code);
+                  <div ref={listRef} className="min-h-0 flex-1 space-y-2 overflow-hidden p-1">
+                    {pagedItems.map((it) => {
+                      const cat = catalog.get(it.code);
                       return (
                         <div
-                          key={i.runningId || i.testcaseId}
+                          key={it.key}
                           className="rounded-item border border-white/10 bg-white/[0.03] px-3 py-2"
                         >
-                          {/* 測項代碼 + 程序名 + 判決 */}
+                          {/* 狀態燈 + 測項代碼 + 程序名 + 進度/判決 */}
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-sm">{code}</span>
-                            <span className="truncate text-xs text-white/50">
+                            <StatusDot status={it.status} result={it.result} />
+                            <span className="font-mono text-sm">{it.code}</span>
+                            <span className="min-w-0 truncate text-xs text-white/50">
                               {cat?.testcase_procedure}
                             </span>
                             <span className="ml-auto flex-none">
-                              <VerdictPill item={i} />
+                              {it.result ? (
+                                <VerdictPill result={it.result} />
+                              ) : (
+                                <span className="text-sm text-white/50">
+                                  {STATUS_LABEL[it.status]}
+                                </span>
+                              )}
                             </span>
                           </div>
                           {/* 這項在驗什麼(型錄中文通過條件) */}
@@ -221,10 +236,10 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
                               通過條件:{cat.testcase_pass_criteria}
                             </div>
                           )}
-                          {/* 本次執行的結果說明(失敗原因) */}
-                          {i.resultDescription && (
+                          {/* 執行後的結果說明(失敗原因)*/}
+                          {it.resultDescription && (
                             <div className="mt-0.5 text-xs text-white/60">
-                              結果:{i.resultDescription}
+                              結果:{it.resultDescription}
                             </div>
                           )}
                         </div>
@@ -232,9 +247,27 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
                     })}
                   </div>
                   <div className="flex-none">
-                    <Pager page={resPage} total={totalResPages} onChange={setResPage} />
+                    <Pager page={safePage} total={totalItemPages} onChange={setResPage} />
                   </div>
                 </div>
+              )}
+            </div>
+          </section>
+
+          {/* 探針日誌:執行後才顯示,只採用本次 run 的原始 stdout(執行前清空)*/}
+          <section>
+            <div className="dut-wall-band-title">執行紀錄</div>
+            <div className="dut-wall-band-body min-h-0">
+              {run.active ? (
+                <div className="h-full min-h-0 w-full">
+                  <ProbeConsole
+                    log={probeLog}
+                    iface={view.interface}
+                    endpoint={ifaceEndpoint}
+                  />
+                </div>
+              ) : (
+                <p className="p-2 text-sm text-white/40">執行後顯示探針輸出</p>
               )}
             </div>
           </section>
@@ -277,24 +310,25 @@ function Pager({
   );
 }
 
-// 每頁顯示的測項數(清單超過就出現上/下頁)
-const PAGE_SIZE = 7;
-// 結果卡片含通過條件/說明多行 + 放大判決 icon,每頁 4 項留空間給分頁列
-const RES_PAGE_SIZE = 4;
+// 測試項目卡片含通過條件/結果說明多行,每頁 5 項留空間給分頁列
+const ITEM_PAGE_SIZE = 5;
 // 右牆各介面統計的顯示順序
 const SLOT_IFACE_ORDER = ["E2", "A1", "O1"];
 // 右牆「測試能力」展開清單:每頁測項數
 const EXPAND_PAGE_SIZE = 6;
 
-type ProcStatus = RunItemState["status"] | "idle";
-type ProcItem = {
+// 測試項目清單一列(執行前=idle 待測,執行後=帶狀態/進度/判決)
+type ItemStatus = RunItemState["status"] | "idle";
+type ItemRow = {
   key: string;
-  name: string;
-  status: ProcStatus;
+  code: string;
+  status: ItemStatus;
   progress: number | null;
+  result: RunItemState["result"];
+  resultDescription: string;
 };
 
-const STATUS_LABEL: Record<ProcStatus, string> = {
+const STATUS_LABEL: Record<ItemStatus, string> = {
   idle: "未執行",
   pending: "等待中",
   running: "執行中",
@@ -302,28 +336,39 @@ const STATUS_LABEL: Record<ProcStatus, string> = {
   error: "錯誤",
 };
 
-function StatusDot({ status }: { status: ProcStatus }) {
-  // 規範 10 State:Normal #80FFE8 / Error #FF5F5A / Warning #FFC56B
+// 狀態燈:有判決時依 pass/fail 上色,否則依執行狀態。
+// 顏色走規範 10 State:Normal #80FFE8 / Error #FF5F5A。
+function StatusDot({
+  status,
+  result,
+}: {
+  status: ItemStatus;
+  result?: RunItemState["result"];
+}) {
   const cls =
-    status === "finished"
+    result === "passed"
       ? "bg-mint"
-      : status === "running"
-        ? "bg-teal animate-pulse"
-        : status === "error"
-          ? "bg-danger"
-          : "bg-white/30";
+      : result === "failed" || result === "error"
+        ? "bg-danger"
+        : status === "finished"
+          ? "bg-mint"
+          : status === "running"
+            ? "bg-teal animate-pulse"
+            : status === "error"
+              ? "bg-danger"
+              : "bg-white/30";
   return <span className={`inline-block h-2.5 w-2.5 flex-none rounded-full ${cls}`} />;
 }
 
-function VerdictPill({ item }: { item: RunItemState }) {
-  if (item.result === "passed")
+function VerdictPill({ result }: { result: RunItemState["result"] }) {
+  if (result === "passed")
     return (
       <span className="flex items-center gap-2 font-semibold text-mint">
         <CheckCircle2 className="h-9 w-9" strokeWidth={2.2} />
         <span>通過</span>
       </span>
     );
-  if (item.result === "failed" || item.result === "error")
+  if (result === "failed" || result === "error")
     return (
       <span className="flex items-center gap-2 font-semibold text-danger">
         <XCircle className="h-9 w-9" strokeWidth={2.2} />
@@ -337,9 +382,14 @@ function VerdictPill({ item }: { item: RunItemState }) {
 // 右牆 = DUT 整體檔案:換介面「不」跟著變(介面層級的內容歸中牆),
 // 只用當前介面做視覺高亮,避免與中牆重複。
 export function useAdapterDutInfoSlots(view: WallAdapterView) {
-  const { dutName, source, interface: iface, allTestcases, scenarios } = view;
-  const { detail } = useRicDutDetail(dutName, source ?? undefined);
+  const { dutName, interface: iface, allTestcases, scenarios } = view;
+  const { detail } = useRicDutDetail(dutName);
   const dut = detail.dut;
+  const locale = useLocale();
+  // 右牆 DUT 標題:back_end 雙語(dut_name_en/_zh)優先,fallback adapter 識別碼
+  const dutTitle = dut
+    ? pickLocale(bi(dut.dut_name_en, dut.dut_name_zh || dut.dut_name), locale)
+    : dutName;
   // 「測試能力」點開某介面 → 展開該介面的測項清單(分頁;再點收合)
   const [openIface, setOpenIface] = useState<string | null>(null);
   const [exPage, setExPage] = useState(0);
@@ -377,7 +427,7 @@ export function useAdapterDutInfoSlots(view: WallAdapterView) {
     dut: (
       <div className="flex h-full w-full min-w-0 flex-col gap-3 overflow-hidden p-2 text-white">
         <div className="text-sm uppercase tracking-widest text-white/50">受測物</div>
-        <div className="text-3xl font-semibold">{dut?.dut_name ?? dutName ?? "—"}</div>
+        <div className="text-3xl font-semibold">{dutTitle ?? "—"}</div>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <Field label="類型" value={dut?.dut_kind} />
           <Field label="狀態" value={dut?.dut_status} />
@@ -509,6 +559,53 @@ export function useAdapterDutInfoSlots(view: WallAdapterView) {
       </div>
     ),
   };
+}
+
+// 終端機風格的探針日誌框：深色、等寬字、自動捲到底,像 command line 在跑。
+function ProbeConsole({
+  log,
+  iface,
+  endpoint,
+}: {
+  log: RicProbeLog | null;
+  iface: string | null;
+  endpoint?: string | null;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+  }, [log?.log_text]);
+  const dot = "inline-block h-2.5 w-2.5 rounded-full";
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-item border border-white/15 bg-black/70">
+      {/* 標題列(仿終端機視窗)*/}
+      <div className="flex flex-none items-center gap-2 border-b border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/55">
+        <span className="flex items-center gap-1.5">
+          <span className={`${dot} bg-rose-400/80`} />
+          <span className={`${dot} bg-amber-400/80`} />
+          <span className={`${dot} bg-emerald-400/80`} />
+        </span>
+        <Terminal className="ml-1 h-3.5 w-3.5" />
+        <span className="font-mono">
+          執行紀錄{iface ? ` · ${iface}` : ""}{endpoint ? ` · ${endpoint}` : ""}
+        </span>
+        {log?.captured_at && (
+          <span className="ml-auto font-mono text-white/35">
+            {new Date(log.captured_at).toLocaleTimeString()}
+          </span>
+        )}
+      </div>
+      {/* 內容 */}
+      <div
+        ref={ref}
+        className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap px-3 py-2 font-mono text-sm leading-relaxed text-emerald-300/90"
+      >
+        {log?.log_text?.trimEnd() || (
+          <span className="text-white/40">$ 測試執行中,等待探針輸出…</span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function Field({ label, value }: { label: string; value?: string }) {

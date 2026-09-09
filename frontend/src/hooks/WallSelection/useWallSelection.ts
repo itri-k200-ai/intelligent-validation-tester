@@ -2,14 +2,22 @@
 import { useEffect, useRef } from "react";
 
 import { selectionService } from "@/services";
+import {
+  WALL_SELECTION_CHANNEL,
+  mockSelectionService,
+} from "@/services/Selection/mockSelectionService";
 import { useWallSelectionStore, type WallSelection } from "@/stores/wallSelectionStore";
+
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
+
+type SelectionMessage = { type: "selection_changed"; payload: WallSelection | null };
 
 /**
  * 牆的選擇同步(左螢幕 → 中牆)。
- *
- * 走 IVT 後端的共享狀態:左螢幕 POST /api/selection/current/ 寫入(存 Redis),
- * 後端再經 Channels 廣播到 /ws/selection/,中牆即時收到。跟 BroadcastChannel
- * 不同,這條可以跨瀏覽器、跨機器 —— 三面牆放三台播放主機也能連動。
+ * - mock(單機 demo):BroadcastChannel + localStorage,同瀏覽器跨分頁即時。
+ * - real(正式/跨電腦):左螢幕 POST /api/selection/current/ 寫入(存 Redis),
+ *   後端再經 Channels 廣播到 /ws/selection/,中牆即時收到。別團隊的左 app
+ *   打同一支 API 也一樣連動 —— 三面牆放三台播放主機也沒問題。
  *
  * 中牆固定停在 /wall,**不做路由導航** —— 收到的 selection 只是「要顯示哪種
  * 內容」,由 /wall 頁面自己切換渲染。
@@ -34,6 +42,20 @@ export function useWallSelection() {
 
   useEffect(() => {
     closedRef.current = false;
+
+    // ── mock:BroadcastChannel(同一個瀏覽器內)──
+    if (USE_MOCK) {
+      setConnected(true);
+      mockSelectionService
+        .current()
+        .then((p) => p && setSelection(p as WallSelection))
+        .catch(() => {});
+      const ch = new BroadcastChannel(WALL_SELECTION_CHANNEL);
+      ch.onmessage = (ev) => setSelection((ev.data as WallSelection) ?? null);
+      return () => ch.close();
+    }
+
+    // ── real:後端共享狀態 + WebSocket ──
     let sock: WebSocket | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -54,10 +76,8 @@ export function useWallSelection() {
       sock.onopen = () => setConnected(true);
       sock.onmessage = (ev) => {
         try {
-          const msg = JSON.parse(ev.data);
-          if (msg?.type === "selection_changed") {
-            setSelection((msg.payload as WallSelection) ?? null);
-          }
+          const msg = JSON.parse(ev.data) as SelectionMessage;
+          if (msg.type === "selection_changed") setSelection(msg.payload ?? null);
         } catch {
           /* 忽略無法解析的訊息 */
         }

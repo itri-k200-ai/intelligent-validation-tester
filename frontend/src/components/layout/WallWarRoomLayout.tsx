@@ -69,8 +69,9 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
             {subtitle && (
               <div className="war-room-main-subtitle-text text-white/60">{subtitle}</div>
             )}
-            {/* 標題下方的「專案:XXX」—— 原本是 main 裡的獨立橫幅,依規格圖搬上來 */}
-            <WallSelectionStatus />
+            {/* 標題下方的「專案:XXX」—— 原本是 main 裡的獨立橫幅,依規格圖搬上來。
+                總覽頁不顯示(它不是被左螢幕選出來的檢視)。 */}
+            {!pathname.startsWith("/overview") && <WallSelectionStatus />}
           </div>
           <div className="war-room-main-topbar-actions">
             {isWall && (

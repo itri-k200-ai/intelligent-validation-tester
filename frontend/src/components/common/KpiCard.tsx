@@ -21,10 +21,10 @@ export function KpiCard({ label, value, hint, tone = "blue" }: Props) {
       data-component="kpi-card"
       className={cn(tones[tone], "kpi-card")}
     >
-      <CardContent className="p-4 md:p-6 kpi-card-body">
+      <CardContent className="p-3 md:p-4 kpi-card-body">
         <p className="text-xs md:text-sm text-white/60 kpi-card-label">{label}</p>
-        <p className="text-2xl md:text-3xl font-semibold mt-1 kpi-card-value">{value}</p>
-        {hint && <p className="text-xs text-white/40 mt-1">{hint}</p>}
+        <p className="text-xl md:text-2xl font-semibold mt-0.5 kpi-card-value">{value}</p>
+        {hint && <p className="text-xs text-white/40 mt-0.5">{hint}</p>}
       </CardContent>
     </Card>
   );

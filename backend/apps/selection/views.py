@@ -30,7 +30,6 @@ from apps.duts.models import Dut
 
 from . import state
 from .broadcast import broadcast_selection
-from .permissions import HasServiceTokenOrAdmin
 
 
 # 左螢幕可以帶、且會原樣保留的 RICtester 識別欄位。
@@ -56,9 +55,9 @@ def _to_card(dut: Dut) -> dict:
 
 
 class CatalogView(APIView):
-    """我們提供「有哪些可測項目」給左 app。"""
+    """我們提供「有哪些可測項目」給左 app。內網部署:公開。"""
 
-    permission_classes = [HasServiceTokenOrAdmin]
+    permission_classes = [AllowAny]
 
     def get(self, request):
         duts = Dut.objects.all().order_by("type", "name")
@@ -67,9 +66,7 @@ class CatalogView(APIView):
 
 class CurrentSelectionView(APIView):
     def get_permissions(self):
-        # 讀取(中/右牆補水)公開;寫入(左 app 回報)要服務金鑰。
-        if self.request.method == "POST":
-            return [HasServiceTokenOrAdmin()]
+        # 內網部署:讀寫皆公開,左 app 直接打 POST 切換,不需服務金鑰。
         return [AllowAny()]
 
     def get(self, request):
@@ -79,20 +76,28 @@ class CurrentSelectionView(APIView):
         href = request.data.get("href")
         dut_id = request.data.get("dutId")
 
+        dut_name = request.data.get("dutName")
+
+        # 需要至少一種選擇識別:href(導覽)/ dutId(IVT)/ dutName(RICtester)
+        if href is not None and (not isinstance(href, str) or not href.startswith("/")):
+            return Response(
+                {"detail": "href 必須是以 / 開頭的路徑。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not (href or dut_id or dut_name):
+            return Response(
+                {"detail": "需要 href / dutId / dutName 其中之一。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 導覽路徑:帶 href(要顯示哪一種內容)+ 可選的 label / dutId
         if href:
-            if not isinstance(href, str) or not href.startswith("/"):
-                return Response(
-                    {"detail": "href 必須是以 / 開頭的路徑。"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            selection = {
-                "href": href,
-                "label": request.data.get("label", ""),
-            }
-            # 選單點的是某台 DUT 時,一併帶 dutId → 中牆導航後自動選中那台。
+            selection = {"href": href, "label": request.data.get("label", "")}
+            # 選單點的是某台 DUT 時一併帶 dutId → 中牆渲染後自動選中那台。
             if dut_id:
                 selection["dutId"] = dut_id
-        elif dut_id:
+        # 舊路徑:只給 dutId(IVT DUT)→ 補上身分卡片欄位
+        elif dut_id and not dut_name:
             try:
                 dut = Dut.objects.get(id=dut_id)
             except (Dut.DoesNotExist, ValueError, DjangoValidationError):
@@ -101,15 +106,12 @@ class CurrentSelectionView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
             selection = _to_card(dut)
-        elif any(k in request.data for k in WALL_FIELDS):
+        else:
             # 只更新 RICtester 識別(例如同一頁內換介面 / 回填 runnings),
             # 沿用目前的 href / label,不強迫左端每次都重帶。
+            # 上面已驗證至少帶了 href / dutId / dutName 其中之一,所以走到這裡
+            # 一定是 dutName 或其他識別欄位。
             selection = dict(state.get_current() or {})
-        else:
-            return Response(
-                {"detail": "需要 href、dutId,或至少一個 RICtester 識別欄位。"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
         # RICtester 識別欄位原樣帶過(白名單,避免左端塞任意內容進共享狀態)。
         for key in WALL_FIELDS:

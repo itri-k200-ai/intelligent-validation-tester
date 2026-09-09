@@ -114,6 +114,9 @@ export const ricBackend = {
     ricRead("scheduler", "test_runs", filter, source),
   caseResults: (filter?: Record<string, unknown>, source?: RicSourceId) =>
     ricRead("oracle", "case_results", filter, source),
+  // 執行紀錄(探針原始 stdout)—— 中牆/測試紀錄的執行紀錄框用
+  probeLogs: (filter?: Record<string, unknown>, source?: RicSourceId) =>
+    ricRead("provisioner", "probe_logs", filter, source),
 };
 
 // 跨所有來源合併的版本(測試紀錄、攝影機這類「不分來源全都要」的場景)。
@@ -122,4 +125,5 @@ export const ricBackendAll = {
   projects: (filter?: Record<string, unknown>) => ricReadAll("registry", "projects", filter),
   cameras: (filter?: Record<string, unknown>) => ricReadAll("registry", "cameras", filter),
   testRuns: (filter?: Record<string, unknown>) => ricReadAll("scheduler", "test_runs", filter),
+  probeLogs: (filter?: Record<string, unknown>) => ricReadAll("provisioner", "probe_logs", filter),
 };

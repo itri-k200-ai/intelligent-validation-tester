@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 
-import { DEFAULT_RIC_SOURCE } from "@/config/ricSources";
 import { useRicActiveRun } from "@/hooks/Backend/useRicActiveRun";
 import { useRicRunCases } from "@/hooks/Backend/useRicRunCases";
 import { adapterService } from "@/services/Adapter/adapterService";
+import { DEFAULT_RIC_SOURCE } from "@/config/ricSources";
 import { useWallSelectionStore } from "@/stores/wallSelectionStore";
+import { runKey, useWallRunStore } from "@/stores/wallRunStore";
 
 export type RunItemState = {
   testcaseId: string;
@@ -25,6 +26,8 @@ export type AdapterRunState = {
   passed: number;
   failed: number;
   startedAt: string | null;
+  /** 按執行當下的探針 log 基準 uuid(探針框用來只顯示本次的新 log)*/
+  baselineLogUuid: string | null;
 };
 
 const POLL_MS = 2500;
@@ -35,16 +38,27 @@ const POLL_MS = 2500;
  */
 export function useAdapterRun(): AdapterRunState {
   // 兩條來源:
-  //  1) 自己(左螢幕模擬器)驅動 → selection 裡有 runnings → 打 adapter 輪詢
+  //  1) 自己(左螢幕模擬器)驅動 → wallRunStore 有 runnings → 打 adapter 輪詢
   //  2) 別的團隊在他們那邊驅動 → 我們拿不到 runningId → 改讀 RICtester
   //     back_end 的 case_results,一樣能顯示逐項判決
   const { activeRun } = useRicActiveRun();
   const { cases } = useRicRunCases(activeRun?.runUuid ?? null, activeRun?.source ?? null);
 
-  const runnings = useWallSelectionStore((s) => s.selection?.runnings);
+  // 依當前選擇的 DUT+介面查該介面自己的 run(切換選擇不影響其他介面的 run)
+  const dutName = useWallSelectionStore((s) => s.selection?.dutName);
+  const iface = useWallSelectionStore((s) => s.selection?.interface);
   // 輪詢要打回「當初驅動這批測試的那一套 tester」。
   const source = useWallSelectionStore((s) => s.selection?.source) ?? DEFAULT_RIC_SOURCE;
-  const startedAt = useWallSelectionStore((s) => s.selection?.runStartedAt ?? null);
+  // runnings 有兩個來源:
+  //  - wallRunStore:在中牆上按執行時,依「DUT+介面」各存一份(切走再切回還在)
+  //  - selection:左螢幕(共通性測試平台模擬器)驅動後回填的 —— 中牆本身
+  //    不驅動測試,所以現場實際走的是這條
+  const entry = useWallRunStore((s) => s.runsByKey[runKey(dutName, iface)]);
+  const selRunnings = useWallSelectionStore((s) => s.selection?.runnings);
+  const selStartedAt = useWallSelectionStore((s) => s.selection?.runStartedAt);
+  const runnings = entry?.runnings ?? selRunnings;
+  const startedAt = entry?.startedAt ?? selStartedAt ?? null;
+  const baselineLogUuid = entry?.baselineLogUuid ?? null;
   const [items, setItems] = useState<RunItemState[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -131,6 +145,8 @@ export function useAdapterRun(): AdapterRunState {
       passed: followed.filter((i) => i.result === "passed").length,
       failed: followed.filter((i) => i.result === "failed").length,
       startedAt: activeRun.startedAt || null,
+      // 外部驅動的執行沒有「本地按下執行」那一刻,探針框不做基準過濾
+      baselineLogUuid: null,
     };
   }
 
@@ -142,5 +158,5 @@ export function useAdapterRun(): AdapterRunState {
       (i) => (i.status === "finished" || i.status === "error") && i.result !== null,
     );
 
-  return { active: items.length > 0, done, items, passed, failed, startedAt };
+  return { active: items.length > 0, done, items, passed, failed, startedAt, baselineLogUuid };
 }

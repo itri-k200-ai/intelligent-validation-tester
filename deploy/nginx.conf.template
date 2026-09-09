@@ -32,7 +32,8 @@ http {
     upstream ric_near_backend { server ${RIC_HOST}:${RIC_NEAR_BACKEND_PORT}; }
     upstream ric_non_adapter  { server ${RIC_HOST}:${RIC_NON_ADAPTER_PORT}; }
     upstream ric_non_backend  { server ${RIC_HOST}:${RIC_NON_BACKEND_PORT}; }
-    upstream ric_hls          { server ${RIC_HOST}:${RIC_HLS_PORT}; }
+    # 環境影像 HLS —— 攝影機拆回 IVT 通用層,走 ivt-mediamtx(同 compose 網路內)
+    upstream ivt_hls          { server mediamtx:8888; }
 
     # 單一入口。前端一份 image,靠 URL ?wall=left|center|right 切畫面。
     server {
@@ -98,9 +99,9 @@ http {
             proxy_send_timeout 3600s;
         }
 
-        # 環境攝影機 HLS —— RICtester mediamtx(影像已整併過去;去掉 /hls 前綴)
+        # 環境攝影機 HLS —— IVT 通用層 mediamtx(去掉 /hls 前綴)
         location /hls/ {
-            proxy_pass         http://ric_hls/;
+            proxy_pass         http://ivt_hls/;
             proxy_set_header   Host              $host;
             add_header         Cache-Control     no-cache;
         }
