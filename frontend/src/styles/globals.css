@@ -2515,8 +2515,10 @@ html.wall-mode .hud-octagon-label {
 }
 
 /* ── 場域測試中牆:室外 UAV / 室內 AMR(components/FieldTest/FieldTestWall)──
-   左「即時環境影像」(占畫面 1/3:兩個 16:9 影像並排 + 場域 UE 吞吐量)、
-   右「測試狀態總覽」(UAV 測試路徑 | 飛行狀態 | 訊號狀態,三張等高)。
+   兩種版面(config/fieldScenarios.ts):
+   - live-results(室外):左「即時狀態」(占畫面 1/3:兩個 16:9 影像 + 飛行狀態 / UAV 訊號)、
+     右「測試結果」(UAV 測試路徑 | UAV 吞吐量開啟前後對比)。
+   - camera-grid(室內):左 4 路影像、右 路徑 | UE 吞吐量 + 行駛狀態 | 訊號狀態。
    卡片、影像、路徑圖可以跨電視拼接縫,但標題、文字、數值要避開 —— 主牆拼接縫在
    x = 1920 的倍數、y = 1080 / 2160(11520×3240 畫布)。做法是讓間距落在拼接縫上:
 
@@ -2567,15 +2569,22 @@ html.wall-mode .field-head-row {
   align-items: center;
 }
 
-/* 左卡:標題 / 影像 / 場域 UE 吞吐量。
-   場域 UE 吞吐量的標題列要在 y = 2160 之上、內容從 y = 2208 起,所以高度由下往上算:
+/* 左卡(室外):標題 / 影像 / 即時小卡。
+   即時小卡的標題列要在 y = 2160 之上、內容從 y = 2208 起,所以高度由下往上算:
    卡身下半段 + 卡距 + 標題列 + 12px 餘裕 → 頂在 y ≈ 1905 */
 html.wall-mode .field-card--video {
   grid-template-rows: auto minmax(0, 1fr) calc(var(--fw-lower) + var(--fw-gap) + var(--fw-sub-head) + 12px);
   row-gap: 1.5rem;
 }
-html.wall-mode .field-sub--throughput .field-sub-body {
+html.wall-mode .field-sub--lower .field-sub-body {
   padding-top: calc(var(--fw-gap) + 12px);
+}
+/* 左下兩張即時小卡並排(左卡內距起算 x = 240):1632 / 1728,間距跨 x = 1920 */
+html.wall-mode .field-live-row {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1632px 1728px;
+  column-gap: var(--fw-gap);
 }
 /* 兩個影像各 1632×918(16:9),左卡內距起算 x = 240,中間間距包住 x = 1920 */
 html.wall-mode .field-video-row {
@@ -2670,6 +2679,17 @@ html.wall-mode .field-status-body {
   display: grid;
   grid-template-columns: 3648px 1824px 1632px;
   column-gap: var(--fw-gap);
+}
+/* 測試結果(室外):UAV 測試路徑 3648 / 吞吐量對比 3552,卡距跨 x = 7680 */
+html.wall-mode .field-status-body--results {
+  grid-template-columns: 3648px 3552px;
+}
+/* 吞吐量對比標題列兩段(小卡內容 x = 7791~11217):左段到 9552、右段從 9648 起,間距跨 x = 9600 */
+html.wall-mode .field-compare-head {
+  display: grid;
+  grid-template-columns: 1761px 1569px;
+  column-gap: var(--fw-gap);
+  align-items: baseline;
 }
 /* 路線圖下方的任務進度列(路徑小卡內容 x = 4047~7569):左段到 5712、右段從 5808 起,
    間距跨 x = 5760 */

@@ -49,6 +49,7 @@ export type FieldSample = {
   batteryPct: number;
   snrDb: number;
   dlMbps: number;
+  ulMbps: number;
 };
 
 /** 場域內一台 UE 的吞吐量取樣(x 與其他折線圖相同,為路徑進度) */
@@ -74,6 +75,20 @@ export type FieldRun = {
   ueThroughput: FieldUeSeries[];
 };
 
+/** 載具目前的即時狀態(左側即時數值、路徑圖箭頭用) */
+export type FieldVehicleStatus = {
+  /** 0 = 正北,順時針 */
+  headingDeg: number;
+  speedMps: number;
+  batteryPct: number;
+  /** 控制模式,例如 MISSION / AUTO */
+  mode: string;
+  /** 以下只有 UAV 有 */
+  altitudeM?: number;
+  verticalSpeedMps?: number;
+  satellites?: number;
+};
+
 export type FieldMission = {
   testcase: FieldTestcase;
   route: RouteWaypoint[];
@@ -81,8 +96,7 @@ export type FieldMission = {
   runs: FieldRun[];
   /** 目前(或最後)在跑的那一趟,runs 的索引 */
   currentRun: number;
-  /** 載具目前航向(0 = 正北,順時針),路徑圖上的箭頭用 */
-  headingDeg: number;
+  vehicle: FieldVehicleStatus;
   /** HLS 串流網址,順序對應 config/fieldScenarios.ts 的 cameras;null 就顯示佔位畫面 */
   cameras: (string | null)[];
 };

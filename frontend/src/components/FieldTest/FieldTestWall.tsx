@@ -13,7 +13,12 @@ import {
 } from "recharts";
 
 import { LiveVideo } from "@/components/Site/LiveVideo";
-import { FIELD_SCENARIOS, type TrendMetric, type TrendSpec } from "@/config/fieldScenarios";
+import {
+  FIELD_SCENARIOS,
+  type FieldScenario,
+  type TrendMetric,
+  type TrendSpec,
+} from "@/config/fieldScenarios";
 import { useFieldTestMission } from "@/hooks/FieldTest/useFieldTestMission";
 import type {
   FieldMission,
@@ -23,77 +28,177 @@ import type {
   OptimizationPhase,
 } from "@/types/fieldTest";
 
-// ── 場域測試中牆(室外 UAV / 室內 AMR 共用)──────────────────────────────
+// ── 場域測試中牆(室外 UAV / 室內 AMR)──────────────────────────────────
 // 內容依規劃圖 docs/外部文件/前端UI建議/2026-09-13_智慧網路實驗室_室外UAV情境中牆UI規劃.png。
 // 測試流程是載具沿同一條路徑跑兩趟(優化開啟前、開啟後),一次只跑一個測試項目;
-// 測項清單在左螢幕,中牆只專注目前這個測試。兩個情境的差別見 config/fieldScenarios.ts。
-// 文字避開電視拼接縫,座標與推算見 globals.css .field-wall。
-// 室外的版面如下;室內(throughputOnRight)左邊改 4 路影像,右邊中間上半 UE 吞吐量、下半行駛狀態:
+// 測項清單在左螢幕,中牆只專注目前這個測試。兩種版面(見 config/fieldScenarios.ts)
+// 共用下面的小卡、路徑圖、折線圖。文字避開電視拼接縫,座標與推算見 globals.css .field-wall。
 //
-//   ┌ 即時環境影像 ──────────────┐ ┌ 測試狀態總覽 │ 測試項目 xxx.code │ Procedure │ 優化 已開啟 ┐
-//   │ [固定攝影機 16:9][載具 16:9]│ │                                                        │
-//   │ ┌場域 UE 吞吐量(10 台)────┐ │ │ ┌測試路徑─────────────┐ ┌移動狀態┐ ┌訊號狀態┐          │
-//   │ │ ╱╲╱ 各 UE(灰)+ 平均    │ │ │ │       路徑圖        │ │ 圖 1 ╱ │ │ SNR ╱  │          │
-//   │ └──────────────────────────┘ │ │ │ 任務進度 64% │ 階段 │ │ 圖 2 ╱ │ │ 下行 ╱ │          │
-//   └──────────────────────────────┘ └────────────────────────────────────────────────────────┘
+// live-results(室外):左即時、右結果
+//   ┌ 即時狀態 ───────── 優化 已開啟 ┐ ┌ 測試結果 │ 測試項目 xxx │ Procedure │ 開啟前 開啟後 ┐
+//   │ [固定攝影機 16:9][載具 16:9]   │ │ ┌測試路徑──────────┐ ┌UAV 吞吐量開啟前後對比──────┐ │
+//   │ ┌飛行狀態──────┐ ┌UAV 訊號───┐│ │ │ 路徑圖(兩趟)    │ │ 下行 98 → 141   ▲+43(+44%)│ │
+//   │ │ 高度 地速 …   │ │ SNR RSSI …││ │ │ 任務進度 │ 階段  │ │ 上行 ╱╲╱                  │ │
+//   └──────────────────────────────────┘ └──────────────────────────────────────────────────────┘
+//
+// camera-grid(室內):左 4 路影像;右 路徑 | 上 UE 吞吐量、下 行駛狀態 | 訊號狀態
 //
 // 資料目前是靜態假資料(見 useFieldTestMission)。
 
-/** 移動狀態小卡的圖示 */
-const MOTION_ICON: Record<FieldScenarioId, LucideIcon> = { outdoor: Plane, indoor: Bot };
+/** 載具狀態小卡的圖示 */
+const VEHICLE_ICON: Record<FieldScenarioId, LucideIcon> = { outdoor: Plane, indoor: Bot };
 
 export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
   const sc = FIELD_SCENARIOS[scenario];
   const { mission } = useFieldTestMission(scenario);
   if (!mission) return <p className="p-2 text-sm text-white/40">載入中…</p>;
 
+  return sc.layout === "live-results" ? (
+    <LiveResultsLayout scenario={scenario} sc={sc} mission={mission} />
+  ) : (
+    <CameraGridLayout scenario={scenario} sc={sc} mission={mission} />
+  );
+}
+
+// ── 版面:左即時、右結果(室外)─────────────────────────────────────────
+
+function LiveResultsLayout({
+  scenario,
+  sc,
+  mission,
+}: {
+  scenario: FieldScenarioId;
+  sc: Extract<FieldScenario, { layout: "live-results" }>;
+  mission: FieldMission;
+}) {
   const run = mission.runs[mission.currentRun];
-  const optimized = run?.phase === "after";
+  const allRuns = mission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
+  const v = mission.vehicle;
+  const link = run?.link ?? null;
+
+  return (
+    <div className="field-wall">
+      {/* ── 左:即時狀態 ── */}
+      <section className="dut-wall-band field-card field-card--video">
+        <div className="flex items-center justify-between">
+          <div className="dut-wall-band-title">即時狀態</div>
+          <OptimizationBadge optimized={run?.phase === "after"} />
+        </div>
+        <div className="field-video-row">
+          {sc.cameras.map((label, i) => (
+            <VideoTile key={label} label={label} src={mission.cameras[i] ?? null} />
+          ))}
+        </div>
+        {/* 兩張即時小卡並排,間距跨 x = 1920 */}
+        <div className="field-live-row">
+          <Sub className="field-sub--lower" icon={VEHICLE_ICON[scenario]} title={sc.live.vehicleTitle}>
+            <MetricGrid
+              items={[
+                // 欄寬窄,「相對高度 m」會被截斷
+                { label: "高度", unit: "m", value: v.altitudeM?.toFixed(1) ?? null },
+                { label: "地速", unit: "m/s", value: v.speedMps.toFixed(1) },
+                { label: "垂直", unit: "m/s", value: v.verticalSpeedMps?.toFixed(1) ?? null },
+                {
+                  label: "電量",
+                  unit: "%",
+                  value: v.batteryPct,
+                  tone: v.batteryPct < 30 ? "text-danger" : undefined,
+                },
+                { label: "衛星數", value: v.satellites ?? null },
+                // 模式字串較長,字級小一階才放得進欄寬
+                { label: "模式", value: v.mode, tone: "text-warning", size: "text-[2rem]" },
+              ]}
+            />
+          </Sub>
+          <Sub
+            className="field-sub--lower"
+            icon={Signal}
+            title={sc.live.signalTitle}
+            aside={run ? `目前:${PHASE[run.phase].short}` : undefined}
+          >
+            <MetricGrid
+              items={[
+                { label: "SNR", unit: "dB", value: link?.snrDb.toFixed(1) ?? null },
+                { label: "RSSI", unit: "dBm", value: link?.rssiDbm.toFixed(1) ?? null },
+                { label: "RSRQ", unit: "dB", value: link?.rsrqDb.toFixed(1) ?? null },
+                { label: "上行", unit: "Mbps", value: link?.ulMbps?.toFixed(1) ?? null },
+                { label: "下行", unit: "Mbps", value: link?.dlMbps?.toFixed(0) ?? null },
+                { label: "丟包", unit: "%", value: link?.packetLossPct?.toFixed(2) ?? null },
+              ]}
+            />
+          </Sub>
+        </div>
+      </section>
+
+      {/* ── 右:測試結果 ── */}
+      <section className="dut-wall-band field-card">
+        <div className="field-card-head">
+          <HeadRow
+            title="測試結果"
+            mission={mission}
+            right={
+              /* 右邊所有圖共用這份圖例 */
+              <span className="justify-self-end text-sm text-white/70">
+                <PhaseLegend />
+              </span>
+            }
+          />
+        </div>
+
+        <div className="field-status-body field-status-body--results">
+          <Sub icon={Route} title={sc.routeTitle}>
+            <RouteMap mission={mission} />
+            <MissionProgress mission={mission} />
+          </Sub>
+
+          {/* 場域內只觀察這台 UAV:比較它的吞吐量,上下兩張圖的間距跨 y = 2160 */}
+          <Sub icon={Signal} title="UAV 吞吐量開啟前後對比">
+            <div className="field-split">
+              <ThroughputCompare runs={mission.runs} spec={THROUGHPUT_CHARTS[0]} series={allRuns} />
+              <ThroughputCompare runs={mission.runs} spec={THROUGHPUT_CHARTS[1]} series={allRuns} />
+            </div>
+          </Sub>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// ── 版面:4 路影像(室內)──────────────────────────────────────────────
+
+function CameraGridLayout({
+  scenario,
+  sc,
+  mission,
+}: {
+  scenario: FieldScenarioId;
+  sc: Extract<FieldScenario, { layout: "camera-grid" }>;
+  mission: FieldMission;
+}) {
+  const run = mission.runs[mission.currentRun];
   const allRuns = mission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
   const currentOnly = run ? [{ phase: run.phase, samples: run.samples }] : [];
 
   return (
     <div className="field-wall">
-      {/* ── 左:即時環境影像(UE 吞吐量不在右邊時,放在影像下方)── */}
-      <section className={`dut-wall-band field-card ${sc.throughputOnRight ? "field-card--cameras" : "field-card--video"}`}>
+      {/* ── 左:即時環境影像(2×2)── */}
+      <section className="dut-wall-band field-card field-card--cameras">
         <div className="dut-wall-band-title">即時環境影像</div>
-        <div className={sc.throughputOnRight ? "field-video-grid" : "field-video-row"}>
+        <div className="field-video-grid">
           {sc.cameras.map((label, i) => (
             <VideoTile key={label} label={label} src={mission.cameras[i] ?? null} />
           ))}
         </div>
-        {!sc.throughputOnRight && run && (
-          <Sub className="field-sub--throughput" icon={Users} title="場域 UE 吞吐量" aside={`${run.ueThroughput.length} 台 UE`}>
-            {/* 這張圖橫跨 x = 1920 拼接縫:刻度不放 50%(會落在縫上) */}
-            <UeThroughputChart run={run} xTicks={[0, 20, 40, 60, 80, 100]} />
-          </Sub>
-        )}
       </section>
 
       {/* ── 右:測試狀態總覽 ── */}
       <section className="dut-wall-band field-card">
-        {/* 標題列:標題 | 測項代碼 | 測項名稱 | 優化狀態,各占一台電視寬(間距跨拼接縫)。
-            測試項目放在同一行,底下的小卡才能往上長 */}
         <div className="field-card-head">
-          <div className="field-head-row">
-            <div className="dut-wall-band-title">測試狀態總覽</div>
-            <span className="flex min-w-0 items-baseline gap-6 text-sm">
-              <span className="flex-none text-white/55">測試項目</span>
-              <span className="min-w-0 truncate font-mono">{mission.testcase.code}</span>
-            </span>
-            <span className="min-w-0 truncate text-sm text-white/60">{mission.testcase.procedure}</span>
-            <span
-              className={`flex items-center justify-self-end gap-4 rounded-full border px-8 text-base ${
-                optimized ? "border-mint/50 text-mint" : "border-white/25 text-white/60"
-              }`}
-            >
-              <span className="text-white/70">優化</span>
-              <span
-                className={`inline-block h-5 w-5 rounded-full ${optimized ? "bg-mint" : "bg-white/30"}`}
-              />
-              {optimized ? "已開啟" : "未開啟"}
-            </span>
-          </div>
+          <HeadRow
+            title="測試狀態總覽"
+            mission={mission}
+            right={<OptimizationBadge optimized={run?.phase === "after"} className="justify-self-end" />}
+          />
         </div>
 
         <div className="field-status-body">
@@ -102,31 +207,20 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
             <MissionProgress mission={mission} />
           </Sub>
 
-          {sc.throughputOnRight ? (
-            /* 上半 UE 吞吐量、下半移動狀態,兩張小卡的間距跨 y = 2160 */
-            <div className="field-stack">
-              <Sub icon={Users} title="場域 UE 吞吐量" aside={run ? `${run.ueThroughput.length} 台 UE` : undefined}>
-                {run && <UeThroughputChart run={run} xTicks={[0, 50, 100]} />}
-              </Sub>
-              <Sub
-                icon={MOTION_ICON[scenario]}
-                title={sc.motion.title}
-                aside={motionSummary(sc.motion.charts[0], sc.motion.stat, run?.samples.at(-1))}
-              >
-                {/* 小卡矮:圖表標題併進小卡標題列,高度留給圖 */}
-                <TrendChart spec={sc.motion.charts[0]} series={currentOnly} bare />
-              </Sub>
-            </div>
-          ) : (
-            <Sub icon={MOTION_ICON[scenario]} title={sc.motion.title}>
-              {/* 上下兩張圖的間距跨 y = 2160 */}
-              <div className="field-split">
-                {sc.motion.charts.map((spec) => (
-                  <TrendChart key={spec.metric} spec={spec} series={currentOnly} />
-                ))}
-              </div>
+          {/* 上半 UE 吞吐量、下半移動狀態,兩張小卡的間距跨 y = 2160 */}
+          <div className="field-stack">
+            <Sub icon={Users} title="場域 UE 吞吐量" aside={run ? `${run.ueThroughput.length} 台 UE` : undefined}>
+              {run && <UeThroughputChart run={run} xTicks={[0, 50, 100]} />}
             </Sub>
-          )}
+            <Sub
+              icon={VEHICLE_ICON[scenario]}
+              title={sc.motion.title}
+              aside={motionSummary(sc.motion.chart, sc.motion.stat, run?.samples.at(-1))}
+            >
+              {/* 小卡矮:圖表標題併進小卡標題列,高度留給圖 */}
+              <TrendChart spec={sc.motion.chart} series={currentOnly} bare />
+            </Sub>
+          </div>
 
           <Sub icon={Signal} title="訊號狀態">
             <div className="field-split">
@@ -147,6 +241,38 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
 }
 
 // ── 共用 ─────────────────────────────────────────────────────────────
+
+/**
+ * 右卡標題列:標題 | 測項代碼 | 測項名稱 | right,各占一台電視寬(間距跨拼接縫)。
+ * 測試項目放在同一行,底下的小卡才能往上長。
+ */
+function HeadRow({ title, mission, right }: { title: string; mission: FieldMission; right: ReactNode }) {
+  return (
+    <div className="field-head-row">
+      <div className="dut-wall-band-title">{title}</div>
+      <span className="flex min-w-0 items-baseline gap-6 text-sm">
+        <span className="flex-none text-white/55">測試項目</span>
+        <span className="min-w-0 truncate font-mono">{mission.testcase.code}</span>
+      </span>
+      <span className="min-w-0 truncate text-sm text-white/60">{mission.testcase.procedure}</span>
+      {right}
+    </div>
+  );
+}
+
+function OptimizationBadge({ optimized, className = "" }: { optimized: boolean; className?: string }) {
+  return (
+    <span
+      className={`flex items-center gap-4 rounded-full border px-8 text-base ${
+        optimized ? "border-mint/50 text-mint" : "border-white/25 text-white/60"
+      } ${className}`}
+    >
+      <span className="text-white/70">優化</span>
+      <span className={`inline-block h-5 w-5 rounded-full ${optimized ? "bg-mint" : "bg-white/30"}`} />
+      {optimized ? "已開啟" : "未開啟"}
+    </span>
+  );
+}
 
 /** 一格影像(16:9),名稱疊在左下 */
 function VideoTile({ label, src }: { label: string; src: string | null }) {
@@ -199,6 +325,37 @@ function PhaseLegend() {
   );
 }
 
+type Reading = {
+  label: string;
+  /** 單位放在標籤後面(欄寬窄,接在數值後面會被截斷) */
+  unit?: string;
+  value: string | number | null;
+  tone?: string;
+  /** 數值字級(Tailwind class) */
+  size?: string;
+};
+
+/** 3 欄 × 2 列的即時數值:標籤(含單位)在上、數值在下 */
+function MetricGrid({ items }: { items: Reading[] }) {
+  return (
+    <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-x-4">
+      {items.map(({ label, unit, value, tone = "text-white", size = "text-[2.75rem]" }) => (
+        <div key={label} className="flex min-w-0 flex-col justify-center gap-2">
+          <span className="truncate whitespace-nowrap text-sm text-white/55">
+            {label}
+            {unit && <span className="ml-2 text-white/35">{unit}</span>}
+          </span>
+          <span
+            className={`min-w-0 truncate font-semibold leading-[1.1] ${size} ${value === null ? "text-white/40" : tone}`}
+          >
+            {value ?? "—"}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── 場域 UE 吞吐量 ───────────────────────────────────────────────────
 
 /** 各 UE 線的去強調色(灰):10 條線不各給一個色相,只凸顯平均 */
@@ -222,8 +379,8 @@ function UeThroughputChart({ run, xTicks }: { run: FieldRun; xTicks: number[] })
   const rows: Row[] = [...byProgress.values()]
     .sort((a, b) => a.progress - b.progress)
     .map((row) => {
-      const values = ues.map((u) => row[u.ue]).filter((v): v is number => v !== undefined);
-      const avg = values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
+      const values = ues.map((u) => row[u.ue]).filter((val): val is number => val !== undefined);
+      const avg = values.length ? values.reduce((sum, val) => sum + val, 0) / values.length : 0;
       return { ...row, progress: row.progress, avg };
     });
   const last = rows.at(-1);
@@ -258,17 +415,17 @@ function UeThroughputChart({ run, xTicks }: { run: FieldRun; xTicks: number[] })
       <div className="relative min-h-0 flex-1">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={rows} margin={{ top: 24, right: 130, bottom: 0, left: 0 }}>
-            <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeWidth={3} vertical={false} />
+            <CartesianGrid stroke={GRID_STROKE} strokeWidth={3} vertical={false} />
             <XAxis
               dataKey="progress"
               type="number"
               domain={[0, 100]}
               ticks={xTicks}
-              tickFormatter={(v: number) => `${v}%`}
+              tickFormatter={(val: number) => `${val}%`}
               tick={AXIS_TICK}
               tickLine={false}
               tickMargin={44}
-              stroke="rgba(255,255,255,0.2)"
+              stroke={AXIS_STROKE}
               strokeWidth={3}
               height={130}
             />
@@ -287,17 +444,7 @@ function UeThroughputChart({ run, xTicks }: { run: FieldRun; xTicks: number[] })
                 const avg = payload.find((it) => it.dataKey === "avg")?.value;
                 const values = payload.filter((it) => it.dataKey !== "avg").map((it) => Number(it.value));
                 return (
-                  <div
-                    style={{
-                      background: "rgba(10,23,47,0.94)",
-                      border: "3px solid rgba(255,255,255,0.2)",
-                      borderRadius: 16,
-                      padding: "16px 24px",
-                      fontSize: 64,
-                      color: "#FFFFFF",
-                      lineHeight: 1.4,
-                    }}
-                  >
+                  <div style={TOOLTIP_BOX}>
                     <div style={{ color: "rgba(255,255,255,0.7)" }}>路徑進度 {label}%</div>
                     <div>平均 {avg === undefined ? "—" : Math.round(Number(avg))} Mbps</div>
                     {values.length > 0 && (
@@ -354,7 +501,7 @@ function UeThroughputChart({ run, xTicks }: { run: FieldRun; xTicks: number[] })
 
 /** 同一條路徑上疊出兩趟軌跡(開啟前 / 開啟後)與載具目前位置 */
 function RouteMap({ mission }: { mission: FieldMission }) {
-  const { route, runs, headingDeg } = mission;
+  const { route, runs, vehicle } = mission;
   const live = runs[mission.currentRun]?.position ?? null;
 
   // 路徑點是 x 向東、y 向北(公尺);SVG 的 y 向下,畫的時候把 y 取負。
@@ -409,7 +556,7 @@ function RouteMap({ mission }: { mission: FieldMission }) {
             <circle r={16 * u} fill="#80FFE8" fillOpacity={0.2} />
             <path
               d="M0,-10 L7.5,8 L0,4 L-7.5,8 Z"
-              transform={`rotate(${headingDeg}) scale(${1.2 * u})`}
+              transform={`rotate(${vehicle.headingDeg}) scale(${1.2 * u})`}
               fill="#80FFE8"
               stroke="#0A172F"
               strokeWidth={1.2}
@@ -450,8 +597,8 @@ function MissionProgress({ mission }: { mission: FieldMission }) {
 /** 移動狀態小卡標題列的數值摘要,例如「0.69 m/s · 電量 88%」 */
 function motionSummary(chart: TrendSpec, stat: TrendSpec | undefined, latest: FieldSample | undefined) {
   const fmt = (spec: TrendSpec) => {
-    const v = sampleValue(latest, spec.metric);
-    return v === null ? "—" : `${v.toFixed(spec.digits)}${spec.unit === "%" ? "" : " "}${spec.unit}`;
+    const val = sampleValue(latest, spec.metric);
+    return val === null ? "—" : `${val.toFixed(spec.digits)}${spec.unit === "%" ? "" : " "}${spec.unit}`;
   };
   return stat ? `${fmt(chart)} · ${stat.label} ${fmt(stat)}` : fmt(chart);
 }
@@ -463,43 +610,63 @@ const RUN_STATUS: Record<FieldRun["status"], string> = {
   error: "錯誤",
 };
 
-// ── 折線圖(移動狀態 / 訊號狀態)──────────────────────────────────────
+// ── 折線圖 ───────────────────────────────────────────────────────────
 
-/** 訊號狀態的兩張圖(兩個情境相同) */
+/** 訊號的兩張圖(兩個情境相同) */
 const SIGNAL_CHARTS: [TrendSpec, TrendSpec] = [
   { label: "SNR", unit: "dB", metric: "snrDb", digits: 1 },
   { label: "下行速率", unit: "Mbps", metric: "dlMbps", digits: 0 },
 ];
 
+/** UAV 吞吐量開啟前後對比的兩張圖;avgKey 是該趟平均值在 link 上的欄位 */
+const THROUGHPUT_CHARTS: [ThroughputSpec, ThroughputSpec] = [
+  { label: "下行吞吐量", unit: "Mbps", metric: "dlMbps", digits: 0, avgKey: "dlMbps" },
+  { label: "上行吞吐量", unit: "Mbps", metric: "ulMbps", digits: 1, avgKey: "ulMbps" },
+];
+
 /** 圖表字級與筆畫都以牆面 3× 畫布計:2px 線 = 6、1px 格線 = 3 */
 const AXIS_TICK = { fontSize: 72, fill: "rgba(255,255,255,0.6)" };
+const AXIS_STROKE = "rgba(255,255,255,0.2)";
+const GRID_STROKE = "rgba(255,255,255,0.08)";
 /** 圖表底色(小卡疊在大卡上的近似色),端點外圈用它隔開線條 */
 const CHART_SURFACE = "#16263A";
+const TOOLTIP_BOX = {
+  background: "rgba(10,23,47,0.94)",
+  border: "3px solid rgba(255,255,255,0.2)",
+  borderRadius: 16,
+  padding: "16px 24px",
+  fontSize: 64,
+  color: "#FFFFFF",
+  lineHeight: 1.4,
+} as const;
 
 const sampleValue = (pt: FieldSample | undefined, metric: TrendMetric) => pt?.[metric] ?? null;
 
 /**
  * 一張折線圖:x 為路徑進度(%),一條線一趟。
- * 標題列顯示目前這趟的最新值。多條線時圖例由所屬小卡放一次(單條線由標題說明)。
+ * 標題列顯示目前這趟的最新值。多條線時圖例由所屬卡片放一次(單條線由標題說明)。
  * bare = 不畫圖表自己的標題列(由所屬小卡的標題列顯示數值)。
  */
 function TrendChart({
   spec: { label, unit, metric, digits },
   series,
   bare = false,
+  xTicks = [0, 50, 100],
 }: {
   spec: TrendSpec;
   series: { phase: OptimizationPhase; samples: FieldSample[] }[];
   bare?: boolean;
+  /** 圖跨拼接縫時,避開會落在縫上的刻度 */
+  xTicks?: number[];
 }) {
   // 依 progress 合併成一列一個 x;沒跑到的進度留空,線自然停在目前位置
   const byProgress = new Map<number, Record<string, number>>();
   series.forEach((s) =>
     s.samples.forEach((pt) => {
-      const v = sampleValue(pt, metric);
-      if (v === null) return;
+      const val = sampleValue(pt, metric);
+      if (val === null) return;
       const row = byProgress.get(pt.progress) ?? { progress: pt.progress };
-      row[s.phase] = v;
+      row[s.phase] = val;
       byProgress.set(pt.progress, row);
     }),
   );
@@ -520,17 +687,17 @@ function TrendChart({
       <div className="relative min-h-0 flex-1">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={rows} margin={{ top: 24, right: 130, bottom: 0, left: 0 }}>
-            <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeWidth={3} vertical={false} />
+            <CartesianGrid stroke={GRID_STROKE} strokeWidth={3} vertical={false} />
             <XAxis
               dataKey="progress"
               type="number"
               domain={[0, 100]}
-              ticks={[0, 50, 100]}
-              tickFormatter={(v: number) => `${v}%`}
+              ticks={xTicks}
+              tickFormatter={(val: number) => `${val}%`}
               tick={AXIS_TICK}
               tickLine={false}
               tickMargin={44}
-              stroke="rgba(255,255,255,0.2)"
+              stroke={AXIS_STROKE}
               strokeWidth={3}
               height={130}
             />
@@ -545,17 +712,12 @@ function TrendChart({
             />
             <Tooltip
               cursor={{ stroke: "rgba(255,255,255,0.35)", strokeWidth: 3 }}
-              contentStyle={{
-                background: "rgba(10,23,47,0.94)",
-                border: "3px solid rgba(255,255,255,0.2)",
-                borderRadius: 16,
-                padding: "16px 24px",
-              }}
-              labelStyle={{ color: "rgba(255,255,255,0.7)", fontSize: 64 }}
-              itemStyle={{ color: "#FFFFFF", fontSize: 64, padding: "4px 0" }}
-              labelFormatter={(v) => `路徑進度 ${v}%`}
-              formatter={(v, name) => [
-                `${Number(v).toFixed(digits)} ${unit}`,
+              contentStyle={TOOLTIP_BOX}
+              labelStyle={{ color: "rgba(255,255,255,0.7)" }}
+              itemStyle={{ color: "#FFFFFF", padding: "4px 0" }}
+              labelFormatter={(val) => `路徑進度 ${val}%`}
+              formatter={(val, name) => [
+                `${Number(val).toFixed(digits)} ${unit}`,
                 PHASE[name as OptimizationPhase]?.short ?? String(name),
               ]}
             />
@@ -577,12 +739,12 @@ function TrendChart({
             {/* 每條線的最新一點加端點 */}
             {series.map((s) => {
               const end = s.samples.at(-1);
-              const v = sampleValue(end, metric);
-              return end && v !== null ? (
+              const val = sampleValue(end, metric);
+              return end && val !== null ? (
                 <ReferenceDot
                   key={`end-${s.phase}`}
                   x={end.progress}
-                  y={v}
+                  y={val}
                   r={12}
                   fill={PHASE[s.phase].color}
                   stroke={CHART_SURFACE}
@@ -598,10 +760,64 @@ function TrendChart({
   );
 }
 
+type ThroughputSpec = TrendSpec & { avgKey: "dlMbps" | "ulMbps" };
+
+/**
+ * 吞吐量開啟前後對比:標題列放兩趟平均與變化量,底下是兩趟的折線圖。
+ * 這張圖橫跨 x = 9600 拼接縫 —— 標題列分左右兩段(間距跨縫),x 刻度改 20% 一格避開縫。
+ */
+function ThroughputCompare({
+  runs,
+  spec,
+  series,
+}: {
+  runs: FieldRun[];
+  spec: ThroughputSpec;
+  series: { phase: OptimizationPhase; samples: FieldSample[] }[];
+}) {
+  const avg = (phase: OptimizationPhase) => runs.find((r) => r.phase === phase)?.link?.[spec.avgKey] ?? null;
+  const before = avg("before");
+  const after = avg("after");
+  const d = before !== null && after !== null ? after - before : null;
+  const pct = d !== null && before ? Math.round((d / before) * 100) : null;
+  const fmt = (val: number | null) => (val === null ? "—" : val.toFixed(spec.digits));
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* 左段只放名稱與兩個數值,單位和變化量放右段 —— 左段超過 1761 寬會壓到 x = 9600 */}
+      <div className="field-compare-head mb-4 flex-none">
+        <div className="flex min-w-0 items-baseline gap-6 whitespace-nowrap">
+          <span className="text-sm text-white/60">{spec.label}</span>
+          <span className="flex items-baseline gap-3">
+            <span className="inline-block h-4 w-4 self-center rounded-full" style={{ background: PHASE.before.color }} />
+            <span className="text-[2.25rem] leading-[1.1] text-white/65">{fmt(before)}</span>
+          </span>
+          <span className="text-sm text-white/35">→</span>
+          <span className="flex items-baseline gap-3">
+            <span className="inline-block h-4 w-4 self-center rounded-full" style={{ background: PHASE.after.color }} />
+            <span className="text-[2.75rem] font-semibold leading-[1.1] text-white">{fmt(after)}</span>
+          </span>
+        </div>
+        <div className="flex min-w-0 items-baseline justify-end gap-6 whitespace-nowrap">
+          <span className="text-sm text-white/50">{spec.unit} 平均</span>
+          {d !== null && (
+            <span className={`text-base font-semibold ${d >= 0 ? "text-mint" : "text-danger"}`}>
+              {d > 0 ? "▲+" : d < 0 ? "▼" : ""}
+              {d.toFixed(spec.digits)}
+              {pct !== null && `(${pct > 0 ? "+" : ""}${pct}%)`}
+            </span>
+          )}
+        </div>
+      </div>
+      <TrendChart spec={spec} series={series} bare xTicks={[0, 20, 40, 60, 80, 100]} />
+    </div>
+  );
+}
+
 // ── 對照表 ───────────────────────────────────────────────────────────
 
 /**
- * 兩趟的名稱與代表色(路線軌跡、進度條、折線、圖例共用)。
+ * 兩趟的名稱與代表色(路線軌跡、進度條、折線、長條、圖例共用)。
  * 顏色用 dataviz 驗證器在深色底(#16263A)上驗過:亮度帶、彩度、色盲 / 一般視覺分辨度、
  * 對比都通過 —— 規範的 #FFC56B / #80FFE8 太亮,當系列色會失去層次。
  */

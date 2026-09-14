@@ -60,6 +60,7 @@ function samples(scenario: FieldScenarioId, phase: OptimizationPhase, upTo: numb
         batteryPct: Math.round(98 - p * 0.2),
         snrDb: +(14 - 9 * far + 6.5 * boost + 0.8 * Math.sin(p * 0.7)).toFixed(1),
         dlMbps: Math.round(160 - 95 * far + 45 * boost + 6 * Math.sin(p * 0.5)),
+        ulMbps: +(20 - 11 * far + 8 * boost + 1.5 * Math.sin(p * 0.6)).toFixed(1),
       });
     } else {
       // 每走完一排走道要轉彎減速(轉角約每 1/8 路徑一個)
@@ -70,6 +71,7 @@ function samples(scenario: FieldScenarioId, phase: OptimizationPhase, upTo: numb
         batteryPct: Math.round(96 - p * 0.12),
         snrDb: +(22 - 10 * far + 5 * boost + 1.2 * Math.sin(p * 0.9)).toFixed(1),
         dlMbps: Math.round(280 - 120 * far + 60 * boost + 8 * Math.sin(p * 0.6)),
+        ulMbps: +(45 - 16 * far + 12 * boost + 2 * Math.sin(p * 0.7)).toFixed(1),
       });
     }
   }
@@ -103,7 +105,15 @@ const MISSIONS: Record<FieldScenarioId, FieldMission> = {
     testcase: { code: "uav.waypoint_coverage", procedure: "Waypoint Coverage Measurement" },
     route: UAV_ROUTE,
     currentRun: 1,
-    headingDeg: 315,
+    vehicle: {
+      headingDeg: 315,
+      altitudeM: 30.2,
+      speedMps: 6.0,
+      verticalSpeedMps: 0.1,
+      batteryPct: 78,
+      satellites: 16,
+      mode: "MISSION",
+    },
     cameras: [null, null],
     runs: [
       {
@@ -155,7 +165,7 @@ const MISSIONS: Record<FieldScenarioId, FieldMission> = {
     testcase: { code: "amr.aisle_coverage", procedure: "Indoor Aisle Coverage Measurement" },
     route: AMR_ROUTE,
     currentRun: 1,
-    headingDeg: 180,
+    vehicle: { headingDeg: 180, speedMps: 0.69, batteryPct: 88, mode: "AUTO" },
     cameras: [null, null, null, null],
     runs: [
       {
