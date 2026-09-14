@@ -1,5 +1,6 @@
 "use client";
 import {
+  Bot,
   ChevronDown,
   ChevronRight,
   Cable,
@@ -100,6 +101,7 @@ const NAV: NavNode[] = [
   */
   { kind: "leaf", id: "test-scenarios", href: "/test-scenarios", label: "端對端測試情境", icon: Target },
   { kind: "leaf", id: "outdoor-scenario", href: "/outdoor-scenario", label: "室外 UAV 情境", icon: Plane },
+  { kind: "leaf", id: "indoor-scenario", href: "/indoor-scenario", label: "室內 AMR 情境", icon: Bot },
   { kind: "leaf", id: "agent-sessions", href: "/agent-sessions", label: "Agent 驗測紀錄", icon: History },
   {
     kind: "branch",

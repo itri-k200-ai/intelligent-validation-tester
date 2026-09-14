@@ -97,6 +97,10 @@ export function getPageMeta(pathname: string): PageMeta {
     return { title: "室外 UAV 情境" };
   }
 
+  if (seg[0] === "indoor-scenario") {
+    return { title: "室內 AMR 情境" };
+  }
+
   // 中牆的固定 URL —— 顯示什麼由 selection 決定,標題不隨內容變。
   // (右副牆自己的標題是「智慧網路簡介」,見 war-room-lab-title。)
   if (seg[0] === "wall") {

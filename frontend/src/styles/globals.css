@@ -1289,7 +1289,7 @@ html.wall-mode .test-pill--fail {
 /* 即時環境影像 — HlsPlayer(真串流)撐滿帶身、影像置中,
    蓋掉 Tailwind 的 aspect-video(16:9 貼頂會讓直式高格看起來比例怪) */
 html.wall-mode .dut-wall-band--env .dut-wall-band-body > .relative,
-html.wall-mode .outdoor-video > .relative {
+html.wall-mode .field-video > .relative {
   width: 100%;
   height: 100%;
   display: flex;
@@ -1299,7 +1299,7 @@ html.wall-mode .outdoor-video > .relative {
   overflow: hidden;
 }
 html.wall-mode .dut-wall-band--env .dut-wall-band-body > .relative video,
-html.wall-mode .outdoor-video > .relative video {
+html.wall-mode .field-video > .relative video {
   width: 100%;
   height: 100%;
   aspect-ratio: auto;
@@ -2514,8 +2514,8 @@ html.wall-mode .hud-octagon-label {
   word-break: break-word;
 }
 
-/* ── 室外 UAV 情境中牆(components/Outdoor/OutdoorWall)──────────────────
-   左「即時環境影像」(占畫面 1/3:兩個 16:9 影像並排 + 任務執行狀況)、
+/* ── 場域測試中牆:室外 UAV / 室內 AMR(components/FieldTest/FieldTestWall)──
+   左「即時環境影像」(占畫面 1/3:兩個 16:9 影像並排 + 場域 UE 吞吐量)、
    右「測試狀態總覽」(UAV 測試路徑 | 飛行狀態 | 訊號狀態,三張等高)。
    卡片、影像、路徑圖可以跨電視拼接縫,但標題、文字、數值要避開 —— 主牆拼接縫在
    x = 1920 的倍數、y = 1080 / 2160(11520×3240 畫布)。做法是讓間距落在拼接縫上:
@@ -2523,93 +2523,109 @@ html.wall-mode .hud-octagon-label {
    - 內容區實際範圍 x = 144~11376、y = 579~3048:左右是 war-room-main-body 的
      3rem,上下是前段 `html.wall-mode main` 以 !important 設的 1.5rem / 4rem。
    - 左卡寬到 x = 3792,卡距跨 x = 3840;左卡內兩個影像的間距包住 x = 1920。
-   - 右卡分頭、身:頭(標題 + 副標)底部留一個卡距,身從 y = 1128 開始,跨過 y = 1080。
+   - 右卡分頭、身:頭是一行標題列(標題 | 測項代碼 | 測項名稱 | 優化狀態);身從 y = 880 開始,
+     讓小卡標題列(高 195)落在 880~1075、文字結束在 y ≈ 1052,內容從 y ≈ 1111 起,跨過 y = 1080。
    - 右卡身三張小卡的卡距跨 x = 7680 / 9600。
    - 有文字的小卡內容分上下兩段,段距跨 y = 2160。
    改主牆內容區的 padding、卡距或卡片內距時,下面的數字要一起重算。 */
-html.wall-mode .outdoor-wall {
-  --ow-gap: 96px;
-  --ow-pad: 96px;
+html.wall-mode .field-wall {
+  --fw-gap: 96px;
+  --fw-pad: 96px;
   /* 卡身下半段(y = 2208 起)高度 = 內容區底(3240 - 4rem)- 段頂(2160 + 卡距/2)- 大卡底內距 */
-  --ow-lower: calc(1080px - 4rem - var(--ow-gap) / 2 - var(--ow-pad));
+  --fw-lower: calc(1080px - 4rem - var(--fw-gap) / 2 - var(--fw-pad));
   /* 小卡標題列高度(規範 Combination – Third Layer 65px)與內容上下內距 */
-  --ow-sub-head: calc(65px * var(--wall));
-  --ow-sub-pad: 36px;
+  --fw-sub-head: calc(65px * var(--wall));
+  --fw-sub-pad: 36px;
   height: 100%;
   display: grid;
-  grid-template-columns: calc(3840px - 3rem - var(--ow-gap) / 2) minmax(0, 1fr);
-  gap: var(--ow-gap);
+  grid-template-columns: calc(3840px - 3rem - var(--fw-gap) / 2) minmax(0, 1fr);
+  gap: var(--fw-gap);
 }
-html.wall-mode .outdoor-card {
+html.wall-mode .field-card {
   display: grid;
-  /* 身的高度 = 內容區底(3240 - 4rem)- 身的頂(1080 + 卡距/2)- 大卡底內距 */
-  grid-template-rows: minmax(0, 1fr) calc(2160px - 4rem - var(--ow-gap) / 2 - var(--ow-pad));
-  padding: 60px var(--ow-pad) var(--ow-pad);
+  /* 身的頂 = 1080 - 小卡標題列高 - 5px(小卡標題列底貼在 y = 1075,文字不碰拼接縫);
+     身的高度 = 內容區底(3240 - 4rem)- 大卡底內距 - 身的頂 */
+  grid-template-rows: minmax(0, 1fr) calc(2160px - 4rem - var(--fw-pad) + var(--fw-sub-head) + 5px);
+  padding: 60px var(--fw-pad) var(--fw-pad);
 }
-html.wall-mode .outdoor-card-head {
+html.wall-mode .field-card-head {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding-bottom: var(--ow-gap);
 }
 /* 標題靠左(規劃圖也是靠左;右卡正中間剛好是拼接縫) */
-html.wall-mode .outdoor-wall .dut-wall-band-title {
+html.wall-mode .field-wall .dut-wall-band-title {
   margin-bottom: 0;
   line-height: 1.25;
   text-align: left;
 }
-/* 副標兩段:右卡內距起算 x = 3984,第一段到 5712、第二段從 5808 起,間距跨 x = 5760 */
-html.wall-mode .outdoor-subtitle {
+/* 右卡標題列四段(右卡內距起算 x = 3984):1728 / 1824 / 1824 / 1632,間距跨 x = 5760 / 7680 / 9600 */
+html.wall-mode .field-head-row {
   display: grid;
-  grid-template-columns: 1728px 1824px;
-  column-gap: var(--ow-gap);
+  grid-template-columns: 1728px 1824px 1824px 1632px;
+  column-gap: var(--fw-gap);
+  align-items: center;
 }
 
-/* 左卡:標題 / 影像 / 任務執行狀況。
-   任務執行狀況的標題列要在 y = 2160 之上、內容從 y = 2208 起,所以高度由下往上算:
+/* 左卡:標題 / 影像 / 場域 UE 吞吐量。
+   場域 UE 吞吐量的標題列要在 y = 2160 之上、內容從 y = 2208 起,所以高度由下往上算:
    卡身下半段 + 卡距 + 標題列 + 12px 餘裕 → 頂在 y ≈ 1905 */
-html.wall-mode .outdoor-card--video {
-  grid-template-rows: auto minmax(0, 1fr) calc(var(--ow-lower) + var(--ow-gap) + var(--ow-sub-head) + 12px);
+html.wall-mode .field-card--video {
+  grid-template-rows: auto minmax(0, 1fr) calc(var(--fw-lower) + var(--fw-gap) + var(--fw-sub-head) + 12px);
   row-gap: 1.5rem;
 }
-html.wall-mode .outdoor-sub--task .outdoor-sub-body {
-  padding-top: calc(var(--ow-gap) + 12px);
+html.wall-mode .field-sub--throughput .field-sub-body {
+  padding-top: calc(var(--fw-gap) + 12px);
 }
 /* 兩個影像各 1632×918(16:9),左卡內距起算 x = 240,中間間距包住 x = 1920 */
-html.wall-mode .outdoor-video-row {
+html.wall-mode .field-video-row {
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(2, 1632px);
   justify-content: space-between;
   align-items: start;
 }
-html.wall-mode .outdoor-video {
+/* 只放影像的左卡(motion = null,4 路):標題 + 2×2 影像,影像貼齊卡底。
+   各 1632×918,欄距包住 x = 1920;兩列 2 × 918 + 96 = 1932 貼底 → 第一列 y 1020~1938、
+   第二列 2034~2952。名稱與 LIVE 在影像底部、沒串流的提示在畫面中間,都避開 y = 1080 / 2160 */
+html.wall-mode .field-card--cameras {
+  grid-template-rows: auto minmax(0, 1fr);
+  row-gap: 1.5rem;
+}
+html.wall-mode .field-video-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1632px);
+  justify-content: space-between;
+  align-content: end;
+  row-gap: var(--fw-gap);
+}
+html.wall-mode .field-video {
   position: relative;
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border-radius: 1rem;
 }
-html.wall-mode .outdoor-video > .video-placeholder,
-html.wall-mode .outdoor-video > .relative {
+html.wall-mode .field-video > .video-placeholder,
+html.wall-mode .field-video > .relative {
   position: absolute;
   inset: 0;
 }
 /* 佔位畫面的假控制列不顯示(真的串流用瀏覽器自己的控制列) */
-html.wall-mode .outdoor-video .video-controls {
+html.wall-mode .field-video .video-controls {
   display: none;
 }
 /* 名稱(左)與 LIVE(右)放底部:影像頂端跨過 y = 1080 拼接縫 */
-html.wall-mode .outdoor-video-label,
-html.wall-mode .outdoor-video .video-live-badge {
+html.wall-mode .field-video-label,
+html.wall-mode .field-video .video-live-badge {
   position: absolute;
   top: auto;
   bottom: 1.25rem;
 }
-html.wall-mode .outdoor-video .video-live-badge {
+html.wall-mode .field-video .video-live-badge {
   right: 1.25rem;
 }
-html.wall-mode .outdoor-video-label {
+html.wall-mode .field-video-label {
   left: 1.25rem;
   padding: 0.25rem 1.25rem;
   border-radius: 9999px;
@@ -2618,23 +2634,9 @@ html.wall-mode .outdoor-video-label {
   font-size: 2rem;
   line-height: 1.4;
 }
-/* 任務執行狀況兩欄(小卡內容 x = 303~3633):左欄到 1872、右欄從 1968 起,欄距跨 x = 1920 */
-html.wall-mode .outdoor-compare-list {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 1569px 1665px;
-  column-gap: var(--ow-gap);
-}
-html.wall-mode .outdoor-compare-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto 260px;
-  column-gap: 36px;
-  align-items: center;
-}
 
 /* 小卡 —— 設計規範「Combination – Third Layer」:標題列 65px、內層圓角 21px */
-html.wall-mode .outdoor-sub {
+html.wall-mode .field-sub {
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -2644,46 +2646,53 @@ html.wall-mode .outdoor-sub {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.05);
 }
-html.wall-mode .outdoor-sub-head {
+html.wall-mode .field-sub-head {
   flex: none;
   display: flex;
   align-items: center;
   gap: 1rem;
-  height: var(--ow-sub-head);
+  height: var(--fw-sub-head);
   padding: 0 calc(21px * var(--wall));
   background: rgba(255, 255, 255, 0.1);
 }
-html.wall-mode .outdoor-sub-body {
+html.wall-mode .field-sub-body {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: var(--ow-sub-pad) calc(21px * var(--wall));
+  padding: var(--fw-sub-pad) calc(21px * var(--wall));
 }
 
 /* 右卡身(大卡內距起算 x = 3984):UAV 測試路徑 3648(兩台電視寬)/ 飛行狀態 1824 /
    訊號狀態 1632,三張等高,卡距跨 x = 7680、9600 */
-html.wall-mode .outdoor-status-body {
+html.wall-mode .field-status-body {
   min-height: 0;
   display: grid;
   grid-template-columns: 3648px 1824px 1632px;
-  column-gap: var(--ow-gap);
+  column-gap: var(--fw-gap);
 }
 /* 路線圖下方的任務進度列(路徑小卡內容 x = 4047~7569):左段到 5712、右段從 5808 起,
    間距跨 x = 5760 */
-html.wall-mode .outdoor-map-foot {
+html.wall-mode .field-map-foot {
   flex: none;
   margin-top: 1.5rem;
   display: grid;
   grid-template-columns: 1665px 1761px;
-  column-gap: var(--ow-gap);
+  column-gap: var(--fw-gap);
   align-items: center;
 }
+/* 同一欄上下兩張小卡(室內右邊中間):下卡從 y = 2208 起、高度 = 卡身下半段,卡距跨 y = 2160 */
+html.wall-mode .field-stack {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) var(--fw-lower);
+  row-gap: var(--fw-gap);
+}
 /* 小卡內容分上下兩段,下段從 y = 2208 起:高度 = 卡身下半段 - 小卡內容底內距,段距跨 y = 2160 */
-html.wall-mode .outdoor-split {
+html.wall-mode .field-split {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) calc(var(--ow-lower) - var(--ow-sub-pad));
-  row-gap: var(--ow-gap);
+  grid-template-rows: minmax(0, 1fr) calc(var(--fw-lower) - var(--fw-sub-pad));
+  row-gap: var(--fw-gap);
 }

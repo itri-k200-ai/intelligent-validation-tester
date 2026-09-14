@@ -1,5 +1,5 @@
-import { OutdoorScenarioContainer } from "@/components/Outdoor/OutdoorScenarioContainer";
+import { FieldTestScenarioContainer } from "@/components/FieldTest/FieldTestScenarioContainer";
 
 export default function OutdoorScenarioPage() {
-  return <OutdoorScenarioContainer />;
+  return <FieldTestScenarioContainer scenario="outdoor" />;
 }
