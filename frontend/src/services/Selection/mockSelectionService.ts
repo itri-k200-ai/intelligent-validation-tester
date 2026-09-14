@@ -27,10 +27,13 @@ export const mockSelectionService = {
   },
   async setSelection(payload: WallSelectionPayload): Promise<void> {
     if (typeof window === "undefined") return;
+    // 跟後端一樣蓋上 updatedAt —— 中牆靠它判斷選擇與 RIC 執行的先後
+    // (見 app/(dashboard)/wall/page.tsx 的室外情境例外)。
+    const stamped = { ...payload, updatedAt: new Date().toISOString() };
     try {
-      window.localStorage.setItem(LS_KEY, JSON.stringify(payload));
+      window.localStorage.setItem(LS_KEY, JSON.stringify(stamped));
       const ch = new BroadcastChannel(WALL_SELECTION_CHANNEL);
-      ch.postMessage(payload);
+      ch.postMessage(stamped);
       ch.close();
     } catch {
       /* ignore */

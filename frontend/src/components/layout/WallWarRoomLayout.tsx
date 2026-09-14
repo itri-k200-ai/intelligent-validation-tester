@@ -85,22 +85,26 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
                 {showBezels ? "框線中" : "框線"}
               </Button>
             )}
-            <Button
-              variant={isWall ? "default" : "ghost"}
-              size="sm"
-              onClick={toggleWall}
-              title={isWall ? "切回一般模式" : "切換到電視牆模式"}
-            >
-              {isWall ? (
-                <>
-                  <Tv2 className="h-4 w-4 mr-2" /> 牆面中
-                </>
-              ) : (
-                <>
-                  <Tv className="h-4 w-4 mr-2" /> 電視牆
-                </>
-              )}
-            </Button>
+            {/* 實體牆(?wall=center / right)固定是牆模式,按了也會被 WallModeApplier
+                設回去,不顯示;全貌預覽仍保留,才切得回一般模式。 */}
+            {region !== "center" && region !== "right" && (
+              <Button
+                variant={isWall ? "default" : "ghost"}
+                size="sm"
+                onClick={toggleWall}
+                title={isWall ? "切回一般模式" : "切換到電視牆模式"}
+              >
+                {isWall ? (
+                  <>
+                    <Tv2 className="h-4 w-4 mr-2" /> 牆面中
+                  </>
+                ) : (
+                  <>
+                    <Tv className="h-4 w-4 mr-2" /> 電視牆
+                  </>
+                )}
+              </Button>
+            )}
             {/* 規格:gap 51px、margin-right 20px、ITRI 高 55px、6G 高 70px */}
             <div className="war-room-top-right">
               <img className="logo-itri" src="/images/logo/itri-logo.png" alt="工業技術研究院" />

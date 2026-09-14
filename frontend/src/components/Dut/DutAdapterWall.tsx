@@ -1,5 +1,5 @@
 "use client";
-import { CheckCircle2, Maximize2, Pause, Play, Video, Volume2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { useRicDutDetail } from "@/hooks/Backend/useRicDutDetail";
 import { ricBackend } from "@/services/Backend/ricBackendService";
 import { useRicTestcaseCatalog } from "@/hooks/Backend/useRicTestcaseCatalog";
 import { TestcaseSequenceDiagram } from "@/components/Dut/TestcaseSequenceDiagram";
-import { HlsPlayer } from "@/components/Site/HlsPlayer";
+import { LiveVideo } from "@/components/Site/LiveVideo";
 import { bi, pickLocale } from "@/lib/bilingual";
 import { useLocale } from "@/stores/localeStore";
 
@@ -189,30 +189,7 @@ export function DutAdapterWallBands({ view }: { view: WallAdapterView }) {
           即時環境影像{cameras[0] ? ` — ${cameras[0].name}` : ""}
         </div>
         <div className="dut-wall-band-body">
-          {cameras[0]?.hls_url ? (
-            <HlsPlayer src={cameras[0].hls_url} />
-          ) : (
-            <div className="video-placeholder">
-              <div className="video-screen">
-                <div className="video-empty">
-                  <Video className="w-20 h-20" strokeWidth={1.25} />
-                  <p>尚無攝影機串流</p>
-                </div>
-                <div className="video-live-badge">
-                  <span className="video-live-dot" /> LIVE
-                </div>
-              </div>
-              <div className="video-controls">
-                <button type="button" aria-label="play"><Play className="w-5 h-5" /></button>
-                <button type="button" aria-label="pause"><Pause className="w-5 h-5" /></button>
-                <span className="video-time">00:00</span>
-                <div className="video-timeline"><div className="video-progress" /></div>
-                <span className="video-time">--:--</span>
-                <button type="button" aria-label="volume"><Volume2 className="w-5 h-5" /></button>
-                <button type="button" aria-label="fullscreen"><Maximize2 className="w-5 h-5" /></button>
-              </div>
-            </div>
-          )}
+          <LiveVideo src={cameras[0]?.hls_url} />
         </div>
       </div>
 
