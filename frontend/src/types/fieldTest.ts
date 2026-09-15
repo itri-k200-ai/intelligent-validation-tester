@@ -56,12 +56,6 @@ export type FieldSample = {
   ulMbps: number;
 };
 
-/** 場域內一台 UE 的吞吐量取樣(x 與其他折線圖相同,為路徑進度) */
-export type FieldUeSeries = {
-  ue: string;
-  samples: { progress: number; mbps: number }[];
-};
-
 export type FieldRun = {
   phase: OptimizationPhase;
   status: "pending" | "running" | "finished" | "error";
@@ -75,8 +69,6 @@ export type FieldRun = {
   link: LinkQuality | null;
   /** 沿路徑的取樣(折線圖用),依 progress 遞增;執行中只到目前進度 */
   samples: FieldSample[];
-  /** 場域內各 UE 的吞吐量,取樣進度同 samples */
-  ueThroughput: FieldUeSeries[];
 };
 
 /** 載具目前的即時狀態(左側即時數值、路徑圖箭頭用) */
@@ -91,6 +83,9 @@ export type FieldVehicleStatus = {
   altitudeM?: number;
   verticalSpeedMps?: number;
   satellites?: number;
+  /** 以下只有 AMR 有:這趟已行駛距離、前方最近障礙物距離 */
+  odometerM?: number;
+  obstacleM?: number;
 };
 
 export type FieldMission = {

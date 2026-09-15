@@ -2,7 +2,6 @@ import type {
   FieldMission,
   FieldSample,
   FieldScenarioId,
-  FieldUeSeries,
   OptimizationPhase,
   RouteWaypoint,
 } from "@/types/fieldTest";
@@ -28,7 +27,7 @@ const UAV_ROUTE: RouteWaypoint[] = [
   { id: "R", kind: "return", x: 10, y: -20 },
 ];
 
-/** 室內:AMR 在廠房走道來回(S 形),最後回到出發點旁 */
+/** 室內:AMR 在 51 館 5 樓走道來回(S 形),最後回到出發點旁 */
 const AMR_ROUTE: RouteWaypoint[] = [
   { id: "S", kind: "start", x: 0, y: 0 },
   { id: "A1", kind: "checkpoint", x: 36, y: 0 },
@@ -96,28 +95,6 @@ function samples(scenario: FieldScenarioId, phase: OptimizationPhase, upTo: numb
   return out;
 }
 
-/** 假設場域內有 10 台 UE */
-const UE_COUNT = 10;
-
-/**
- * 各 UE 的吞吐量:每台位置不同、基準速率不同;載具經過附近時該 UE 會掉速;
- * 優化後整體提高。固定公式,不是動態模擬。
- */
-function ueThroughput(scenario: FieldScenarioId, phase: OptimizationPhase, upTo: number): FieldUeSeries[] {
-  const base = scenario === "outdoor" ? 90 : 180;
-  const lift = phase === "after" ? base * 0.3 : 0;
-  return Array.from({ length: UE_COUNT }, (_, i) => {
-    const ueBase = base * (0.6 + 0.08 * i);
-    const samples = [];
-    for (let p = 0; p <= upTo; p += 4) {
-      const passing = 0.3 * Math.max(0, Math.sin((Math.PI * (p - i * 9)) / 30));
-      const mbps = Math.max(5, Math.round(ueBase * (1 - passing) + lift + 6 * Math.sin(p * 0.4 + i)));
-      samples.push({ progress: p, mbps });
-    }
-    return { ue: `UE-${String(i + 1).padStart(2, "0")}`, samples };
-  });
-}
-
 const MISSIONS: Record<FieldScenarioId, FieldMission> = {
   outdoor: {
     testcase: {
@@ -157,7 +134,6 @@ const MISSIONS: Record<FieldScenarioId, FieldMission> = {
           nrMode: "SA",
         },
         samples: samples("outdoor", "before", 100),
-        ueThroughput: ueThroughput("outdoor", "before", 100),
       },
       {
         phase: "after",
@@ -179,19 +155,26 @@ const MISSIONS: Record<FieldScenarioId, FieldMission> = {
           nrMode: "SA",
         },
         samples: samples("outdoor", "after", 64),
-        ueThroughput: ueThroughput("outdoor", "after", 64),
       },
     ],
   },
   indoor: {
     testcase: {
-      code: "amr.aisle_coverage",
-      name: "走道訊號覆蓋量測",
-      environment: "廠房走道",
+      code: "amr.interference_mitigation",
+      name: "IM xApp 效能測試",
+      environment: "工研院51館5樓",
     },
     route: AMR_ROUTE,
     currentRun: 1,
-    vehicle: { headingDeg: 180, speedMps: 0.69, batteryPct: 88, mode: "AUTO" },
+    vehicle: {
+      headingDeg: 180,
+      speedMps: 0.69,
+      batteryPct: 88,
+      // 路徑全長約 196 m,跑到 64%
+      odometerM: 125.4,
+      obstacleM: 1.8,
+      mode: "AUTO",
+    },
     cameras: [null, null, null, null],
     runs: [
       {
@@ -213,7 +196,6 @@ const MISSIONS: Record<FieldScenarioId, FieldMission> = {
           nrMode: "SA",
         },
         samples: samples("indoor", "before", 100),
-        ueThroughput: ueThroughput("indoor", "before", 100),
       },
       {
         phase: "after",
@@ -235,7 +217,6 @@ const MISSIONS: Record<FieldScenarioId, FieldMission> = {
           nrMode: "SA",
         },
         samples: samples("indoor", "after", 64),
-        ueThroughput: ueThroughput("indoor", "after", 64),
       },
     ],
   },

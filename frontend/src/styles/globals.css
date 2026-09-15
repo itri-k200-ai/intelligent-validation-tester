@@ -2518,16 +2518,17 @@ html.wall-mode .hud-octagon-label {
    兩種版面(config/fieldScenarios.ts):
    - live-results(室外):左「即時狀態」(占畫面 1/3:兩個 16:9 影像 + 飛行狀態 / UAV 通訊品質)、
      右「測試狀態總覽」(UAV 測試路徑 | QoE 優化開啟前後比較)。
-   - camera-grid(室內):左 4 路影像、右 路徑 | UE 吞吐量 + 行駛狀態 | 訊號狀態。
+   - camera-grid(室內):左右各半 —— 左「即時狀態」(2×2 影像 + 行駛狀態 / AMR 通訊品質)、
+     右「測試狀態總覽」(AMR 測試路徑 | IM 優化開啟前後比較)。
    卡片、影像、路徑圖可以跨電視拼接縫,但標題、文字、數值要避開 —— 主牆拼接縫在
    x = 1920 的倍數、y = 1080 / 2160(11520×3240 畫布)。做法是讓間距落在拼接縫上:
 
    - 內容區實際範圍 x = 144~11376、y = 579~3048:左右是 war-room-main-body 的
      3rem,上下是前段 `html.wall-mode main` 以 !important 設的 1.5rem / 4rem。
-   - 左卡寬到 x = 3792,卡距跨 x = 3840;左卡內兩個影像的間距包住 x = 1920。
+   - 左卡寬到 x = 3792(室外)/ 5712(室內),卡距跨 x = 3840 / 5760。
    - 右卡分頭、身:頭是一行標題列(標題 | 測項代碼 | 測項名稱 | 優化狀態);身從 y = 880 開始,
      讓小卡標題列(高 195)落在 880~1075、文字結束在 y ≈ 1052,內容從 y ≈ 1111 起,跨過 y = 1080。
-   - 右卡身三張小卡的卡距跨 x = 7680 / 9600。
+   - 右卡身小卡的卡距跨拼接縫:室外 x = 7680,室內 x = 9600。
    - 有文字的小卡內容分上下兩段,段距跨 y = 2160。
    改主牆內容區的 padding、卡距或卡片內距時,下面的數字要一起重算。 */
 html.wall-mode .field-wall {
@@ -2542,6 +2543,10 @@ html.wall-mode .field-wall {
   display: grid;
   grid-template-columns: calc(3840px - 3rem - var(--fw-gap) / 2) minmax(0, 1fr);
   gap: var(--fw-gap);
+}
+/* 室內左右各半:左卡到 x = 5712、右卡從 5808 起,卡距跨 x = 5760 */
+html.wall-mode .field-wall--half {
+  grid-template-columns: calc(5760px - 3rem - var(--fw-gap) / 2) minmax(0, 1fr);
 }
 html.wall-mode .field-card {
   display: grid;
@@ -2567,6 +2572,10 @@ html.wall-mode .field-head-row {
   grid-template-columns: 1728px 1824px 1824px 1632px;
   column-gap: var(--fw-gap);
   align-items: center;
+}
+/* 室內右卡從 x = 5904 起只剩三段:1728 / 1824 / 1632,間距跨 x = 7680 / 9600 */
+html.wall-mode .field-wall--half .field-head-row {
+  grid-template-columns: 1728px 1824px 1632px;
 }
 
 /* 左卡(室外):標題 / 影像 / 即時小卡。
@@ -2594,20 +2603,30 @@ html.wall-mode .field-video-row {
   justify-content: space-between;
   align-items: start;
 }
-/* 只放影像的左卡(motion = null,4 路):標題 + 2×2 影像,影像貼齊卡底。
-   各 1632×918,欄距包住 x = 1920;兩列 2 × 918 + 96 = 1932 貼底 → 第一列 y 1020~1938、
-   第二列 2034~2952。名稱與 LIVE 在影像底部、沒串流的提示在畫面中間,都避開 y = 1080 / 2160 */
-html.wall-mode .field-card--cameras {
-  grid-template-rows: auto minmax(0, 1fr);
-  row-gap: 1.5rem;
+/* 室內左卡身(y = 880~2952,左卡內距起算 x = 240):2×2 影像 3552 / 即時小卡 1728,欄距跨 x = 3840 */
+html.wall-mode .field-live-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 3552px 1728px;
+  column-gap: var(--fw-gap);
 }
+/* 影像各 1728×972(16:9),上下貼齊卡身:第一列 y 880~1852、第二列 1980~2952。
+   左欄影像本身跨 x = 1920,但名稱(左下)與 LIVE(右下,右緣 x = 1908)都在縫的左邊;
+   沒串流的提示在畫面中間(y ≈ 1366 / 2466),都避開 y = 1080 / 2160 */
 html.wall-mode .field-video-grid {
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(2, 1632px);
+  grid-template-columns: repeat(2, 1728px);
   justify-content: space-between;
-  align-content: end;
-  row-gap: var(--fw-gap);
+  align-content: space-between;
+}
+/* 即時小卡上下兩張:下卡高度同室外 .field-live-row(標題列在 y = 2160 之上、數值從 y = 2208 起),
+   上卡 y = 880~1833,標題列 880~1075 與右卡小卡對齊 */
+html.wall-mode .field-live-stack {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) calc(var(--fw-lower) + var(--fw-gap) + var(--fw-sub-head) + 12px);
+  row-gap: 1.5rem;
 }
 html.wall-mode .field-video {
   position: relative;
@@ -2672,12 +2691,12 @@ html.wall-mode .field-sub-body {
   padding: var(--fw-sub-pad) calc(21px * var(--wall));
 }
 
-/* 右卡身(大卡內距起算 x = 3984):UAV 測試路徑 3648(兩台電視寬)/ 飛行狀態 1824 /
-   訊號狀態 1632,三張等高,卡距跨 x = 7680、9600 */
+/* 右卡身(室內,右卡內距起算 x = 5904):AMR 測試路徑 3648 / IM 優化開啟前後比較 1632,
+   卡距跨 x = 9600(路線圖本身跨 x = 7680) */
 html.wall-mode .field-status-body {
   min-height: 0;
   display: grid;
-  grid-template-columns: 3648px 1824px 1632px;
+  grid-template-columns: 3648px 1632px;
   column-gap: var(--fw-gap);
 }
 /* 測試結果(室外):UAV 測試路徑 3648 / 吞吐量對比 3552,卡距跨 x = 7680 */
@@ -2691,8 +2710,8 @@ html.wall-mode .field-compare-head {
   column-gap: var(--fw-gap);
   align-items: baseline;
 }
-/* 路線圖下方的任務進度列(路徑小卡內容 x = 4047~7569):左段到 5712、右段從 5808 起,
-   間距跨 x = 5760 */
+/* 路線圖下方的測試進度列(路徑小卡內容寬 3522):左段 1665、右段 1761,間距跨拼接縫 ——
+   室外內容 x = 4047~7569 跨 x = 5760;室內內容 x = 5967~9489 跨 x = 7680 */
 html.wall-mode .field-map-foot {
   flex: none;
   margin-top: 1.5rem;
@@ -2700,13 +2719,6 @@ html.wall-mode .field-map-foot {
   grid-template-columns: 1665px 1761px;
   column-gap: var(--fw-gap);
   align-items: center;
-}
-/* 同一欄上下兩張小卡(室內右邊中間):下卡從 y = 2208 起、高度 = 卡身下半段,卡距跨 y = 2160 */
-html.wall-mode .field-stack {
-  min-height: 0;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) var(--fw-lower);
-  row-gap: var(--fw-gap);
 }
 /* 小卡內容分上下兩段,下段從 y = 2208 起:高度 = 卡身下半段 - 小卡內容底內距,段距跨 y = 2160 */
 html.wall-mode .field-split {

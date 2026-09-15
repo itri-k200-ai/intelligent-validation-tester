@@ -1,5 +1,5 @@
 "use client";
-import { Bot, Plane, Route, Signal, Users, type LucideIcon } from "lucide-react";
+import { Bot, Plane, Route, Signal, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   CartesianGrid,
@@ -25,6 +25,7 @@ import type {
   FieldRun,
   FieldSample,
   FieldScenarioId,
+  FieldVehicleStatus,
   OptimizationPhase,
 } from "@/types/fieldTest";
 
@@ -41,7 +42,11 @@ import type {
 //   │ │ 高度 地速 …   │ │ SNR RSSI …││ │ │ 測試進度 │ 階段  │ │ 上行 ╱╲╱                  │ │
 //   └──────────────────────────────────┘ └──────────────────────────────────────────────────────┘
 //
-// camera-grid(室內):左 4 路影像;右 路徑 | 上 UE 吞吐量、下 行駛狀態 | 訊號狀態
+// camera-grid(室內):同樣左即時、右結果,但 4 路影像放不進 1/3 寬,所以左右各半
+//   ┌ 即時狀態 ─────────────────────── 優化 已開啟 ┐ ┌ 測試狀態總覽 │ 測試項目 │ 測試環境 ┐
+//   │ [攝影機 1][攝影機 2] ┌行駛狀態────┐        │ │ ┌AMR 測試路徑────────┐ ┌IM 優化─┐ │
+//   │ [攝影機 3][AMR 車載] └AMR 通訊品質┘        │ │ └路徑圖 / 測試進度───┘ └SNR 下行┘ │
+//   └──────────────────────────────────────────────┘ └──────────────────────────────────────┘
 //
 // 資料目前是靜態假資料(見 useFieldTestMission)。
 
@@ -73,8 +78,6 @@ function LiveResultsLayout({
 }) {
   const run = mission.runs[mission.currentRun];
   const allRuns = mission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
-  const v = mission.vehicle;
-  const link = run?.link ?? null;
 
   return (
     <div className="field-wall">
@@ -91,42 +94,13 @@ function LiveResultsLayout({
         </div>
         {/* 兩張即時小卡並排,間距跨 x = 1920 */}
         <div className="field-live-row">
-          <Sub className="field-sub--lower" icon={VEHICLE_ICON[scenario]} title={sc.live.vehicleTitle}>
-            <MetricGrid
-              items={[
-                // 欄寬窄,「相對高度 m」會被截斷
-                { label: "高度", unit: "m", value: v.altitudeM?.toFixed(1) ?? null },
-                { label: "地速", unit: "m/s", value: v.speedMps.toFixed(1) },
-                { label: "垂直", unit: "m/s", value: v.verticalSpeedMps?.toFixed(1) ?? null },
-                {
-                  label: "電量",
-                  unit: "%",
-                  value: v.batteryPct,
-                  tone: v.batteryPct < 30 ? "text-danger" : undefined,
-                },
-                { label: "衛星數", value: v.satellites ?? null },
-                // 模式字串較長,字級小一階才放得進欄寬
-                { label: "模式", value: v.mode, tone: "text-warning", size: "text-[2rem]" },
-              ]}
-            />
-          </Sub>
-          <Sub
+          <VehicleSub
             className="field-sub--lower"
-            icon={Signal}
-            title={sc.live.signalTitle}
-            aside={run ? `目前:${PHASE[run.phase].short}` : undefined}
-          >
-            <MetricGrid
-              items={[
-                { label: "SNR", unit: "dB", value: link?.snrDb.toFixed(1) ?? null },
-                { label: "RSSI", unit: "dBm", value: link?.rssiDbm.toFixed(1) ?? null },
-                { label: "RSRQ", unit: "dB", value: link?.rsrqDb.toFixed(1) ?? null },
-                { label: "上行", unit: "Mbps", value: link?.ulMbps?.toFixed(1) ?? null },
-                { label: "下行", unit: "Mbps", value: link?.dlMbps?.toFixed(0) ?? null },
-                { label: "丟包", unit: "%", value: link?.packetLossPct?.toFixed(2) ?? null },
-              ]}
-            />
-          </Sub>
+            scenario={scenario}
+            title={sc.live.vehicleTitle}
+            vehicle={mission.vehicle}
+          />
+          <SignalSub className="field-sub--lower" title={sc.live.signalTitle} run={run} />
         </div>
       </section>
 
@@ -166,7 +140,7 @@ function LiveResultsLayout({
   );
 }
 
-// ── 版面:4 路影像(室內)──────────────────────────────────────────────
+// ── 版面:左右各半、4 路影像(室內)─────────────────────────────────────
 
 function CameraGridLayout({
   scenario,
@@ -179,28 +153,36 @@ function CameraGridLayout({
 }) {
   const run = mission.runs[mission.currentRun];
   const allRuns = mission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
-  const currentOnly = run ? [{ phase: run.phase, samples: run.samples }] : [];
 
   return (
-    <div className="field-wall">
-      {/* ── 左:即時環境影像(2×2)── */}
-      <section className="dut-wall-band field-card field-card--cameras">
-        <div className="dut-wall-band-title">即時環境影像</div>
-        <div className="field-video-grid">
-          {sc.cameras.map((label, i) => (
-            <VideoTile key={label} label={label} src={mission.cameras[i] ?? null} />
-          ))}
+    <div className="field-wall field-wall--half">
+      {/* ── 左:即時狀態(2×2 影像 + 即時數值)── */}
+      <section className="dut-wall-band field-card">
+        <div className="field-card-head">
+          <div className="flex items-center justify-between">
+            <div className="dut-wall-band-title">即時狀態</div>
+            <OptimizationBadge optimized={run?.phase === "after"} />
+          </div>
+        </div>
+        {/* 影像與即時小卡的欄距跨 x = 3840 */}
+        <div className="field-live-grid">
+          <div className="field-video-grid">
+            {sc.cameras.map((label, i) => (
+              <VideoTile key={label} label={label} src={mission.cameras[i] ?? null} />
+            ))}
+          </div>
+          {/* 上卡標題列對齊右卡小卡;下卡標題列在 y = 2160 之上、數值從 y = 2208 起 */}
+          <div className="field-live-stack">
+            <VehicleSub scenario={scenario} title={sc.live.vehicleTitle} vehicle={mission.vehicle} />
+            <SignalSub className="field-sub--lower" title={sc.live.signalTitle} run={run} />
+          </div>
         </div>
       </section>
 
       {/* ── 右:測試狀態總覽 ── */}
       <section className="dut-wall-band field-card">
         <div className="field-card-head">
-          <HeadRow
-            title="測試狀態總覽"
-            mission={mission}
-            right={<OptimizationBadge optimized={run?.phase === "after"} className="justify-self-end" />}
-          />
+          <HeadRow title="測試狀態總覽" mission={mission} />
         </div>
 
         <div className="field-status-body">
@@ -209,22 +191,7 @@ function CameraGridLayout({
             <MissionProgress mission={mission} />
           </Sub>
 
-          {/* 上半 UE 吞吐量、下半移動狀態,兩張小卡的間距跨 y = 2160 */}
-          <div className="field-stack">
-            <Sub icon={Users} title="場域 UE 吞吐量" aside={run ? `${run.ueThroughput.length} 台 UE` : undefined}>
-              {run && <UeThroughputChart run={run} xTicks={[0, 50, 100]} />}
-            </Sub>
-            <Sub
-              icon={VEHICLE_ICON[scenario]}
-              title={sc.motion.title}
-              aside={motionSummary(sc.motion.chart, sc.motion.stat, run?.samples.at(-1))}
-            >
-              {/* 小卡矮:圖表標題併進小卡標題列,高度留給圖 */}
-              <TrendChart spec={sc.motion.chart} series={currentOnly} bare />
-            </Sub>
-          </div>
-
-          <Sub icon={Signal} title="訊號狀態">
+          <Sub icon={Signal} title="IM 優化開啟前後比較">
             <div className="field-split">
               <div className="flex min-h-0 flex-col">
                 {/* 圖例放這一行:小卡標題列寬度不夠,放在那裡會被截掉 */}
@@ -245,10 +212,10 @@ function CameraGridLayout({
 // ── 共用 ─────────────────────────────────────────────────────────────
 
 /**
- * 右卡標題列:標題 | 測項代碼 | 測項名稱 | right,各占一台電視寬(間距跨拼接縫)。
+ * 右卡標題列:標題 | 測試項目 | 測試環境 | right(可省),各占一台電視寬(間距跨拼接縫)。
  * 測試項目放在同一行,底下的小卡才能往上長。
  */
-function HeadRow({ title, mission, right }: { title: string; mission: FieldMission; right: ReactNode }) {
+function HeadRow({ title, mission, right }: { title: string; mission: FieldMission; right?: ReactNode }) {
   return (
     <div className="field-head-row">
       <div className="dut-wall-band-title">{title}</div>
@@ -361,144 +328,79 @@ function MetricGrid({ items }: { items: Reading[] }) {
   );
 }
 
-// ── 場域 UE 吞吐量 ───────────────────────────────────────────────────
+// ── 即時數值小卡 ─────────────────────────────────────────────────────
 
-/** 各 UE 線的去強調色(灰):10 條線不各給一個色相,只凸顯平均 */
-const UE_LINE = "rgba(255,255,255,0.28)";
+/** 載具即時數值:室外 UAV 與室內 AMR 各看各的參數,都是 3 欄 × 2 列 */
+function vehicleReadings(scenario: FieldScenarioId, v: FieldVehicleStatus): Reading[] {
+  const battery: Reading = {
+    label: "電量",
+    unit: "%",
+    value: v.batteryPct,
+    tone: v.batteryPct < 30 ? "text-danger" : undefined,
+  };
+  // 模式字串較長,字級小一階才放得進欄寬
+  const mode: Reading = { label: "模式", value: v.mode, tone: "text-warning", size: "text-[2rem]" };
+  if (scenario === "indoor") {
+    return [
+      { label: "速度", unit: "m/s", value: v.speedMps.toFixed(2) },
+      { label: "航向", unit: "°", value: v.headingDeg.toFixed(0) },
+      battery,
+      { label: "里程", unit: "m", value: v.odometerM?.toFixed(1) ?? null },
+      { label: "障礙距離", unit: "m", value: v.obstacleM?.toFixed(1) ?? null },
+      mode,
+    ];
+  }
+  return [
+    // 欄寬窄,「相對高度 m」會被截斷
+    { label: "高度", unit: "m", value: v.altitudeM?.toFixed(1) ?? null },
+    { label: "地速", unit: "m/s", value: v.speedMps.toFixed(1) },
+    { label: "垂直", unit: "m/s", value: v.verticalSpeedMps?.toFixed(1) ?? null },
+    battery,
+    { label: "衛星數", value: v.satellites ?? null },
+    mode,
+  ];
+}
 
-/**
- * 場域內各 UE 的吞吐量(目前這趟),x 為路徑進度。
- * 10 台 UE 超過類別色的上限(8),所以各 UE 一律灰色當背景,平均線用這趟的代表色凸顯。
- */
-function UeThroughputChart({ run, xTicks }: { run: FieldRun; xTicks: number[] }) {
-  const ues = run.ueThroughput;
-  const byProgress = new Map<number, Record<string, number>>();
-  ues.forEach((u) =>
-    u.samples.forEach((pt) => {
-      const row = byProgress.get(pt.progress) ?? { progress: pt.progress };
-      row[u.ue] = pt.mbps;
-      byProgress.set(pt.progress, row);
-    }),
-  );
-  type Row = Record<string, number> & { progress: number; avg: number };
-  const rows: Row[] = [...byProgress.values()]
-    .sort((a, b) => a.progress - b.progress)
-    .map((row) => {
-      const values = ues.map((u) => row[u.ue]).filter((val): val is number => val !== undefined);
-      const avg = values.length ? values.reduce((sum, val) => sum + val, 0) / values.length : 0;
-      return { ...row, progress: row.progress, avg };
-    });
-  const last = rows.at(-1);
-  const color = PHASE[run.phase].color;
-
-  // y 軸:折線不需要從 0 起算,貼著資料範圍取整,刻度用整齊的 50 / 100 間隔,10 條線才分得開
-  const all = ues.flatMap((u) => u.samples.map((pt) => pt.mbps));
-  const yLo = all.length ? Math.max(0, Math.floor((Math.min(...all) - 10) / 50) * 50) : 0;
-  const yHi = all.length ? Math.ceil((Math.max(...all) + 10) / 50) * 50 : 100;
-  const yStep = yHi - yLo > 200 ? 100 : 50;
-  const yTicks = Array.from({ length: Math.floor((yHi - yLo) / yStep) + 1 }, (_, i) => yLo + i * yStep);
-
+/** 飛行狀態 / 行駛狀態 */
+function VehicleSub({
+  scenario,
+  title,
+  vehicle,
+  className,
+}: {
+  scenario: FieldScenarioId;
+  title: string;
+  vehicle: FieldVehicleStatus;
+  className?: string;
+}) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="mb-4 flex flex-none items-baseline gap-5 whitespace-nowrap">
-        <span className="text-sm text-white/60">平均</span>
-        <span className="text-[2.75rem] font-semibold leading-[1.1] text-white">
-          {last ? Math.round(last.avg) : "—"}
-        </span>
-        <span className="text-sm text-white/50">Mbps</span>
-        <span className="ml-auto flex items-center gap-8 text-sm text-white/70">
-          <span className="flex items-center gap-3">
-            <span className="inline-block h-[6px] w-12 rounded-full" style={{ background: UE_LINE }} />
-            各 UE
-          </span>
-          <span className="flex items-center gap-3">
-            <span className="inline-block h-[6px] w-12 rounded-full" style={{ background: color }} />
-            平均
-          </span>
-        </span>
-      </div>
-      <div className="relative min-h-0 flex-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={rows} margin={{ top: 24, right: 130, bottom: 0, left: 0 }}>
-            <CartesianGrid stroke={GRID_STROKE} strokeWidth={3} vertical={false} />
-            <XAxis
-              dataKey="progress"
-              type="number"
-              domain={[0, 100]}
-              ticks={xTicks}
-              tickFormatter={(val: number) => `${val}%`}
-              tick={AXIS_TICK}
-              tickLine={false}
-              tickMargin={44}
-              stroke={AXIS_STROKE}
-              strokeWidth={3}
-              height={130}
-            />
-            <YAxis
-              tick={AXIS_TICK}
-              tickLine={false}
-              axisLine={false}
-              width={150}
-              domain={[yLo, yHi]}
-              ticks={yTicks}
-            />
-            <Tooltip
-              cursor={{ stroke: "rgba(255,255,255,0.35)", strokeWidth: 3 }}
-              content={({ active, payload, label }) => {
-                if (!active || !payload?.length) return null;
-                const avg = payload.find((it) => it.dataKey === "avg")?.value;
-                const values = payload.filter((it) => it.dataKey !== "avg").map((it) => Number(it.value));
-                return (
-                  <div style={TOOLTIP_BOX}>
-                    <div style={{ color: "rgba(255,255,255,0.7)" }}>路徑進度 {label}%</div>
-                    <div>平均 {avg === undefined ? "—" : Math.round(Number(avg))} Mbps</div>
-                    {values.length > 0 && (
-                      <div>
-                        最高 {Math.max(...values)} · 最低 {Math.min(...values)} Mbps
-                      </div>
-                    )}
-                  </div>
-                );
-              }}
-            />
-            {ues.map((u) => (
-              <Line
-                key={u.ue}
-                dataKey={u.ue}
-                type="monotone"
-                stroke={UE_LINE}
-                strokeWidth={4}
-                dot={false}
-                activeDot={false}
-                isAnimationActive={false}
-              />
-            ))}
-            <Line
-              dataKey="avg"
-              type="monotone"
-              stroke={color}
-              strokeWidth={6}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              dot={false}
-              activeDot={{ r: 12, fill: color, stroke: CHART_SURFACE, strokeWidth: 6 }}
-              isAnimationActive={false}
-            />
-            {last && (
-              <ReferenceDot
-                x={last.progress}
-                y={last.avg}
-                r={12}
-                fill={color}
-                stroke={CHART_SURFACE}
-                strokeWidth={6}
-                ifOverflow="visible"
-              />
-            )}
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
+    <Sub className={className} icon={VEHICLE_ICON[scenario]} title={title}>
+      <MetricGrid items={vehicleReadings(scenario, vehicle)} />
+    </Sub>
+  );
+}
+
+/** UAV / AMR 通訊品質:目前這趟的鏈路數值 */
+function SignalSub({ title, run, className }: { title: string; run: FieldRun | undefined; className?: string }) {
+  const link = run?.link ?? null;
+  return (
+    <Sub
+      className={className}
+      icon={Signal}
+      title={title}
+      aside={run ? `目前:${PHASE[run.phase].short}` : undefined}
+    >
+      <MetricGrid
+        items={[
+          { label: "SNR", unit: "dB", value: link?.snrDb.toFixed(1) ?? null },
+          { label: "RSSI", unit: "dBm", value: link?.rssiDbm.toFixed(1) ?? null },
+          { label: "RSRQ", unit: "dB", value: link?.rsrqDb.toFixed(1) ?? null },
+          { label: "上行", unit: "Mbps", value: link?.ulMbps?.toFixed(1) ?? null },
+          { label: "下行", unit: "Mbps", value: link?.dlMbps?.toFixed(0) ?? null },
+          { label: "丟包", unit: "%", value: link?.packetLossPct?.toFixed(2) ?? null },
+        ]}
+      />
+    </Sub>
   );
 }
 
@@ -573,7 +475,7 @@ function RouteMap({ mission }: { mission: FieldMission }) {
   );
 }
 
-/** 路徑圖下方:目前這趟的測試進度(左)與階段(右),欄距跨 x = 5760 */
+/** 路徑圖下方:目前這趟的測試進度(左)與階段(右),欄距跨拼接縫(見 globals.css .field-map-foot) */
 function MissionProgress({ mission }: { mission: FieldMission }) {
   const run = mission.runs[mission.currentRun];
   if (!run) return null;
@@ -599,15 +501,6 @@ function MissionProgress({ mission }: { mission: FieldMission }) {
   );
 }
 
-/** 移動狀態小卡標題列的數值摘要,例如「0.69 m/s · 電量 88%」 */
-function motionSummary(chart: TrendSpec, stat: TrendSpec | undefined, latest: FieldSample | undefined) {
-  const fmt = (spec: TrendSpec) => {
-    const val = sampleValue(latest, spec.metric);
-    return val === null ? "—" : `${val.toFixed(spec.digits)}${spec.unit === "%" ? "" : " "}${spec.unit}`;
-  };
-  return stat ? `${fmt(chart)} · ${stat.label} ${fmt(stat)}` : fmt(chart);
-}
-
 const RUN_STATUS: Record<FieldRun["status"], string> = {
   pending: "待命",
   running: "進行中",
@@ -617,10 +510,10 @@ const RUN_STATUS: Record<FieldRun["status"], string> = {
 
 // ── 折線圖 ───────────────────────────────────────────────────────────
 
-/** 訊號的兩張圖(兩個情境相同) */
+/** IM 優化開啟前後比較的兩張圖(室內) */
 const SIGNAL_CHARTS: [TrendSpec, TrendSpec] = [
   { label: "SNR", unit: "dB", metric: "snrDb", digits: 1 },
-  { label: "下行速率", unit: "Mbps", metric: "dlMbps", digits: 0 },
+  { label: "下行吞吐量", unit: "Mbps", metric: "dlMbps", digits: 0 },
 ];
 
 /** QoE 優化開啟前後比較的兩張圖 */
