@@ -11,7 +11,7 @@ import type {
  * 場域測試的假資料(固定值)。
  *
  * 對應的 tester 還沒串,先給中牆一份靜態資料看版面:載具沿同一條路徑跑兩趟,
- * 第一趟「優化開啟前」已跑完、第二趟「優化開啟後」跑到一半。
+ * 第一趟「優化前」已跑完、第二趟「優化後」跑到一半。
  */
 
 // 公尺,出發點為原點,x 向東、y 向北。
@@ -42,7 +42,24 @@ const AMR_ROUTE: RouteWaypoint[] = [
 ];
 
 /**
- * 沿路徑每 4% 取一筆。路徑中段離基地台最遠,訊號最差;優化開啟後 SNR、下行速率整體較高。
+ * 假資料用:室外航線上受干擾、訊號會下滑的兩段(路徑進度 %)。
+ * 只用來產生折線的起伏,畫面上不標示 —— 實際干擾範圍會隨環境變動,不是固定的區域。
+ */
+const OUTDOOR_ZONES: { from: number; to: number }[] = [
+  { from: 28, to: 46 },
+  { from: 58, to: 76 },
+];
+
+/** 干擾程度 0~1:進出干擾區的邊界各有約 4% 的漸變 */
+function interference(p: number) {
+  return Math.max(
+    0,
+    ...OUTDOOR_ZONES.map((z) => Math.min(Math.max(Math.min(p - z.from, z.to - p) / 4 + 0.5, 0), 1)),
+  );
+}
+
+/**
+ * 沿路徑每 4% 取一筆。路徑中段離基地台最遠,訊號最差;優化後 SNR、下行吞吐量整體較高。
  * 用固定公式算出來,每次都一樣(不是動態模擬)。
  */
 function samples(scenario: FieldScenarioId, phase: OptimizationPhase, upTo: number): FieldSample[] {
@@ -58,9 +75,10 @@ function samples(scenario: FieldScenarioId, phase: OptimizationPhase, upTo: numb
         altitudeM: +(30 * climb + (cruising ? 0.4 * Math.sin(p * 0.9) : 0)).toFixed(1),
         speedMps: +(6 * climb + (cruising ? 0.3 * Math.sin(p * 1.3) : 0)).toFixed(1),
         batteryPct: Math.round(98 - p * 0.2),
-        snrDb: +(14 - 9 * far + 6.5 * boost + 0.8 * Math.sin(p * 0.7)).toFixed(1),
-        dlMbps: Math.round(160 - 95 * far + 45 * boost + 6 * Math.sin(p * 0.5)),
-        ulMbps: +(20 - 11 * far + 8 * boost + 1.5 * Math.sin(p * 0.6)).toFixed(1),
+        // 受干擾的路段訊號下滑:優化前掉很多,優化後只掉一點
+        snrDb: +(19 - (boost ? 3 : 11) * interference(p) + 0.8 * Math.sin(p * 0.7)).toFixed(1),
+        dlMbps: Math.round((165 + 6 * Math.sin(p * 0.5)) * (1 - (boost ? 0.15 : 0.65) * interference(p))),
+        ulMbps: +((22 + 1.5 * Math.sin(p * 0.6)) * (1 - (boost ? 0.15 : 0.65) * interference(p))).toFixed(1),
       });
     } else {
       // 每走完一排走道要轉彎減速(轉角約每 1/8 路徑一個)
@@ -83,7 +101,7 @@ const UE_COUNT = 10;
 
 /**
  * 各 UE 的吞吐量:每台位置不同、基準速率不同;載具經過附近時該 UE 會掉速;
- * 優化開啟後整體提高。固定公式,不是動態模擬。
+ * 優化後整體提高。固定公式,不是動態模擬。
  */
 function ueThroughput(scenario: FieldScenarioId, phase: OptimizationPhase, upTo: number): FieldUeSeries[] {
   const base = scenario === "outdoor" ? 90 : 180;
@@ -102,7 +120,11 @@ function ueThroughput(scenario: FieldScenarioId, phase: OptimizationPhase, upTo:
 
 const MISSIONS: Record<FieldScenarioId, FieldMission> = {
   outdoor: {
-    testcase: { code: "uav.waypoint_coverage", procedure: "Waypoint Coverage Measurement" },
+    testcase: {
+      code: "uav.interference_mobility",
+      name: "室外 QoE xApp 效能測試",
+      environment: "工研院52館外大草坪",
+    },
     route: UAV_ROUTE,
     currentRun: 1,
     vehicle: {
@@ -162,7 +184,11 @@ const MISSIONS: Record<FieldScenarioId, FieldMission> = {
     ],
   },
   indoor: {
-    testcase: { code: "amr.aisle_coverage", procedure: "Indoor Aisle Coverage Measurement" },
+    testcase: {
+      code: "amr.aisle_coverage",
+      name: "走道訊號覆蓋量測",
+      environment: "廠房走道",
+    },
     route: AMR_ROUTE,
     currentRun: 1,
     vehicle: { headingDeg: 180, speedMps: 0.69, batteryPct: 88, mode: "AUTO" },

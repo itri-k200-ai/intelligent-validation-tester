@@ -2516,8 +2516,8 @@ html.wall-mode .hud-octagon-label {
 
 /* ── 場域測試中牆:室外 UAV / 室內 AMR(components/FieldTest/FieldTestWall)──
    兩種版面(config/fieldScenarios.ts):
-   - live-results(室外):左「即時狀態」(占畫面 1/3:兩個 16:9 影像 + 飛行狀態 / UAV 訊號)、
-     右「測試結果」(UAV 測試路徑 | UAV 吞吐量開啟前後對比)。
+   - live-results(室外):左「即時狀態」(占畫面 1/3:兩個 16:9 影像 + 飛行狀態 / UAV 通訊品質)、
+     右「測試狀態總覽」(UAV 測試路徑 | QoE 優化開啟前後比較)。
    - camera-grid(室內):左 4 路影像、右 路徑 | UE 吞吐量 + 行駛狀態 | 訊號狀態。
    卡片、影像、路徑圖可以跨電視拼接縫,但標題、文字、數值要避開 —— 主牆拼接縫在
    x = 1920 的倍數、y = 1080 / 2160(11520×3240 畫布)。做法是讓間距落在拼接縫上:

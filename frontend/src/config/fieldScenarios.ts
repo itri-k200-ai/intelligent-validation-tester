@@ -2,8 +2,8 @@ import type { FieldSample, FieldScenarioId } from "@/types/fieldTest";
 
 // ── 場域測試情境(中牆)────────────────────────────────────────────────
 // 室外 UAV、室內 AMR 共用中牆的零件(components/FieldTest/FieldTestWall),版面各自一種:
-//   - live-results(室外):左邊「即時狀態」—— 2 路影像 + 載具狀態 / 載具訊號數值;
-//     右邊「測試結果」—— 路徑 | UAV 吞吐量開啟前後對比(場域內只觀察這台 UAV)
+//   - live-results(室外):左邊「即時狀態」—— 2 路影像 + 飛行狀態 / UAV 通訊品質數值;
+//     右邊「測試狀態總覽」—— 路徑 | QoE 優化開啟前後比較(只觀察這台 UAV)
 //   - camera-grid(室內):左邊 4 路影像;右邊 路徑 | UE 吞吐量 + 移動狀態 | 訊號狀態
 // 新增情境改這裡 + types/fieldTest.ts 的 FieldScenarioId + 假資料。
 
@@ -37,15 +37,15 @@ export type FieldScenario = ScenarioBase &
 
 export const FIELD_SCENARIOS: Record<FieldScenarioId, FieldScenario> = {
   outdoor: {
-    title: "室外 UAV 情境",
+    title: "xApp Tester 室外測試情境",
     href: "/outdoor-scenario",
     routeTitle: "UAV 測試路徑",
     layout: "live-results",
-    cameras: ["室外固定攝影機", "無人機機載攝影機"],
-    live: { vehicleTitle: "飛行狀態", signalTitle: "UAV 訊號" },
+    cameras: ["室外固定攝影機", "UAV 機載攝影機"],
+    live: { vehicleTitle: "飛行狀態", signalTitle: "UAV 通訊品質" },
   },
   indoor: {
-    title: "室內 AMR 情境",
+    title: "xApp Tester 室內測試情境",
     href: "/indoor-scenario",
     routeTitle: "AMR 測試路徑",
     layout: "camera-grid",

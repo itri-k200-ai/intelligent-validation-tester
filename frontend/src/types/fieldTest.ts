@@ -1,7 +1,7 @@
 // ── 場域測試中牆(室外 UAV / 室內 AMR)──────────────────────────────────
 //
 // 兩個情境版面相同:載具(室外無人機、室內 AMR)沿同一條路徑跑兩趟 ——
-// 優化開啟前、開啟後,比較兩趟的訊號與傳輸,一次只跑一個測試項目。
+// 優化前、優化後,比較兩趟的訊號與傳輸,一次只跑一個測試項目。
 // 對應的 tester 尚未串接,欄位是依規劃圖
 // docs/外部文件/前端UI建議/2026-09-13_智慧網路實驗室_室外UAV情境中牆UI規劃.png 定的,
 // 目前只有 mockFieldTestService 在填。串接時若對方欄位不同,在 service 層轉成這個形狀,
@@ -11,8 +11,12 @@ export type FieldScenarioId = "outdoor" | "indoor";
 
 /** 本次測試項目(一次只會有一個,兩趟都跑同一項;測項清單由左螢幕負責) */
 export type FieldTestcase = {
+  /** 測項代碼(和左螢幕 / tester 對應用,中牆不顯示) */
   code: string;
-  procedure: string;
+  /** 中文名稱 */
+  name: string;
+  /** 測試環境(短標籤,例如「工研院52館外大草坪」) */
+  environment: string;
 };
 
 export type RouteWaypointKind = "start" | "checkpoint" | "mission" | "return";
@@ -35,7 +39,7 @@ export type LinkQuality = {
   nrMode: string;
 };
 
-/** 優化開啟前 / 開啟後 —— 載具沿同一條路徑各跑一趟,比較兩趟的結果。 */
+/** 優化前 / 優化後 —— 載具沿同一條路徑各跑一趟,比較兩趟的結果。 */
 export type OptimizationPhase = "before" | "after";
 
 /** 沿路徑取樣的一筆數據;兩趟用同一個 x(路徑進度)才對得起來比較 */
@@ -61,7 +65,7 @@ export type FieldUeSeries = {
 export type FieldRun = {
   phase: OptimizationPhase;
   status: "pending" | "running" | "finished" | "error";
-  /** 這趟任務進度 0–100 */
+  /** 這趟測試進度 0–100 */
   progress: number;
   /** 已經過的路徑點數(含出發點) */
   reachedWaypoints: number;
@@ -92,7 +96,7 @@ export type FieldVehicleStatus = {
 export type FieldMission = {
   testcase: FieldTestcase;
   route: RouteWaypoint[];
-  /** 依執行順序:[優化開啟前, 優化開啟後] */
+  /** 依執行順序:[優化前, 優化後] */
   runs: FieldRun[];
   /** 目前(或最後)在跑的那一趟,runs 的索引 */
   currentRun: number;

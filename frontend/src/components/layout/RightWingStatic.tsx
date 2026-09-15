@@ -108,7 +108,7 @@ const METHODS: { tab: string; lines: string[]; figure?: string }[] = [
     ],
   },
   {
-    tab: "戶外測試",
+    tab: "室外測試",
     lines: [
       "於工研院 52 館外大草坪配置手機與無人機進行實測。" +
         "透過無人機穿越干擾與非干擾區,驗證 QoE xApp 的改善效果。",

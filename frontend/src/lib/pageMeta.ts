@@ -94,11 +94,11 @@ export function getPageMeta(pathname: string): PageMeta {
   }
 
   if (seg[0] === "outdoor-scenario") {
-    return { title: "室外 UAV 情境" };
+    return { title: "xApp Tester 室外測試情境" };
   }
 
   if (seg[0] === "indoor-scenario") {
-    return { title: "室內 AMR 情境" };
+    return { title: "xApp Tester 室內測試情境" };
   }
 
   // 中牆的固定 URL —— 顯示什麼由 selection 決定,標題不隨內容變。

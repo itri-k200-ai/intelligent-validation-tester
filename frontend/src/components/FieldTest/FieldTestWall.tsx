@@ -30,15 +30,15 @@ import type {
 
 // ── 場域測試中牆(室外 UAV / 室內 AMR)──────────────────────────────────
 // 內容依規劃圖 docs/外部文件/前端UI建議/2026-09-13_智慧網路實驗室_室外UAV情境中牆UI規劃.png。
-// 測試流程是載具沿同一條路徑跑兩趟(優化開啟前、開啟後),一次只跑一個測試項目;
+// 測試流程是載具沿同一條路徑跑兩趟(優化前、優化後),一次只跑一個測試項目;
 // 測項清單在左螢幕,中牆只專注目前這個測試。兩種版面(見 config/fieldScenarios.ts)
 // 共用下面的小卡、路徑圖、折線圖。文字避開電視拼接縫,座標與推算見 globals.css .field-wall。
 //
 // live-results(室外):左即時、右結果
-//   ┌ 即時狀態 ───────── 優化 已開啟 ┐ ┌ 測試結果 │ 測試項目 xxx │ Procedure │ 開啟前 開啟後 ┐
-//   │ [固定攝影機 16:9][載具 16:9]   │ │ ┌測試路徑──────────┐ ┌UAV 吞吐量開啟前後對比──────┐ │
-//   │ ┌飛行狀態──────┐ ┌UAV 訊號───┐│ │ │ 路徑圖(兩趟)    │ │ 下行 98 → 141   ▲+43(+44%)│ │
-//   │ │ 高度 地速 …   │ │ SNR RSSI …││ │ │ 任務進度 │ 階段  │ │ 上行 ╱╲╱                  │ │
+//   ┌ 即時狀態 ───────── 優化 已開啟 ┐ ┌ 測試狀態總覽 │ 測試項目 │ 測試環境 │ 優化前 優化後 ┐
+//   │ [固定攝影機 16:9][載具 16:9]   │ │ ┌測試路徑──────────┐ ┌QoE 優化開啟前後比較────────┐ │
+//   │ ┌飛行狀態──────┐ ┌UAV 通訊品質┐│ │ │ 路徑圖(兩趟)    │ │ 下行 最低值 25 → 128       │ │
+//   │ │ 高度 地速 …   │ │ SNR RSSI …││ │ │ 測試進度 │ 階段  │ │ 上行 ╱╲╱                  │ │
 //   └──────────────────────────────────┘ └──────────────────────────────────────────────────────┘
 //
 // camera-grid(室內):左 4 路影像;右 路徑 | 上 UE 吞吐量、下 行駛狀態 | 訊號狀態
@@ -130,11 +130,11 @@ function LiveResultsLayout({
         </div>
       </section>
 
-      {/* ── 右:測試結果 ── */}
+      {/* ── 右:測試狀態總覽(路徑與進度不是「結果」,比較圖也要跑完才算結果,所以不叫測試結果)── */}
       <section className="dut-wall-band field-card">
         <div className="field-card-head">
           <HeadRow
-            title="測試結果"
+            title="測試狀態總覽"
             mission={mission}
             right={
               /* 右邊所有圖共用這份圖例 */
@@ -151,8 +151,10 @@ function LiveResultsLayout({
             <MissionProgress mission={mission} />
           </Sub>
 
-          {/* 場域內只觀察這台 UAV:比較它的吞吐量,上下兩張圖的間距跨 y = 2160 */}
-          <Sub icon={Signal} title="UAV 吞吐量開啟前後對比">
+          {/* 室外情境要呈現的是:在具備干擾的環境中,UAV 移動時傳輸穩不穩定。
+              干擾範圍會隨環境變動,畫面上不標固定的干擾區,只呈現兩趟的吞吐量起伏與最低值。
+              場域內只觀察這台 UAV;上下兩張圖的間距跨 y = 2160 */}
+          <Sub icon={Signal} title="QoE 優化開啟前後比較">
             <div className="field-split">
               <ThroughputCompare runs={mission.runs} spec={THROUGHPUT_CHARTS[0]} series={allRuns} />
               <ThroughputCompare runs={mission.runs} spec={THROUGHPUT_CHARTS[1]} series={allRuns} />
@@ -250,11 +252,14 @@ function HeadRow({ title, mission, right }: { title: string; mission: FieldMissi
   return (
     <div className="field-head-row">
       <div className="dut-wall-band-title">{title}</div>
-      <span className="flex min-w-0 items-baseline gap-6 text-sm">
-        <span className="flex-none text-white/55">測試項目</span>
-        <span className="min-w-0 truncate font-mono">{mission.testcase.code}</span>
+      <span className="flex min-w-0 items-baseline gap-6">
+        <span className="flex-none text-sm text-white/55">測試項目</span>
+        <span className="min-w-0 truncate text-base font-semibold">{mission.testcase.name}</span>
       </span>
-      <span className="min-w-0 truncate text-sm text-white/60">{mission.testcase.procedure}</span>
+      <span className="flex min-w-0 items-baseline gap-6">
+        <span className="flex-none text-sm text-white/55">測試環境</span>
+        <span className="min-w-0 truncate text-base">{mission.testcase.environment}</span>
+      </span>
       {right}
     </div>
   );
@@ -499,7 +504,7 @@ function UeThroughputChart({ run, xTicks }: { run: FieldRun; xTicks: number[] })
 
 // ── 測試路徑 ─────────────────────────────────────────────────────────
 
-/** 同一條路徑上疊出兩趟軌跡(開啟前 / 開啟後)與載具目前位置 */
+/** 同一條路徑上疊出兩趟軌跡(優化前 / 優化後)與載具目前位置 */
 function RouteMap({ mission }: { mission: FieldMission }) {
   const { route, runs, vehicle } = mission;
   const live = runs[mission.currentRun]?.position ?? null;
@@ -534,7 +539,7 @@ function RouteMap({ mission }: { mission: FieldMission }) {
           strokeDasharray={`${7 * u} ${6 * u}`}
           strokeLinejoin="round"
         />
-        {/* 先畫開啟前、再畫開啟後,重疊的路段以開啟後為準 */}
+        {/* 先畫優化前、再畫優化後,重疊的路段以優化後為準 */}
         {runs.map((r) =>
           r.reachedWaypoints > 0 ? (
             <polyline
@@ -568,7 +573,7 @@ function RouteMap({ mission }: { mission: FieldMission }) {
   );
 }
 
-/** 路徑圖下方:目前這趟的任務進度(左)與階段(右),欄距跨 x = 5760 */
+/** 路徑圖下方:目前這趟的測試進度(左)與階段(右),欄距跨 x = 5760 */
 function MissionProgress({ mission }: { mission: FieldMission }) {
   const run = mission.runs[mission.currentRun];
   if (!run) return null;
@@ -577,7 +582,7 @@ function MissionProgress({ mission }: { mission: FieldMission }) {
   return (
     <div className="field-map-foot">
       <div className="flex min-w-0 items-center gap-8">
-        <span className="flex-none text-sm text-white/60">任務進度</span>
+        <span className="flex-none text-sm text-white/60">測試進度</span>
         {/* 規範 09:軌道 rgba(255,255,255,0.15) */}
         <div className="h-4 min-w-0 flex-1 overflow-hidden rounded-full bg-white/15">
           <div className="h-full rounded-full" style={{ width: `${pct}%`, background: phase.color }} />
@@ -618,10 +623,10 @@ const SIGNAL_CHARTS: [TrendSpec, TrendSpec] = [
   { label: "下行速率", unit: "Mbps", metric: "dlMbps", digits: 0 },
 ];
 
-/** UAV 吞吐量開啟前後對比的兩張圖;avgKey 是該趟平均值在 link 上的欄位 */
-const THROUGHPUT_CHARTS: [ThroughputSpec, ThroughputSpec] = [
-  { label: "下行吞吐量", unit: "Mbps", metric: "dlMbps", digits: 0, avgKey: "dlMbps" },
-  { label: "上行吞吐量", unit: "Mbps", metric: "ulMbps", digits: 1, avgKey: "ulMbps" },
+/** QoE 優化開啟前後比較的兩張圖 */
+const THROUGHPUT_CHARTS: [TrendSpec, TrendSpec] = [
+  { label: "下行吞吐量", unit: "Mbps", metric: "dlMbps", digits: 0 },
+  { label: "上行吞吐量", unit: "Mbps", metric: "ulMbps", digits: 1 },
 ];
 
 /** 圖表字級與筆畫都以牆面 3× 畫布計:2px 線 = 6、1px 格線 = 3 */
@@ -715,7 +720,7 @@ function TrendChart({
               contentStyle={TOOLTIP_BOX}
               labelStyle={{ color: "rgba(255,255,255,0.7)" }}
               itemStyle={{ color: "#FFFFFF", padding: "4px 0" }}
-              labelFormatter={(val) => `路徑進度 ${val}%`}
+              labelFormatter={(val) => `測試進度 ${val}%`}
               formatter={(val, name) => [
                 `${Number(val).toFixed(digits)} ${unit}`,
                 PHASE[name as OptimizationPhase]?.short ?? String(name),
@@ -760,10 +765,9 @@ function TrendChart({
   );
 }
 
-type ThroughputSpec = TrendSpec & { avgKey: "dlMbps" | "ulMbps" };
-
 /**
- * 吞吐量開啟前後對比:標題列放兩趟平均與變化量,底下是兩趟的折線圖。
+ * QoE 優化開啟前後比較:標題列放兩趟的最低值與變化量,底下是兩趟的折線圖。
+ * 移動中受干擾最直接的反應是掉速,最低值不需要事先假設干擾在哪一段。
  * 這張圖橫跨 x = 9600 拼接縫 —— 標題列分左右兩段(間距跨縫),x 刻度改 20% 一格避開縫。
  */
 function ThroughputCompare({
@@ -772,19 +776,23 @@ function ThroughputCompare({
   series,
 }: {
   runs: FieldRun[];
-  spec: ThroughputSpec;
+  spec: TrendSpec;
   series: { phase: OptimizationPhase; samples: FieldSample[] }[];
 }) {
-  const avg = (phase: OptimizationPhase) => runs.find((r) => r.phase === phase)?.link?.[spec.avgKey] ?? null;
-  const before = avg("before");
-  const after = avg("after");
+  const lowest = (phase: OptimizationPhase) => {
+    const values = (runs.find((r) => r.phase === phase)?.samples ?? [])
+      .map((pt) => sampleValue(pt, spec.metric))
+      .filter((val): val is number => val !== null);
+    return values.length ? Math.min(...values) : null;
+  };
+  const before = lowest("before");
+  const after = lowest("after");
   const d = before !== null && after !== null ? after - before : null;
-  const pct = d !== null && before ? Math.round((d / before) * 100) : null;
   const fmt = (val: number | null) => (val === null ? "—" : val.toFixed(spec.digits));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* 左段只放名稱與兩個數值,單位和變化量放右段 —— 左段超過 1761 寬會壓到 x = 9600 */}
+      {/* 左段:名稱 + 兩個數值 + 單位;兩段都不能超過各自欄寬,否則會壓到 x = 9600 */}
       <div className="field-compare-head mb-4 flex-none">
         <div className="flex min-w-0 items-baseline gap-6 whitespace-nowrap">
           <span className="text-sm text-white/60">{spec.label}</span>
@@ -797,14 +805,14 @@ function ThroughputCompare({
             <span className="inline-block h-4 w-4 self-center rounded-full" style={{ background: PHASE.after.color }} />
             <span className="text-[2.75rem] font-semibold leading-[1.1] text-white">{fmt(after)}</span>
           </span>
+          <span className="text-sm text-white/50">{spec.unit}</span>
         </div>
         <div className="flex min-w-0 items-baseline justify-end gap-6 whitespace-nowrap">
-          <span className="text-sm text-white/50">{spec.unit} 平均</span>
+          <span className="text-sm text-white/50">最低值</span>
           {d !== null && (
             <span className={`text-base font-semibold ${d >= 0 ? "text-mint" : "text-danger"}`}>
               {d > 0 ? "▲+" : d < 0 ? "▼" : ""}
               {d.toFixed(spec.digits)}
-              {pct !== null && `(${pct > 0 ? "+" : ""}${pct}%)`}
             </span>
           )}
         </div>
@@ -822,6 +830,6 @@ function ThroughputCompare({
  * 對比都通過 —— 規範的 #FFC56B / #80FFE8 太亮,當系列色會失去層次。
  */
 const PHASE: Record<OptimizationPhase, { label: string; short: string; color: string }> = {
-  before: { label: "優化開啟前", short: "開啟前", color: "#C07F22" },
-  after: { label: "優化開啟後", short: "開啟後", color: "#1C9E88" },
+  before: { label: "優化前", short: "優化前", color: "#C07F22" },
+  after: { label: "優化後", short: "優化後", color: "#1C9E88" },
 };
