@@ -2710,15 +2710,15 @@ html.wall-mode .field-compare-head {
   column-gap: var(--fw-gap);
   align-items: baseline;
 }
-/* 路線圖上方的測試進度列(路徑小卡內容寬 3522):左段 1665、右段 1761,間距跨拼接縫 ——
-   室外內容 x = 4047~7569 跨 x = 5760;室內內容 x = 5967~9489 跨 x = 7680 */
+/* 路線圖上方的測試進度列:標籤 + 兩段式長條 + 百分比。
+   條子是圖形,可以跨 x = 5760 / 7680 的拼接縫;文字只有左邊的標籤與最右邊的百分比,
+   都在縫之外(百分比貼路徑小卡右緣)。 */
 html.wall-mode .field-map-head {
   flex: none;
   margin-bottom: 1.5rem;
-  display: grid;
-  grid-template-columns: 1665px 1761px;
-  column-gap: var(--fw-gap);
+  display: flex;
   align-items: center;
+  gap: 2rem;
 }
 /* 小卡內容分上下兩段,下段從 y = 2208 起:高度 = 卡身下半段 - 小卡內容底內距,段距跨 y = 2160 */
 html.wall-mode .field-split {
@@ -2766,4 +2766,26 @@ html.wall-mode .field-scenario-switch button {
   padding: 0 calc(14px * var(--wall));
   font-size: calc(20px * var(--wall));
   line-height: 1.2;
+}
+
+/* ── 測試進度:同一條路徑跑兩趟 ────────────────────────────────────────
+   一條長條切成兩半(左半第一趟、右半第二趟),中間留一道細縫當分界;
+   各半自己填到該趟的百分比,顏色對照標題列的啟用前 / 啟用後圖例。 */
+.field-progress-track {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem;
+}
+.field-progress-seg {
+  height: 1rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  /* 規範 09:軌道 rgba(255,255,255,0.15) */
+  background: rgba(255, 255, 255, 0.15);
+}
+.field-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
 }

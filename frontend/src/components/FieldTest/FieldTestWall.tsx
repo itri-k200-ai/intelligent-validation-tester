@@ -39,7 +39,7 @@ import type {
 // live-results(室外):左即時、右結果
 //   ┌ 即時狀態 ───────────────────── ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 │ 啟用前 啟用後 ┐
 //   │ [固定攝影機 16:9][載具 16:9]   │ │ ┌測試路徑──────────┐ ┌QoE xApp 啟用前後───────────┐ │
-//   │ ┌飛行狀態──────┐ ┌UAV 通訊品質┐│ │ │ 測試進度 │ 階段  │ │ 下行 平均 120 → 155 Mbps   │ │
+//   │ ┌飛行狀態──────┐ ┌UAV 通訊品質┐│ │ │ 測試進度 ──── 64% │ │ 下行 平均 120 → 155 Mbps   │ │
 //   │ │ 高度 地速 …   │ │ SNR RSSI …││ │ │ 路徑圖(兩趟)    │ │ 上行 ╱╲╱                  │ │
 //   └──────────────────────────────────┘ └──────────────────────────────────────────────────────┘
 //
@@ -224,7 +224,8 @@ function HeadRow({ title, mission, right }: { title: string; mission: FieldMissi
   return (
     <div className="field-head-row">
       <div className="dut-wall-band-title">{title}</div>
-      <span className="flex min-w-0 items-baseline gap-6">
+      {/* 測試環境靠右 —— 這一欄的右界就是路徑小卡的右緣,貼齊才不會看起來飄在中間 */}
+      <span className="flex min-w-0 items-baseline justify-end gap-6">
         <span className="flex-none text-sm text-white/55">測試環境</span>
         <span className="min-w-0 truncate text-base">{mission.testcase.environment}</span>
       </span>
@@ -533,38 +534,43 @@ function RadioLegend() {
   );
 }
 
-/** 路徑圖上方:目前這趟的測試進度(左)與階段(右),欄距跨拼接縫(見 globals.css .field-map-head) */
+/**
+ * 路徑圖上方的測試進度。測試是同一條路徑跑兩趟(先 xApp 未啟用、再啟用),
+ * 所以條子分兩半:左半第一趟、右半第二趟,各自填到自己的進度,中間留一道細縫。
+ * 顏色對照標題列的啟用前 / 啟用後圖例,不再重複標字;右邊大字是目前這趟的百分比。
+ */
 function MissionProgress({ mission }: { mission: FieldMission }) {
   const run = mission.runs[mission.currentRun];
   if (!run) return null;
-  const pct = Math.round(Math.min(Math.max(run.progress, 0), 100));
-  const phase = PHASE[run.phase];
+  const pct = (r: FieldRun) => Math.round(Math.min(Math.max(r.progress, 0), 100));
+
   return (
     <div className="field-map-head">
-      <div className="flex min-w-0 items-center gap-8">
-        <span className="flex-none text-sm text-white/60">測試進度</span>
-        {/* 規範 09:軌道 rgba(255,255,255,0.15) */}
-        <div className="h-4 min-w-0 flex-1 overflow-hidden rounded-full bg-white/15">
-          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: phase.color }} />
-        </div>
-        <span className="flex-none text-[2.75rem] font-semibold leading-[1.1] text-white">{pct}%</span>
+      <span className="flex-none text-sm text-white/60">測試進度</span>
+      <div className="field-progress-track">
+        {mission.runs.map((r) => (
+          /* 規範 09:軌道 rgba(255,255,255,0.15) */
+          <div key={r.phase} className="field-progress-seg">
+            <div
+              className="field-progress-fill"
+              style={{ width: `${pct(r)}%`, background: PHASE[r.phase].color }}
+            />
+          </div>
+        ))}
       </div>
-      <div className="flex min-w-0 items-center gap-6">
-        <span className="flex-none text-sm text-white/60">目前階段</span>
-        <span className="inline-block h-5 w-5 flex-none rounded-full" style={{ background: phase.color }} />
-        <span className="flex-none text-[2.5rem] font-semibold leading-tight">{phase.label}</span>
-        <span className="flex-none text-sm text-white/60">{RUN_STATUS[run.status]}</span>
-      </div>
+      {/* 百分比要說明是哪一趟的,不然兩段條子旁邊一個 64% 看不出在講哪半邊 */}
+      <span className="flex flex-none items-baseline gap-3">
+        <span
+          className="inline-block h-4 w-4 flex-none self-center rounded-full"
+          style={{ background: PHASE[run.phase].color }}
+        />
+        <span className="flex-none text-sm text-white/60">{PHASE[run.phase].label}</span>
+        <span className="flex-none text-[2.75rem] font-semibold leading-[1.1] text-white">{pct(run)}%</span>
+      </span>
     </div>
   );
 }
 
-const RUN_STATUS: Record<FieldRun["status"], string> = {
-  pending: "待命",
-  running: "進行中",
-  finished: "已完成",
-  error: "錯誤",
-};
 
 // ── 折線圖 ───────────────────────────────────────────────────────────
 
