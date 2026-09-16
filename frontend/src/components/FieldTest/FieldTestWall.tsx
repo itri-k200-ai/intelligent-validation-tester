@@ -13,6 +13,7 @@ import {
 } from "recharts";
 
 import { LiveVideo } from "@/components/Site/LiveVideo";
+import type { FloorPlan, FloorRect } from "@/config/floorPlans";
 import {
   FIELD_SCENARIOS,
   type FieldScenario,
@@ -36,16 +37,16 @@ import type {
 // 共用下面的小卡、路徑圖、折線圖。文字避開電視拼接縫,座標與推算見 globals.css .field-wall。
 //
 // live-results(室外):左即時、右結果
-//   ┌ 即時狀態 ───────── 優化 已開啟 ┐ ┌ 測試狀態總覽 │ 測試項目 │ 測試環境 │ 優化前 優化後 ┐
+//   ┌ 即時狀態 ───────── 優化 已開啟 ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 │ 優化前 優化後 ┐
 //   │ [固定攝影機 16:9][載具 16:9]   │ │ ┌測試路徑──────────┐ ┌QoE 優化開啟前後比較────────┐ │
-//   │ ┌飛行狀態──────┐ ┌UAV 通訊品質┐│ │ │ 路徑圖(兩趟)    │ │ 下行 最低值 25 → 128       │ │
-//   │ │ 高度 地速 …   │ │ SNR RSSI …││ │ │ 測試進度 │ 階段  │ │ 上行 ╱╲╱                  │ │
+//   │ ┌飛行狀態──────┐ ┌UAV 通訊品質┐│ │ │ 測試進度 │ 階段  │ │ 下行 平均 120 → 155 Mbps   │ │
+//   │ │ 高度 地速 …   │ │ SNR RSSI …││ │ │ 路徑圖(兩趟)    │ │ 上行 ╱╲╱                  │ │
 //   └──────────────────────────────────┘ └──────────────────────────────────────────────────────┘
 //
 // camera-grid(室內):同樣左即時、右結果,但 4 路影像放不進 1/3 寬,所以左右各半
-//   ┌ 即時狀態 ─────────────────────── 優化 已開啟 ┐ ┌ 測試狀態總覽 │ 測試項目 │ 測試環境 ┐
+//   ┌ 即時狀態 ─────────────────────── 優化 已開啟 ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 ┐
 //   │ [攝影機 1][攝影機 2] ┌行駛狀態────┐        │ │ ┌AMR 測試路徑────────┐ ┌IM 優化─┐ │
-//   │ [攝影機 3][AMR 車載] └AMR 通訊品質┘        │ │ └路徑圖 / 測試進度───┘ └SNR 下行┘ │
+//   │ [攝影機 3][AMR 車載] └AMR 通訊品質┘        │ │ └測試進度 / 路徑圖───┘ └SNR 下行┘ │
 //   └──────────────────────────────────────────────┘ └──────────────────────────────────────┘
 //
 // 資料目前是靜態假資料(見 useFieldTestMission)。
@@ -121,8 +122,8 @@ function LiveResultsLayout({
 
         <div className="field-status-body field-status-body--results">
           <Sub icon={Route} title={sc.routeTitle}>
-            <RouteMap mission={mission} />
             <MissionProgress mission={mission} />
+            <RouteMap mission={mission} />
           </Sub>
 
           {/* 室外情境要呈現的是:在具備干擾的環境中,UAV 移動時傳輸穩不穩定。
@@ -186,9 +187,18 @@ function CameraGridLayout({
         </div>
 
         <div className="field-status-body">
-          <Sub icon={Route} title={sc.routeTitle} aside={<PhaseLegend />}>
-            <RouteMap mission={mission} />
+          <Sub
+            icon={Route}
+            title={sc.routeTitle}
+            aside={
+              <span className="flex items-center gap-8">
+                {sc.floorPlan && <RadioLegend />}
+                <PhaseLegend />
+              </span>
+            }
+          >
             <MissionProgress mission={mission} />
+            <RouteMap mission={mission} floorPlan={sc.floorPlan} />
           </Sub>
 
           <Sub icon={Signal} title="IM 優化開啟前後比較">
@@ -212,7 +222,7 @@ function CameraGridLayout({
 // ── 共用 ─────────────────────────────────────────────────────────────
 
 /**
- * 右卡標題列:標題 | 測試項目 | 測試環境 | right(可省),各占一台電視寬(間距跨拼接縫)。
+ * 右卡標題列:標題 | 測試環境 | 測試項目 | right(可省),各占一台電視寬(間距跨拼接縫)。
  * 測試項目放在同一行,底下的小卡才能往上長。
  */
 function HeadRow({ title, mission, right }: { title: string; mission: FieldMission; right?: ReactNode }) {
@@ -220,12 +230,12 @@ function HeadRow({ title, mission, right }: { title: string; mission: FieldMissi
     <div className="field-head-row">
       <div className="dut-wall-band-title">{title}</div>
       <span className="flex min-w-0 items-baseline gap-6">
-        <span className="flex-none text-sm text-white/55">測試項目</span>
-        <span className="min-w-0 truncate text-base font-semibold">{mission.testcase.name}</span>
-      </span>
-      <span className="flex min-w-0 items-baseline gap-6">
         <span className="flex-none text-sm text-white/55">測試環境</span>
         <span className="min-w-0 truncate text-base">{mission.testcase.environment}</span>
+      </span>
+      <span className="flex min-w-0 items-baseline gap-6">
+        <span className="flex-none text-sm text-white/55">測試項目</span>
+        <span className="min-w-0 truncate text-base font-semibold">{mission.testcase.name}</span>
       </span>
       {right}
     </div>
@@ -339,7 +349,7 @@ function vehicleReadings(scenario: FieldScenarioId, v: FieldVehicleStatus): Read
     tone: v.batteryPct < 30 ? "text-danger" : undefined,
   };
   // 模式字串較長,字級小一階才放得進欄寬
-  const mode: Reading = { label: "模式", value: v.mode, tone: "text-warning", size: "text-[2rem]" };
+  const mode: Reading = { label: "模式", value: v.mode, size: "text-[2rem]" };
   if (scenario === "indoor") {
     return [
       { label: "速度", unit: "m/s", value: v.speedMps.toFixed(2) },
@@ -406,21 +416,31 @@ function SignalSub({ title, run, className }: { title: string; run: FieldRun | u
 
 // ── 測試路徑 ─────────────────────────────────────────────────────────
 
-/** 同一條路徑上疊出兩趟軌跡(優化前 / 優化後)與載具目前位置 */
-function RouteMap({ mission }: { mission: FieldMission }) {
+/** 同一條路徑上疊出兩趟軌跡(優化前 / 優化後)與載具目前位置;有平面圖就墊在最底下 */
+function RouteMap({ mission, floorPlan }: { mission: FieldMission; floorPlan?: FloorPlan }) {
   const { route, runs, vehicle } = mission;
   const live = runs[mission.currentRun]?.position ?? null;
 
   // 路徑點是 x 向東、y 向北(公尺);SVG 的 y 向下,畫的時候把 y 取負。
-  const xs = [...route.map((p) => p.x), ...(live ? [live.x] : [])];
-  const ys = [...route.map((p) => -p.y), ...(live ? [-live.y] : [])];
+  // 有平面圖時範圍以整層樓為準(含外牆與 RU),路徑沒走到的地方也要看得到
+  const planPts = floorPlan
+    ? [
+        { x: floorPlan.outline.x1, y: floorPlan.outline.y1 },
+        { x: floorPlan.outline.x2, y: floorPlan.outline.y2 },
+        ...floorPlan.radios,
+      ]
+    : [];
+  const extent = [...route, ...(live ? [live] : []), ...planPts];
+  const xs = extent.map((p) => p.x);
+  const ys = extent.map((p) => -p.y);
   const minX = Math.min(...xs);
   const minY = Math.min(...ys);
   const spanX = Math.max(...xs) - minX;
   const spanY = Math.max(...ys) - minY;
   // u = 一個視覺單位:線寬、點大小都乘它,路徑範圍不管幾公尺比例都一致
   const u = Math.max(spanX, spanY) / 300 || 1;
-  const pad = 20 * u;
+  // 平面圖外牆本身就是邊界,留一點點邊就好,整層樓才畫得大
+  const pad = (floorPlan ? 6 : 20) * u;
   const pts = (list: { x: number; y: number }[]) => list.map((p) => `${p.x},${-p.y}`).join(" ");
   const start = route[0];
 
@@ -433,6 +453,7 @@ function RouteMap({ mission }: { mission: FieldMission }) {
         role="img"
         aria-label="測試路徑與兩趟軌跡"
       >
+        {floorPlan && <FloorPlanLayer plan={floorPlan} u={u} />}
         <polyline
           points={pts(route)}
           fill="none"
@@ -455,6 +476,13 @@ function RouteMap({ mission }: { mission: FieldMission }) {
             />
           ) : null,
         )}
+        {/* RU 疊在軌跡上面,路徑經過 RU 時才不會被蓋掉 */}
+        {floorPlan?.radios.map((ru) => (
+          <g key={ru.id} transform={`translate(${ru.x} ${-ru.y})`}>
+            <circle r={5.5 * u} fill={CHART_SURFACE} stroke={RADIO_RING} strokeWidth={1.2 * u} />
+            <circle r={2 * u} fill={RADIO_RING} />
+          </g>
+        ))}
         {start && (
           <circle cx={start.x} cy={-start.y} r={6 * u} fill="#4C8DFF" stroke="#0A172F" strokeWidth={1.5 * u} />
         )}
@@ -475,14 +503,67 @@ function RouteMap({ mission }: { mission: FieldMission }) {
   );
 }
 
-/** 路徑圖下方:目前這趟的測試進度(左)與階段(右),欄距跨拼接縫(見 globals.css .field-map-foot) */
+/** 平面圖的線:壓暗,路徑與載具才跳得出來 */
+const PLAN_LINE = "rgba(255,255,255,0.22)";
+const PLAN_OUTLINE = "rgba(255,255,255,0.45)";
+const RADIO_RING = "rgba(255,255,255,0.85)";
+
+/** 室內平面圖底圖:外牆、隔間、電梯樓梯(交叉線);RU 由 RouteMap 疊在軌跡上。只畫線不寫字,地圖跨拼接縫 */
+function FloorPlanLayer({ plan, u }: { plan: FloorPlan; u: number }) {
+  const box = (r: FloorRect) => ({
+    x: Math.min(r.x1, r.x2),
+    y: -Math.max(r.y1, r.y2),
+    width: Math.abs(r.x2 - r.x1),
+    height: Math.abs(r.y2 - r.y1),
+  });
+  return (
+    <g fill="none" stroke={PLAN_LINE} strokeWidth={0.8 * u}>
+      {plan.rooms.map((r, i) => (
+        <rect key={`room-${i}`} {...box(r)} fill="rgba(255,255,255,0.03)" />
+      ))}
+      {plan.cores.map((r, i) => {
+        const b = box(r);
+        return (
+          <g key={`core-${i}`}>
+            <rect {...b} />
+            <path
+              d={`M${b.x},${b.y} L${b.x + b.width},${b.y + b.height} M${b.x + b.width},${b.y} L${b.x},${b.y + b.height}`}
+              strokeWidth={0.5 * u}
+            />
+          </g>
+        );
+      })}
+      {plan.walls.map((w, i) => (
+        <line key={`wall-${i}`} x1={w.x1} y1={-w.y1} x2={w.x2} y2={-w.y2} />
+      ))}
+      <rect {...box(plan.outline)} stroke={PLAN_OUTLINE} strokeWidth={1.4 * u} />
+    </g>
+  );
+}
+
+/** RU 的圖例(與平面圖上的 RU 同一個樣子) */
+function RadioLegend() {
+  return (
+    <span className="flex items-center gap-3">
+      <span
+        className="inline-flex h-9 w-9 items-center justify-center rounded-full border-[5px]"
+        style={{ borderColor: RADIO_RING, background: CHART_SURFACE }}
+      >
+        <span className="h-3 w-3 rounded-full" style={{ background: RADIO_RING }} />
+      </span>
+      RU
+    </span>
+  );
+}
+
+/** 路徑圖上方:目前這趟的測試進度(左)與階段(右),欄距跨拼接縫(見 globals.css .field-map-head) */
 function MissionProgress({ mission }: { mission: FieldMission }) {
   const run = mission.runs[mission.currentRun];
   if (!run) return null;
   const pct = Math.round(Math.min(Math.max(run.progress, 0), 100));
   const phase = PHASE[run.phase];
   return (
-    <div className="field-map-foot">
+    <div className="field-map-head">
       <div className="flex min-w-0 items-center gap-8">
         <span className="flex-none text-sm text-white/60">測試進度</span>
         {/* 規範 09:軌道 rgba(255,255,255,0.15) */}
@@ -659,8 +740,8 @@ function TrendChart({
 }
 
 /**
- * QoE 優化開啟前後比較:標題列放兩趟的最低值與變化量,底下是兩趟的折線圖。
- * 移動中受干擾最直接的反應是掉速,最低值不需要事先假設干擾在哪一段。
+ * QoE 優化開啟前後比較:標題列放兩趟的平均與平均差值,底下是兩趟的折線圖。
+ * 後面那趟還在跑,平均只取兩趟都跑過的路徑進度,不然是拿半趟跟整趟比。
  * 這張圖橫跨 x = 9600 拼接縫 —— 標題列分左右兩段(間距跨縫),x 刻度改 20% 一格避開縫。
  */
 function ThroughputCompare({
@@ -672,14 +753,17 @@ function ThroughputCompare({
   spec: TrendSpec;
   series: { phase: OptimizationPhase; samples: FieldSample[] }[];
 }) {
-  const lowest = (phase: OptimizationPhase) => {
+  // 兩趟比同一段路徑才公平:後面那趟還在跑,就只算兩趟都跑過的進度
+  const upTo = Math.min(...runs.map((r) => r.samples.at(-1)?.progress ?? 0));
+  const mean = (phase: OptimizationPhase) => {
     const values = (runs.find((r) => r.phase === phase)?.samples ?? [])
+      .filter((pt) => pt.progress <= upTo)
       .map((pt) => sampleValue(pt, spec.metric))
       .filter((val): val is number => val !== null);
-    return values.length ? Math.min(...values) : null;
+    return values.length ? values.reduce((sum, val) => sum + val, 0) / values.length : null;
   };
-  const before = lowest("before");
-  const after = lowest("after");
+  const before = mean("before");
+  const after = mean("after");
   const d = before !== null && after !== null ? after - before : null;
   const fmt = (val: number | null) => (val === null ? "—" : val.toFixed(spec.digits));
 
@@ -701,13 +785,14 @@ function ThroughputCompare({
           <span className="text-sm text-white/50">{spec.unit}</span>
         </div>
         <div className="flex min-w-0 items-baseline justify-end gap-6 whitespace-nowrap">
-          <span className="text-sm text-white/50">最低值</span>
+          <span className="text-sm text-white/50">平均差值</span>
           {d !== null && (
             <span className={`text-base font-semibold ${d >= 0 ? "text-mint" : "text-danger"}`}>
               {d > 0 ? "▲+" : d < 0 ? "▼" : ""}
-              {d.toFixed(spec.digits)}
+              {Math.abs(d).toFixed(spec.digits)}
             </span>
           )}
+          <span className="text-sm text-white/50">{spec.unit}</span>
         </div>
       </div>
       <TrendChart spec={spec} series={series} bare xTicks={[0, 20, 40, 60, 80, 100]} />

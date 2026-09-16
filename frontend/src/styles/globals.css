@@ -2526,7 +2526,7 @@ html.wall-mode .hud-octagon-label {
    - 內容區實際範圍 x = 144~11376、y = 579~3048:左右是 war-room-main-body 的
      3rem,上下是前段 `html.wall-mode main` 以 !important 設的 1.5rem / 4rem。
    - 左卡寬到 x = 3792(室外)/ 5712(室內),卡距跨 x = 3840 / 5760。
-   - 右卡分頭、身:頭是一行標題列(標題 | 測項代碼 | 測項名稱 | 優化狀態);身從 y = 880 開始,
+   - 右卡分頭、身:頭是一行標題列(標題 | 測試環境 | 測試項目 | 圖例或優化狀態);身從 y = 880 開始,
      讓小卡標題列(高 195)落在 880~1075、文字結束在 y ≈ 1052,內容從 y ≈ 1111 起,跨過 y = 1080。
    - 右卡身小卡的卡距跨拼接縫:室外 x = 7680,室內 x = 9600。
    - 有文字的小卡內容分上下兩段,段距跨 y = 2160。
@@ -2710,11 +2710,11 @@ html.wall-mode .field-compare-head {
   column-gap: var(--fw-gap);
   align-items: baseline;
 }
-/* 路線圖下方的測試進度列(路徑小卡內容寬 3522):左段 1665、右段 1761,間距跨拼接縫 ——
+/* 路線圖上方的測試進度列(路徑小卡內容寬 3522):左段 1665、右段 1761,間距跨拼接縫 ——
    室外內容 x = 4047~7569 跨 x = 5760;室內內容 x = 5967~9489 跨 x = 7680 */
-html.wall-mode .field-map-foot {
+html.wall-mode .field-map-head {
   flex: none;
-  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
   display: grid;
   grid-template-columns: 1665px 1761px;
   column-gap: var(--fw-gap);

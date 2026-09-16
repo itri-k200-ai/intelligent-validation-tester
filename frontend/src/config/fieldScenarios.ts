@@ -1,3 +1,4 @@
+import { ITRI_B51_5F, type FloorPlan } from "@/config/floorPlans";
 import type { FieldSample, FieldScenarioId } from "@/types/fieldTest";
 
 // ── 場域測試情境(中牆)────────────────────────────────────────────────
@@ -18,6 +19,8 @@ type ScenarioBase = {
   /** 左螢幕送來的 selection.href,也是非牆模式的獨立路由 */
   href: string;
   routeTitle: string;
+  /** 路線圖底下的平面圖(室內才有) */
+  floorPlan?: FloorPlan;
   /** 左卡「即時狀態」兩張即時數值小卡的標題 */
   live: { vehicleTitle: string; signalTitle: string };
 };
@@ -41,6 +44,7 @@ export const FIELD_SCENARIOS: Record<FieldScenarioId, FieldScenario> = {
     title: "xApp Tester 室內測試情境",
     href: "/indoor-scenario",
     routeTitle: "AMR 測試路徑",
+    floorPlan: ITRI_B51_5F,
     layout: "camera-grid",
     cameras: ["室內固定攝影機 1", "室內固定攝影機 2", "室內固定攝影機 3", "AMR 車載攝影機"],
     live: { vehicleTitle: "行駛狀態", signalTitle: "AMR 通訊品質" },

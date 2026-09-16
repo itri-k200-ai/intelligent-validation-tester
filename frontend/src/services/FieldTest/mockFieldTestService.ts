@@ -27,17 +27,19 @@ const UAV_ROUTE: RouteWaypoint[] = [
   { id: "R", kind: "return", x: 10, y: -20 },
 ];
 
-/** 室內:AMR 在 51 館 5 樓走道來回(S 形),最後回到出發點旁 */
+/**
+ * 室內:AMR 沿 51 館 5 樓走廊前進,從 505 門進 190㎡ 辦公區繞一段,再從 504 門回走廊。
+ * 座標與 config/floorPlans.ts 的平面圖相同(原點在平面圖左上角),全長約 62.6 m。
+ */
 const AMR_ROUTE: RouteWaypoint[] = [
-  { id: "S", kind: "start", x: 0, y: 0 },
-  { id: "A1", kind: "checkpoint", x: 36, y: 0 },
-  { id: "A2", kind: "mission", x: 36, y: -8 },
-  { id: "B1", kind: "checkpoint", x: 0, y: -8 },
-  { id: "B2", kind: "mission", x: 0, y: -16 },
-  { id: "C1", kind: "checkpoint", x: 36, y: -16 },
-  { id: "C2", kind: "mission", x: 36, y: -24 },
-  { id: "D1", kind: "checkpoint", x: -4, y: -24 },
-  { id: "R", kind: "return", x: -4, y: 0 },
+  { id: "S", kind: "start", x: 2.2, y: -14.8 },
+  { id: "C1", kind: "checkpoint", x: 12.8, y: -14.8 },
+  { id: "M1", kind: "mission", x: 24.7, y: -14.8 },
+  { id: "C2", kind: "checkpoint", x: 35.3, y: -14.8 },
+  { id: "M2", kind: "mission", x: 35.3, y: -7.6 },
+  { id: "C3", kind: "checkpoint", x: 44.9, y: -7.6 },
+  { id: "M3", kind: "mission", x: 44.9, y: -14.8 },
+  { id: "R", kind: "return", x: 50.4, y: -14.8 },
 ];
 
 /**
@@ -99,7 +101,7 @@ const MISSIONS: Record<FieldScenarioId, FieldMission> = {
   outdoor: {
     testcase: {
       code: "uav.interference_mobility",
-      name: "室外 QoE xApp 效能測試",
+      name: "QoE xApp 效能測試",
       environment: "工研院52館外大草坪",
     },
     route: UAV_ROUTE,
@@ -167,11 +169,11 @@ const MISSIONS: Record<FieldScenarioId, FieldMission> = {
     route: AMR_ROUTE,
     currentRun: 1,
     vehicle: {
-      headingDeg: 180,
+      headingDeg: 0,
       speedMps: 0.69,
       batteryPct: 88,
-      // 路徑全長約 196 m,跑到 64%
-      odometerM: 125.4,
+      // 路徑全長約 62.6 m,跑到 64%
+      odometerM: 39.4,
       obstacleM: 1.8,
       mode: "AUTO",
     },
@@ -201,9 +203,9 @@ const MISSIONS: Record<FieldScenarioId, FieldMission> = {
         phase: "after",
         status: "running",
         progress: 64,
-        reachedWaypoints: 6,
-        // C1 → C2 中間,往南走
-        position: { x: 36, y: -20 },
+        reachedWaypoints: 4,
+        // C2 → M2 途中:剛從 505 門進辦公區,往北走
+        position: { x: 35.3, y: -8.5 },
         link: {
           snrDb: 20.4,
           sinrDb: 21.3,
