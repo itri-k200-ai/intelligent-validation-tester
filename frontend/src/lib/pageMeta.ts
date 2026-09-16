@@ -93,12 +93,9 @@ export function getPageMeta(pathname: string): PageMeta {
     return { title: REGION_LABEL[seg[1]] ?? "場域管理" };
   }
 
-  if (seg[0] === "outdoor-scenario") {
-    return { title: "xApp Tester 室外測試情境" };
-  }
-
-  if (seg[0] === "indoor-scenario") {
-    return { title: "xApp Tester 室內測試情境" };
+  // 室外 / 室內合併成一頁,情境由標題下方的按鈕切換,標題不隨情境變
+  if (seg[0] === "smart-network" || seg[0] === "outdoor-scenario" || seg[0] === "indoor-scenario") {
+    return { title: "智慧網路" };
   }
 
   // 中牆的固定 URL —— 顯示什麼由 selection 決定,標題不隨內容變。

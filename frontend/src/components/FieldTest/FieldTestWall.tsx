@@ -37,14 +37,14 @@ import type {
 // 共用下面的小卡、路徑圖、折線圖。文字避開電視拼接縫,座標與推算見 globals.css .field-wall。
 //
 // live-results(室外):左即時、右結果
-//   ┌ 即時狀態 ───────── xApp 已啟用 ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 │ 啟用前 啟用後 ┐
+//   ┌ 即時狀態 ───────────────────── ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 │ 啟用前 啟用後 ┐
 //   │ [固定攝影機 16:9][載具 16:9]   │ │ ┌測試路徑──────────┐ ┌QoE xApp 啟用前後───────────┐ │
 //   │ ┌飛行狀態──────┐ ┌UAV 通訊品質┐│ │ │ 測試進度 │ 階段  │ │ 下行 平均 120 → 155 Mbps   │ │
 //   │ │ 高度 地速 …   │ │ SNR RSSI …││ │ │ 路徑圖(兩趟)    │ │ 上行 ╱╲╱                  │ │
 //   └──────────────────────────────────┘ └──────────────────────────────────────────────────────┘
 //
 // camera-grid(室內):同樣左即時、右結果,但 4 路影像放不進 1/3 寬,所以左右各半
-//   ┌ 即時狀態 ─────────────────────── xApp 已啟用 ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 ┐
+//   ┌ 即時狀態 ─────────────────────────────────── ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 ┐
 //   │ [攝影機 1][攝影機 2] ┌行駛狀態────┐        │ │ ┌AMR 測試路徑────────┐ ┌IM 啟用─┐ │
 //   │ [攝影機 3][AMR 車載] └AMR 通訊品質┘        │ │ └測試進度 / 路徑圖───┘ └SNR 下行┘ │
 //   └──────────────────────────────────────────────┘ └──────────────────────────────────────┘
@@ -79,15 +79,13 @@ function LiveResultsLayout({
 }) {
   const run = mission.runs[mission.currentRun];
   const allRuns = mission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
+  const upTo = sharedProgress(mission.runs);
 
   return (
     <div className="field-wall">
       {/* ── 左:即時狀態 ── */}
       <section className="dut-wall-band field-card field-card--video">
-        <div className="flex items-center justify-between">
-          <div className="dut-wall-band-title">即時狀態</div>
-          <OptimizationBadge optimized={run?.phase === "after"} />
-        </div>
+        <div className="dut-wall-band-title">即時狀態</div>
         <div className="field-video-row">
           {sc.cameras.map((label, i) => (
             <VideoTile key={label} label={label} src={mission.cameras[i] ?? null} />
@@ -127,12 +125,12 @@ function LiveResultsLayout({
           </Sub>
 
           {/* 室外情境要呈現的是:在具備干擾的環境中,UAV 移動時傳輸穩不穩定。
-              干擾範圍會隨環境變動,畫面上不標固定的干擾區,只呈現兩趟的吞吐量起伏與最低值。
+              干擾範圍會隨環境變動,畫面上不標固定的干擾區,只呈現兩趟的吞吐量起伏與平均。
               場域內只觀察這台 UAV;上下兩張圖的間距跨 y = 2160 */}
           <Sub icon={Signal} title="QoE xApp 啟用前後">
             <div className="field-split">
-              <ThroughputCompare runs={mission.runs} spec={THROUGHPUT_CHARTS[0]} series={allRuns} />
-              <ThroughputCompare runs={mission.runs} spec={THROUGHPUT_CHARTS[1]} series={allRuns} />
+              <ThroughputCompare runs={mission.runs} spec={THROUGHPUT_CHARTS[0]} series={allRuns} upTo={upTo} />
+              <ThroughputCompare runs={mission.runs} spec={THROUGHPUT_CHARTS[1]} series={allRuns} upTo={upTo} />
             </div>
           </Sub>
         </div>
@@ -160,10 +158,7 @@ function CameraGridLayout({
       {/* ── 左:即時狀態(2×2 影像 + 即時數值)── */}
       <section className="dut-wall-band field-card">
         <div className="field-card-head">
-          <div className="flex items-center justify-between">
-            <div className="dut-wall-band-title">即時狀態</div>
-            <OptimizationBadge optimized={run?.phase === "after"} />
-          </div>
+          <div className="dut-wall-band-title">即時狀態</div>
         </div>
         {/* 影像與即時小卡的欄距跨 x = 3840 */}
         <div className="field-live-grid">
@@ -242,19 +237,6 @@ function HeadRow({ title, mission, right }: { title: string; mission: FieldMissi
   );
 }
 
-function OptimizationBadge({ optimized, className = "" }: { optimized: boolean; className?: string }) {
-  return (
-    <span
-      className={`flex items-center gap-4 rounded-full border px-8 text-base ${
-        optimized ? "border-mint/50 text-mint" : "border-white/25 text-white/60"
-      } ${className}`}
-    >
-      <span className="text-white/70">xApp</span>
-      <span className={`inline-block h-5 w-5 rounded-full ${optimized ? "bg-mint" : "bg-white/30"}`} />
-      {optimized ? "已啟用" : "未啟用"}
-    </span>
-  );
-}
 
 /** 一格影像(16:9),名稱疊在左下 */
 function VideoTile({ label, src }: { label: string; src: string | null }) {
@@ -394,12 +376,7 @@ function VehicleSub({
 function SignalSub({ title, run, className }: { title: string; run: FieldRun | undefined; className?: string }) {
   const link = run?.link ?? null;
   return (
-    <Sub
-      className={className}
-      icon={Signal}
-      title={title}
-      aside={run ? `目前:${PHASE[run.phase].short}` : undefined}
-    >
+    <Sub className={className} icon={Signal} title={title}>
       <MetricGrid
         items={[
           { label: "SNR", unit: "dB", value: link?.snrDb.toFixed(1) ?? null },
@@ -740,6 +717,17 @@ function TrendChart({
 }
 
 /**
+ * 兩趟都跑過的路徑進度。後面那趟還在跑就以它為準,不然是拿半趟跟整趟比;
+ * 只有一趟有資料(第一趟還在跑)就用那一趟自己的進度。
+ */
+function sharedProgress(runs: FieldRun[]) {
+  const ends = runs
+    .map((r) => r.samples.at(-1)?.progress)
+    .filter((p): p is number => p !== undefined);
+  return ends.length ? Math.min(...ends) : 0;
+}
+
+/**
  * QoE xApp 啟用前後:標題列放兩趟的平均與平均差值,底下是兩趟的折線圖。
  * 後面那趟還在跑,平均只取兩趟都跑過的路徑進度,不然是拿半趟跟整趟比。
  * 這張圖橫跨 x = 9600 拼接縫 —— 標題列分左右兩段(間距跨縫),x 刻度改 20% 一格避開縫。
@@ -748,13 +736,14 @@ function ThroughputCompare({
   runs,
   spec,
   series,
+  upTo,
 }: {
   runs: FieldRun[];
   spec: TrendSpec;
   series: { phase: OptimizationPhase; samples: FieldSample[] }[];
+  /** 平均只算到這個路徑進度(見 sharedProgress) */
+  upTo: number;
 }) {
-  // 兩趟比同一段路徑才公平:後面那趟還在跑,就只算兩趟都跑過的進度
-  const upTo = Math.min(...runs.map((r) => r.samples.at(-1)?.progress ?? 0));
   const mean = (phase: OptimizationPhase) => {
     const values = (runs.find((r) => r.phase === phase)?.samples ?? [])
       .filter((pt) => pt.progress <= upTo)
@@ -769,10 +758,12 @@ function ThroughputCompare({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* 左段:名稱 + 兩個數值 + 單位;兩段都不能超過各自欄寬,否則會壓到 x = 9600 */}
+      {/* 左段:名稱 + 平均 + 兩個數值,單位跟右段的平均差值寫在一起 ——
+          左段再多「Mbps」就會壓到 x = 9600 的拼接縫 */}
       <div className="field-compare-head mb-4 flex-none">
-        <div className="flex min-w-0 items-baseline gap-6 whitespace-nowrap">
+        <div className="flex min-w-0 items-baseline gap-4 whitespace-nowrap">
           <span className="text-sm text-white/60">{spec.label}</span>
+          <span className="text-sm text-white/40">平均</span>
           <span className="flex items-baseline gap-3">
             <span className="inline-block h-4 w-4 self-center rounded-full" style={{ background: PHASE.before.color }} />
             <span className="text-[2.25rem] leading-[1.1] text-white/65">{fmt(before)}</span>
@@ -782,7 +773,6 @@ function ThroughputCompare({
             <span className="inline-block h-4 w-4 self-center rounded-full" style={{ background: PHASE.after.color }} />
             <span className="text-[2.75rem] font-semibold leading-[1.1] text-white">{fmt(after)}</span>
           </span>
-          <span className="text-sm text-white/50">{spec.unit}</span>
         </div>
         <div className="flex min-w-0 items-baseline justify-end gap-6 whitespace-nowrap">
           <span className="text-sm text-white/50">平均差值</span>

@@ -21,7 +21,7 @@ import type { DutType, Region } from "@/types/common";
  *   2. 沒有執行在跑 → 照 selection 顯示(別團隊的左 app 打
  *      POST /api/selection/current/ 指定),預設是總覽。
  *
- * 例外:場域測試(室外 UAV /outdoor-scenario、室內 AMR /indoor-scenario)見 WallPage 內的說明。
+ * 例外:場域測試(/smart-network,室外 UAV / 室內 AMR 合併)見 WallPage 內的說明。
  *
  * selection.href 保留原本的路徑字串,但語意已經是「內容識別碼」而不是
  * 導覽目標;沿用它是為了讓左螢幕的選單定義不用改。原本那些路由
@@ -51,7 +51,7 @@ function contentPath(href: string | undefined) {
 function render(path: string) {
   if (path === "/test-records") return <RunRecordsContainer />;
   const field = fieldScenarioByPath(path);
-  if (field) return <FieldTestScenarioContainer scenario={field} />;
+  if (field) return <FieldTestScenarioContainer initial={field} />;
 
   const iface = path.match(/^\/interface-validation\/([^/]+)$/);
   if (iface) {

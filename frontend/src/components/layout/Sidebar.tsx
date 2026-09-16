@@ -1,6 +1,5 @@
 "use client";
 import {
-  Bot,
   ChevronDown,
   ChevronRight,
   Cable,
@@ -9,7 +8,7 @@ import {
   Globe,
   History,
   LayoutDashboard,
-  Plane,
+  Radio,
   Sparkles,
   Target,
   type LucideIcon,
@@ -100,8 +99,7 @@ const NAV: NavNode[] = [
   },
   */
   { kind: "leaf", id: "test-scenarios", href: "/test-scenarios", label: "端對端測試情境", icon: Target },
-  { kind: "leaf", id: "outdoor-scenario", href: "/outdoor-scenario", label: "xApp Tester 室外測試情境", icon: Plane },
-  { kind: "leaf", id: "indoor-scenario", href: "/indoor-scenario", label: "xApp Tester 室內測試情境", icon: Bot },
+  { kind: "leaf", id: "smart-network", href: "/smart-network", label: "智慧網路", icon: Radio },
   { kind: "leaf", id: "agent-sessions", href: "/agent-sessions", label: "Agent 驗測紀錄", icon: History },
   {
     kind: "branch",

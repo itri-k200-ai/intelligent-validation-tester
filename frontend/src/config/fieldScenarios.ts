@@ -16,7 +16,7 @@ export type TrendSpec = { label: string; unit: string; metric: TrendMetric; digi
 type ScenarioBase = {
   /** 牆面 / 選單上的名稱 */
   title: string;
-  /** 左螢幕送來的 selection.href,也是非牆模式的獨立路由 */
+  /** 舊的 selection.href / 獨立路由 —— 直接指定要先看哪個情境(合併頁見 MERGED_PATH) */
   href: string;
   routeTitle: string;
   /** 路線圖底下的平面圖(室內才有) */
@@ -33,7 +33,7 @@ export type FieldScenario = ScenarioBase &
 
 export const FIELD_SCENARIOS: Record<FieldScenarioId, FieldScenario> = {
   outdoor: {
-    title: "xApp Tester 室外測試情境",
+    title: "室外測試情境",
     href: "/outdoor-scenario",
     routeTitle: "UAV 測試路徑",
     layout: "live-results",
@@ -41,7 +41,7 @@ export const FIELD_SCENARIOS: Record<FieldScenarioId, FieldScenario> = {
     live: { vehicleTitle: "飛行狀態", signalTitle: "UAV 通訊品質" },
   },
   indoor: {
-    title: "xApp Tester 室內測試情境",
+    title: "室內測試情境",
     href: "/indoor-scenario",
     routeTitle: "AMR 測試路徑",
     floorPlan: ITRI_B51_5F,
@@ -51,8 +51,15 @@ export const FIELD_SCENARIOS: Record<FieldScenarioId, FieldScenario> = {
   },
 };
 
-/** selection.href(已去 query / 尾斜線)→ 情境;不是場域測試就回 null */
+/** 室外 / 室內合併後的路由:牆上用標題下方的按鈕切換情境 */
+export const FIELD_SCENARIO_MERGED_PATH = "/smart-network";
+
+/**
+ * selection.href(已去 query / 尾斜線)→ 一開始要顯示哪個情境;不是場域測試就回 null。
+ * 合併頁預設室外;舊的 /outdoor-scenario、/indoor-scenario 仍可用,直接指定情境。
+ */
 export function fieldScenarioByPath(path: string): FieldScenarioId | null {
+  if (path === FIELD_SCENARIO_MERGED_PATH) return "outdoor";
   const hit = (Object.keys(FIELD_SCENARIOS) as FieldScenarioId[]).find(
     (id) => FIELD_SCENARIOS[id].href === path,
   );

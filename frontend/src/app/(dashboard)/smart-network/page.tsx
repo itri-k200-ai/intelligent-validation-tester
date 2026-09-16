@@ -1,6 +1,5 @@
 import { FieldTestScenarioContainer } from "@/components/FieldTest/FieldTestScenarioContainer";
 
-/** 舊 href:左螢幕直接指定室外情境;畫面與 /smart-network 相同,牆上仍可切換 */
-export default function OutdoorScenarioPage() {
+export default function SmartNetworkPage() {
   return <FieldTestScenarioContainer initial="outdoor" />;
 }

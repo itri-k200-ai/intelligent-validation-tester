@@ -13,10 +13,12 @@ import {
   RightWingEquip,
   RightWingMethod,
 } from "./RightWingStatic";
+import { useFieldScenarioStore } from "@/stores/fieldScenarioStore";
 import { useWallModeStore } from "@/stores/wallModeStore";
 
 import { Sidebar } from "./Sidebar";
 import { WallLeftSimulator } from "./WallLeftSimulator";
+import { FieldScenarioSwitch } from "@/components/FieldTest/FieldScenarioSwitch";
 import { WallSelectionStatus } from "./WallSelectionStatus";
 
 /**
@@ -41,6 +43,7 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
 
   const isWall = useWallModeStore((s) => s.isWall);
   const toggleWall = useWallModeStore((s) => s.toggle);
+  const fieldScenarioActive = useFieldScenarioStore((s) => s.active);
   const showBezels = useWallModeStore((s) => s.showBezels);
   const toggleBezels = useWallModeStore((s) => s.toggleBezels);
 
@@ -72,6 +75,9 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
             {/* 標題下方的「專案:XXX」—— 原本是 main 裡的獨立橫幅,依規格圖搬上來。
                 總覽頁不顯示(它不是被左螢幕選出來的檢視)。 */}
             {!pathname.startsWith("/overview") && <WallSelectionStatus />}
+            {/* 場域測試的室外 / 室內切換 —— 中牆停在 /wall,是不是這個畫面看
+                fieldScenarioStore.active(由 FieldTestScenarioContainer 掛載時設)。 */}
+            {fieldScenarioActive && <FieldScenarioSwitch />}
           </div>
           <div className="war-room-main-topbar-actions">
             {isWall && (

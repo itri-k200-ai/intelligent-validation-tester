@@ -2526,7 +2526,7 @@ html.wall-mode .hud-octagon-label {
    - 內容區實際範圍 x = 144~11376、y = 579~3048:左右是 war-room-main-body 的
      3rem,上下是前段 `html.wall-mode main` 以 !important 設的 1.5rem / 4rem。
    - 左卡寬到 x = 3792(室外)/ 5712(室內),卡距跨 x = 3840 / 5760。
-   - 右卡分頭、身:頭是一行標題列(標題 | 測試環境 | 測試項目 | 圖例或啟用狀態);身從 y = 880 開始,
+   - 右卡分頭、身:頭是一行標題列(標題 | 測試環境 | 測試項目 | 圖例);身從 y = 880 開始,
      讓小卡標題列(高 195)落在 880~1075、文字結束在 y ≈ 1052,內容從 y ≈ 1111 起,跨過 y = 1080。
    - 右卡身小卡的卡距跨拼接縫:室外 x = 7680,室內 x = 9600。
    - 有文字的小卡內容分上下兩段,段距跨 y = 2160。
@@ -2727,4 +2727,43 @@ html.wall-mode .field-split {
   display: grid;
   grid-template-rows: minmax(0, 1fr) calc(var(--fw-lower) - var(--fw-sub-pad));
   row-gap: var(--fw-gap);
+}
+
+/* ── 標題下方的情境切換(室外 / 室內)─────────────────────────────────
+   室外 / 室內合在 /smart-network 一頁,按鈕放在「專案:XXX」下面
+   (components/FieldTest/FieldScenarioSwitch)。
+   中牆 topbar 是固定高 169px × 3 = 507:標題(168)+ 專案列(約 106)之後只剩
+   約 100px,所以這一列連間距壓在 96px 以內,main 的內容區才不會被推離 y = 579。 */
+.field-scenario-switch {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.field-scenario-switch button {
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  padding: 0.125rem 0.75rem;
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+.field-scenario-switch button.is-active {
+  /* 選中用「啟用後」的系列色,跟牆上其他綠色狀態一致 */
+  border-color: rgba(28, 158, 136, 0.9);
+  background: rgba(28, 158, 136, 0.3);
+  color: #ffffff;
+}
+html.wall-mode .field-scenario-switch {
+  /* 標題置中 → 兩顆等寬按鈕的正中央就是主牆中線 x = 5760 的拼接縫。
+     間隙給到 96px(同卡距),縫穩穩落在空隙中間,左右各留 48。 */
+  gap: 96px;
+  margin-top: calc(4px * var(--wall));
+}
+html.wall-mode .field-scenario-switch button {
+  /* 1px 的框在牆上等於 1 顆實體像素,遠看等於沒有框 —— 跟著 --wall 放大 */
+  border-width: calc(1px * var(--wall));
+  height: calc(28px * var(--wall));
+  padding: 0 calc(14px * var(--wall));
+  font-size: calc(20px * var(--wall));
+  line-height: 1.2;
 }
