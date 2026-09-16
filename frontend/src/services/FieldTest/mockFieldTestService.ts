@@ -10,7 +10,7 @@ import type {
  * 場域測試的假資料(固定值)。
  *
  * 對應的 tester 還沒串,先給中牆一份靜態資料看版面:載具沿同一條路徑跑兩趟,
- * 第一趟「優化前」已跑完、第二趟「優化後」跑到一半。
+ * 第一趟「啟用前」已跑完、第二趟「啟用後」跑到一半。
  */
 
 // 公尺,出發點為原點,x 向東、y 向北。
@@ -60,7 +60,7 @@ function interference(p: number) {
 }
 
 /**
- * 沿路徑每 4% 取一筆。路徑中段離基地台最遠,訊號最差;優化後 SNR、下行吞吐量整體較高。
+ * 沿路徑每 4% 取一筆。路徑中段離基地台最遠,訊號最差;啟用後 SNR、下行吞吐量整體較高。
  * 用固定公式算出來,每次都一樣(不是動態模擬)。
  */
 function samples(scenario: FieldScenarioId, phase: OptimizationPhase, upTo: number): FieldSample[] {
@@ -76,7 +76,7 @@ function samples(scenario: FieldScenarioId, phase: OptimizationPhase, upTo: numb
         altitudeM: +(30 * climb + (cruising ? 0.4 * Math.sin(p * 0.9) : 0)).toFixed(1),
         speedMps: +(6 * climb + (cruising ? 0.3 * Math.sin(p * 1.3) : 0)).toFixed(1),
         batteryPct: Math.round(98 - p * 0.2),
-        // 受干擾的路段訊號下滑:優化前掉很多,優化後只掉一點
+        // 受干擾的路段訊號下滑:啟用前掉很多,啟用後只掉一點
         snrDb: +(19 - (boost ? 3 : 11) * interference(p) + 0.8 * Math.sin(p * 0.7)).toFixed(1),
         dlMbps: Math.round((165 + 6 * Math.sin(p * 0.5)) * (1 - (boost ? 0.15 : 0.65) * interference(p))),
         ulMbps: +((22 + 1.5 * Math.sin(p * 0.6)) * (1 - (boost ? 0.15 : 0.65) * interference(p))).toFixed(1),

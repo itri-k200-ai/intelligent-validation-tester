@@ -32,20 +32,20 @@ import type {
 
 // ── 場域測試中牆(室外 UAV / 室內 AMR)──────────────────────────────────
 // 內容依規劃圖 docs/外部文件/前端UI建議/2026-09-13_智慧網路實驗室_室外UAV情境中牆UI規劃.png。
-// 測試流程是載具沿同一條路徑跑兩趟(優化前、優化後),一次只跑一個測試項目;
+// 測試流程是載具沿同一條路徑跑兩趟(啟用前、啟用後),一次只跑一個測試項目;
 // 測項清單在左螢幕,中牆只專注目前這個測試。兩種版面(見 config/fieldScenarios.ts)
 // 共用下面的小卡、路徑圖、折線圖。文字避開電視拼接縫,座標與推算見 globals.css .field-wall。
 //
 // live-results(室外):左即時、右結果
-//   ┌ 即時狀態 ───────── 優化 已開啟 ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 │ 優化前 優化後 ┐
-//   │ [固定攝影機 16:9][載具 16:9]   │ │ ┌測試路徑──────────┐ ┌QoE 優化開啟前後比較────────┐ │
+//   ┌ 即時狀態 ───────── xApp 已啟用 ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 │ 啟用前 啟用後 ┐
+//   │ [固定攝影機 16:9][載具 16:9]   │ │ ┌測試路徑──────────┐ ┌QoE xApp 啟用前後───────────┐ │
 //   │ ┌飛行狀態──────┐ ┌UAV 通訊品質┐│ │ │ 測試進度 │ 階段  │ │ 下行 平均 120 → 155 Mbps   │ │
 //   │ │ 高度 地速 …   │ │ SNR RSSI …││ │ │ 路徑圖(兩趟)    │ │ 上行 ╱╲╱                  │ │
 //   └──────────────────────────────────┘ └──────────────────────────────────────────────────────┘
 //
 // camera-grid(室內):同樣左即時、右結果,但 4 路影像放不進 1/3 寬,所以左右各半
-//   ┌ 即時狀態 ─────────────────────── 優化 已開啟 ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 ┐
-//   │ [攝影機 1][攝影機 2] ┌行駛狀態────┐        │ │ ┌AMR 測試路徑────────┐ ┌IM 優化─┐ │
+//   ┌ 即時狀態 ─────────────────────── xApp 已啟用 ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 ┐
+//   │ [攝影機 1][攝影機 2] ┌行駛狀態────┐        │ │ ┌AMR 測試路徑────────┐ ┌IM 啟用─┐ │
 //   │ [攝影機 3][AMR 車載] └AMR 通訊品質┘        │ │ └測試進度 / 路徑圖───┘ └SNR 下行┘ │
 //   └──────────────────────────────────────────────┘ └──────────────────────────────────────┘
 //
@@ -129,7 +129,7 @@ function LiveResultsLayout({
           {/* 室外情境要呈現的是:在具備干擾的環境中,UAV 移動時傳輸穩不穩定。
               干擾範圍會隨環境變動,畫面上不標固定的干擾區,只呈現兩趟的吞吐量起伏與最低值。
               場域內只觀察這台 UAV;上下兩張圖的間距跨 y = 2160 */}
-          <Sub icon={Signal} title="QoE 優化開啟前後比較">
+          <Sub icon={Signal} title="QoE xApp 啟用前後">
             <div className="field-split">
               <ThroughputCompare runs={mission.runs} spec={THROUGHPUT_CHARTS[0]} series={allRuns} />
               <ThroughputCompare runs={mission.runs} spec={THROUGHPUT_CHARTS[1]} series={allRuns} />
@@ -201,7 +201,7 @@ function CameraGridLayout({
             <RouteMap mission={mission} floorPlan={sc.floorPlan} />
           </Sub>
 
-          <Sub icon={Signal} title="IM 優化開啟前後比較">
+          <Sub icon={Signal} title="IM xApp 啟用前後">
             <div className="field-split">
               <div className="flex min-h-0 flex-col">
                 {/* 圖例放這一行:小卡標題列寬度不夠,放在那裡會被截掉 */}
@@ -249,9 +249,9 @@ function OptimizationBadge({ optimized, className = "" }: { optimized: boolean; 
         optimized ? "border-mint/50 text-mint" : "border-white/25 text-white/60"
       } ${className}`}
     >
-      <span className="text-white/70">優化</span>
+      <span className="text-white/70">xApp</span>
       <span className={`inline-block h-5 w-5 rounded-full ${optimized ? "bg-mint" : "bg-white/30"}`} />
-      {optimized ? "已開啟" : "未開啟"}
+      {optimized ? "已啟用" : "未啟用"}
     </span>
   );
 }
@@ -416,7 +416,7 @@ function SignalSub({ title, run, className }: { title: string; run: FieldRun | u
 
 // ── 測試路徑 ─────────────────────────────────────────────────────────
 
-/** 同一條路徑上疊出兩趟軌跡(優化前 / 優化後)與載具目前位置;有平面圖就墊在最底下 */
+/** 同一條路徑上疊出兩趟軌跡(啟用前 / 啟用後)與載具目前位置;有平面圖就墊在最底下 */
 function RouteMap({ mission, floorPlan }: { mission: FieldMission; floorPlan?: FloorPlan }) {
   const { route, runs, vehicle } = mission;
   const live = runs[mission.currentRun]?.position ?? null;
@@ -462,7 +462,7 @@ function RouteMap({ mission, floorPlan }: { mission: FieldMission; floorPlan?: F
           strokeDasharray={`${7 * u} ${6 * u}`}
           strokeLinejoin="round"
         />
-        {/* 先畫優化前、再畫優化後,重疊的路段以優化後為準 */}
+        {/* 先畫啟用前、再畫啟用後,重疊的路段以啟用後為準 */}
         {runs.map((r) =>
           r.reachedWaypoints > 0 ? (
             <polyline
@@ -591,13 +591,13 @@ const RUN_STATUS: Record<FieldRun["status"], string> = {
 
 // ── 折線圖 ───────────────────────────────────────────────────────────
 
-/** IM 優化開啟前後比較的兩張圖(室內) */
+/** IM xApp 啟用前後的兩張圖(室內) */
 const SIGNAL_CHARTS: [TrendSpec, TrendSpec] = [
   { label: "SNR", unit: "dB", metric: "snrDb", digits: 1 },
   { label: "下行吞吐量", unit: "Mbps", metric: "dlMbps", digits: 0 },
 ];
 
-/** QoE 優化開啟前後比較的兩張圖 */
+/** QoE xApp 啟用前後的兩張圖 */
 const THROUGHPUT_CHARTS: [TrendSpec, TrendSpec] = [
   { label: "下行吞吐量", unit: "Mbps", metric: "dlMbps", digits: 0 },
   { label: "上行吞吐量", unit: "Mbps", metric: "ulMbps", digits: 1 },
@@ -740,7 +740,7 @@ function TrendChart({
 }
 
 /**
- * QoE 優化開啟前後比較:標題列放兩趟的平均與平均差值,底下是兩趟的折線圖。
+ * QoE xApp 啟用前後:標題列放兩趟的平均與平均差值,底下是兩趟的折線圖。
  * 後面那趟還在跑,平均只取兩趟都跑過的路徑進度,不然是拿半趟跟整趟比。
  * 這張圖橫跨 x = 9600 拼接縫 —— 標題列分左右兩段(間距跨縫),x 刻度改 20% 一格避開縫。
  */
@@ -808,6 +808,6 @@ function ThroughputCompare({
  * 對比都通過 —— 規範的 #FFC56B / #80FFE8 太亮,當系列色會失去層次。
  */
 const PHASE: Record<OptimizationPhase, { label: string; short: string; color: string }> = {
-  before: { label: "優化前", short: "優化前", color: "#C07F22" },
-  after: { label: "優化後", short: "優化後", color: "#1C9E88" },
+  before: { label: "啟用前", short: "啟用前", color: "#C07F22" },
+  after: { label: "啟用後", short: "啟用後", color: "#1C9E88" },
 };

@@ -4,9 +4,9 @@ import type { FieldSample, FieldScenarioId } from "@/types/fieldTest";
 // ── 場域測試情境(中牆)────────────────────────────────────────────────
 // 室外 UAV、室內 AMR 共用中牆的零件(components/FieldTest/FieldTestWall),版面各自一種:
 //   - live-results(室外):左邊「即時狀態」—— 2 路影像 + 飛行狀態 / UAV 通訊品質數值;
-//     右邊「測試狀態總覽」—— 路徑 | QoE 優化開啟前後比較(只觀察這台 UAV)
+//     右邊「測試狀態總覽」—— 路徑 | QoE xApp 啟用前後(只觀察這台 UAV)
 //   - camera-grid(室內):左右各半 —— 左邊「即時狀態」2×2 影像 + 行駛狀態 / AMR 通訊品質數值;
-//     右邊 路徑 | IM 優化開啟前後比較
+//     右邊 路徑 | IM xApp 啟用前後
 // 新增情境改這裡 + types/fieldTest.ts 的 FieldScenarioId + 假資料。
 
 export type TrendMetric = Exclude<keyof FieldSample, "progress">;
