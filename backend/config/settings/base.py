@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "apps.documents",
     "apps.agent_sessions",
     "apps.selection",
+    "apps.field_tests",
 ]
 
 DOCUMENTS_BUCKET = "documents"
@@ -161,6 +162,30 @@ CORS_ALLOW_CREDENTIALS = True
 # 左 app(別團隊)回報選擇用的服務金鑰;中/右牆「目前選擇」狀態存的 Redis。
 WALL_SERVICE_TOKEN = env("WALL_SERVICE_TOKEN", default="dev-wall-token")
 WALL_STATE_REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
+
+# ── 場域測試(智慧網路中牆)的外部平台 Performance_tester ──────────────
+# 只有後端這台連得到場域網段,金鑰也只留在這裡 —— 前端一律打自己的
+# /api/field-tests/*(見 apps/field_tests)。
+PERF_TESTER_BASE = env("PERF_TESTER_BASE", default="http://localhost:8011/api")
+# 平台目前 API_KEY 為空 = 免帶;設了就會自動帶 X-API-Key
+PERF_TESTER_API_KEY = env("PERF_TESTER_API_KEY", default="")
+# 實測 /live 1.7~3.9 秒;/robot 偶爾 5 秒但失敗已容錯。設太長會讓不通的那台
+# 佔住 worker,連好的情境都排不到 —— 6 秒是量過的折衷。
+PERF_TESTER_TIMEOUT = env.float("PERF_TESTER_TIMEOUT", default=6.0)
+# 上游的階段名稱 → 前端的 before / after(對不到會按出現順序分配)
+# 實測平台回的是「優化前 / 優化後」(pipeline plan 的 phase step);舊用詞一併留著
+PERF_TESTER_PHASE_MAP = env.json(
+    "PERF_TESTER_PHASE_MAP",
+    default={"優化前": "before", "優化後": "after", "部署前": "before", "部署後": "after"},
+)
+# 情境 → 控制器(cid 來自 GET /api/ctrl-conns、ref 如 amr-01)與要跑的方案
+FIELD_TEST_TARGETS = env.json(
+    "FIELD_TEST_TARGETS",
+    default={
+        "outdoor": {"cid": "", "ref": "", "plan_id": ""},
+        "indoor": {"cid": "", "ref": "", "plan_id": ""},
+    },
+)
 
 # ------------------------------ Channels ------------------------------
 CHANNEL_REDIS_URL = env("CHANNEL_REDIS_URL", default="redis://localhost:6379/3")
