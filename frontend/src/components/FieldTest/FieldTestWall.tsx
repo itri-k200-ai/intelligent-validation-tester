@@ -24,6 +24,7 @@ import { useFieldTestMission } from "@/hooks/FieldTest/useFieldTestMission";
 import type {
   FieldMission,
   FieldRun,
+  LinkQuality,
   FieldSample,
   FieldScenarioId,
   FieldVehicleStatus,
@@ -98,8 +99,14 @@ function LiveResultsLayout({
             scenario={scenario}
             title={sc.live.vehicleTitle}
             vehicle={mission.vehicle}
+            position={run?.position ?? null}
           />
-          <SignalSub className="field-sub--lower" title={sc.live.signalTitle} run={run} />
+          <SignalSub
+            className="field-sub--lower"
+            scenario={scenario}
+            title={sc.live.signalTitle}
+            run={run}
+          />
         </div>
       </section>
 
@@ -152,6 +159,7 @@ function CameraGridLayout({
 }) {
   const run = mission.runs[mission.currentRun];
   const allRuns = mission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
+  const upTo = sharedProgress(mission.runs);
 
   return (
     <div className="field-wall field-wall--half">
@@ -169,8 +177,18 @@ function CameraGridLayout({
           </div>
           {/* 上卡標題列對齊右卡小卡;下卡標題列在 y = 2160 之上、數值從 y = 2208 起 */}
           <div className="field-live-stack">
-            <VehicleSub scenario={scenario} title={sc.live.vehicleTitle} vehicle={mission.vehicle} />
-            <SignalSub className="field-sub--lower" title={sc.live.signalTitle} run={run} />
+            <VehicleSub
+              scenario={scenario}
+              title={sc.live.vehicleTitle}
+              vehicle={mission.vehicle}
+              position={run?.position ?? null}
+            />
+            <SignalSub
+            className="field-sub--lower"
+            scenario={scenario}
+            title={sc.live.signalTitle}
+            run={run}
+          />
           </div>
         </div>
       </section>
@@ -196,16 +214,12 @@ function CameraGridLayout({
             <RouteMap mission={mission} floorPlan={sc.floorPlan} />
           </Sub>
 
-          <Sub icon={Signal} title="IM xApp 啟用前後">
+          {/* 與室外同一種比較:兩趟的平均與平均差值(圖例在路徑小卡的標題列) */}
+          {/* 卡窄:標題列只放得下「平均」,圖例在路徑卡那邊 */}
+          <Sub icon={Signal} title="IM xApp 啟用前後" aside="平均">
             <div className="field-split">
-              <div className="flex min-h-0 flex-col">
-                {/* 圖例放這一行:小卡標題列寬度不夠,放在那裡會被截掉 */}
-                <span className="flex flex-none justify-end text-sm text-white/70">
-                  <PhaseLegend />
-                </span>
-                <TrendChart spec={SIGNAL_CHARTS[0]} series={allRuns} />
-              </div>
-              <TrendChart spec={SIGNAL_CHARTS[1]} series={allRuns} />
+              <ThroughputCompare runs={mission.runs} spec={SIGNAL_CHARTS[0]} series={allRuns} upTo={upTo} narrow />
+              <ThroughputCompare runs={mission.runs} spec={SIGNAL_CHARTS[1]} series={allRuns} upTo={upTo} narrow />
             </div>
           </Sub>
         </div>
@@ -324,25 +338,30 @@ function MetricGrid({ items }: { items: Reading[] }) {
 // ── 即時數值小卡 ─────────────────────────────────────────────────────
 
 /** 載具即時數值:室外 UAV 與室內 AMR 各看各的參數,都是 3 欄 × 2 列 */
-function vehicleReadings(scenario: FieldScenarioId, v: FieldVehicleStatus): Reading[] {
+function vehicleReadings(
+  scenario: FieldScenarioId,
+  v: FieldVehicleStatus,
+  position: { x: number; y: number } | null,
+): Reading[] {
   const battery: Reading = {
     label: "電量",
     unit: "%",
     value: v.batteryPct,
     tone: v.batteryPct < 30 ? "text-danger" : undefined,
   };
-  // 模式字串較長,字級小一階才放得進欄寬
-  const mode: Reading = { label: "模式", value: v.mode, size: "text-[2rem]" };
   if (scenario === "indoor") {
+    // 照 AMR 即時遙測畫面:SLAM 位置 x / y、yaw、定位品質,再加上速度與電量
     return [
+      { label: "位置 x", unit: "m", value: position?.x.toFixed(1) ?? null },
+      { label: "位置 y", unit: "m", value: position?.y.toFixed(1) ?? null },
+      { label: "yaw", unit: "°", value: v.headingDeg.toFixed(0) },
+      { label: "定位品質", value: v.localizationPct ?? null },
       { label: "速度", unit: "m/s", value: v.speedMps.toFixed(2) },
-      { label: "航向", unit: "°", value: v.headingDeg.toFixed(0) },
       battery,
-      { label: "里程", unit: "m", value: v.odometerM?.toFixed(1) ?? null },
-      { label: "障礙距離", unit: "m", value: v.obstacleM?.toFixed(1) ?? null },
-      mode,
     ];
   }
+  // 模式字串較長,字級小一階才放得進欄寬
+  const mode: Reading = { label: "模式", value: v.mode, size: "text-[2rem]" };
   return [
     // 欄寬窄,「相對高度 m」會被截斷
     { label: "高度", unit: "m", value: v.altitudeM?.toFixed(1) ?? null },
@@ -359,35 +378,61 @@ function VehicleSub({
   scenario,
   title,
   vehicle,
+  position,
   className,
 }: {
   scenario: FieldScenarioId;
   title: string;
   vehicle: FieldVehicleStatus;
+  /** 目前這趟的位置(室內顯示 SLAM x / y);沒在跑就是 null */
+  position: { x: number; y: number } | null;
   className?: string;
 }) {
   return (
     <Sub className={className} icon={VEHICLE_ICON[scenario]} title={title}>
-      <MetricGrid items={vehicleReadings(scenario, vehicle)} />
+      <MetricGrid items={vehicleReadings(scenario, vehicle, position)} />
     </Sub>
   );
 }
 
+/** 通訊品質數值:室內照 AMR 即時遙測畫面的欄位,室外沿用 UAV 的鏈路指標 */
+function signalReadings(scenario: FieldScenarioId, link: LinkQuality | null): Reading[] {
+  if (scenario === "indoor") {
+    return [
+      { label: "SINR", unit: "dB", value: link?.sinrDb.toFixed(1) ?? null },
+      { label: "RSRP", unit: "dBm", value: link?.rsrpDbm?.toFixed(1) ?? null },
+      { label: "RSRQ", unit: "dB", value: link?.rsrqDb.toFixed(1) ?? null },
+      { label: "RTT", unit: "ms", value: link?.rttMs?.toFixed(1) ?? null },
+      // 遙測畫面寫「吞吐 DL / UL」,這裡欄寬只有 502,配上單位會被截 —— 用 DL / UL
+      { label: "DL", unit: "Mbps", value: link?.dlMbps?.toFixed(0) ?? null },
+      { label: "UL", unit: "Mbps", value: link?.ulMbps?.toFixed(1) ?? null },
+    ];
+  }
+  return [
+    { label: "SNR", unit: "dB", value: link?.snrDb.toFixed(1) ?? null },
+    { label: "RSSI", unit: "dBm", value: link?.rssiDbm.toFixed(1) ?? null },
+    { label: "RSRQ", unit: "dB", value: link?.rsrqDb.toFixed(1) ?? null },
+    { label: "上行", unit: "Mbps", value: link?.ulMbps?.toFixed(1) ?? null },
+    { label: "下行", unit: "Mbps", value: link?.dlMbps?.toFixed(0) ?? null },
+    { label: "丟包", unit: "%", value: link?.packetLossPct?.toFixed(2) ?? null },
+  ];
+}
+
 /** UAV / AMR 通訊品質:目前這趟的鏈路數值 */
-function SignalSub({ title, run, className }: { title: string; run: FieldRun | undefined; className?: string }) {
-  const link = run?.link ?? null;
+function SignalSub({
+  scenario,
+  title,
+  run,
+  className,
+}: {
+  scenario: FieldScenarioId;
+  title: string;
+  run: FieldRun | undefined;
+  className?: string;
+}) {
   return (
     <Sub className={className} icon={Signal} title={title}>
-      <MetricGrid
-        items={[
-          { label: "SNR", unit: "dB", value: link?.snrDb.toFixed(1) ?? null },
-          { label: "RSSI", unit: "dBm", value: link?.rssiDbm.toFixed(1) ?? null },
-          { label: "RSRQ", unit: "dB", value: link?.rsrqDb.toFixed(1) ?? null },
-          { label: "上行", unit: "Mbps", value: link?.ulMbps?.toFixed(1) ?? null },
-          { label: "下行", unit: "Mbps", value: link?.dlMbps?.toFixed(0) ?? null },
-          { label: "丟包", unit: "%", value: link?.packetLossPct?.toFixed(2) ?? null },
-        ]}
-      />
+      <MetricGrid items={signalReadings(scenario, run?.link ?? null)} />
     </Sub>
   );
 }
@@ -400,15 +445,15 @@ function RouteMap({ mission, floorPlan }: { mission: FieldMission; floorPlan?: F
   const live = runs[mission.currentRun]?.position ?? null;
 
   // 路徑點是 x 向東、y 向北(公尺);SVG 的 y 向下,畫的時候把 y 取負。
-  // 有平面圖時範圍以整層樓為準(含外牆與 RU),路徑沒走到的地方也要看得到
-  const planPts = floorPlan
+  // 有平面圖就以它的 view 為範圍(只畫測試用到的區域,超出的牆線由 SVG 裁掉);
+  // 沒有平面圖(室外)才用路徑本身的範圍。
+  const view = floorPlan?.view;
+  const extent = view
     ? [
-        { x: floorPlan.outline.x1, y: floorPlan.outline.y1 },
-        { x: floorPlan.outline.x2, y: floorPlan.outline.y2 },
-        ...floorPlan.radios,
+        { x: view.x1, y: view.y1 },
+        { x: view.x2, y: view.y2 },
       ]
-    : [];
-  const extent = [...route, ...(live ? [live] : []), ...planPts];
+    : [...route, ...(live ? [live] : [])];
   const xs = extent.map((p) => p.x);
   const ys = extent.map((p) => -p.y);
   const minX = Math.min(...xs);
@@ -417,8 +462,8 @@ function RouteMap({ mission, floorPlan }: { mission: FieldMission; floorPlan?: F
   const spanY = Math.max(...ys) - minY;
   // u = 一個視覺單位:線寬、點大小都乘它,路徑範圍不管幾公尺比例都一致
   const u = Math.max(spanX, spanY) / 300 || 1;
-  // 平面圖外牆本身就是邊界,留一點點邊就好,整層樓才畫得大
-  const pad = (floorPlan ? 6 : 20) * u;
+  // view 已經框好要畫的範圍,留一點點邊就好;室外沒有底圖,路徑要留寬一點
+  const pad = (view ? 3 : 20) * u;
   const pts = (list: { x: number; y: number }[]) => list.map((p) => `${p.x},${-p.y}`).join(" ");
   const start = route[0];
 
@@ -574,10 +619,11 @@ function MissionProgress({ mission }: { mission: FieldMission }) {
 
 // ── 折線圖 ───────────────────────────────────────────────────────────
 
-/** IM xApp 啟用前後的兩張圖(室內) */
+/** IM xApp 啟用前後的兩張圖(室內,和室外一樣比兩趟平均) */
 const SIGNAL_CHARTS: [TrendSpec, TrendSpec] = [
   { label: "SNR", unit: "dB", metric: "snrDb", digits: 1 },
-  { label: "下行吞吐量", unit: "Mbps", metric: "dlMbps", digits: 0 },
+  // 卡內可用的文字寬只有縫右邊那 1569,名稱用短的
+  { label: "下行", unit: "Mbps", metric: "dlMbps", digits: 0 },
 ];
 
 /** QoE xApp 啟用前後的兩張圖 */
@@ -736,19 +782,22 @@ function sharedProgress(runs: FieldRun[]) {
 /**
  * QoE xApp 啟用前後:標題列放兩趟的平均與平均差值,底下是兩趟的折線圖。
  * 後面那趟還在跑,平均只取兩趟都跑過的路徑進度,不然是拿半趟跟整趟比。
- * 這張圖橫跨 x = 9600 拼接縫 —— 標題列分左右兩段(間距跨縫),x 刻度改 20% 一格避開縫。
+ * 兩張卡都橫跨 x = 9600 拼接縫 —— 標題列分左右兩段(間距跨縫),x 刻度改 20% 一格避開縫。
  */
 function ThroughputCompare({
   runs,
   spec,
   series,
   upTo,
+  narrow = false,
 }: {
   runs: FieldRun[];
   spec: TrendSpec;
   series: { phase: OptimizationPhase; samples: FieldSample[] }[];
   /** 平均只算到這個路徑進度(見 sharedProgress) */
   upTo: number;
+  /** 窄卡(室內 1632):標題列排成一行,x 刻度回到 50% 一格 */
+  narrow?: boolean;
 }) {
   const mean = (phase: OptimizationPhase) => {
     const values = (runs.find((r) => r.phase === phase)?.samples ?? [])
@@ -761,37 +810,71 @@ function ThroughputCompare({
   const after = mean("after");
   const d = before !== null && after !== null ? after - before : null;
   const fmt = (val: number | null) => (val === null ? "—" : val.toFixed(spec.digits));
+  const dot = (phase: OptimizationPhase) => (
+    <span className="inline-block h-4 w-4 self-center rounded-full" style={{ background: PHASE[phase].color }} />
+  );
+  const delta =
+    d === null ? null : (
+      <>
+        {d > 0 ? "▲+" : d < 0 ? "▼" : ""}
+        {Math.abs(d).toFixed(spec.digits)}
+      </>
+    );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* 左段:名稱 + 平均 + 兩個數值,單位跟右段的平均差值寫在一起 ——
-          左段再多「Mbps」就會壓到 x = 9600 的拼接縫 */}
-      <div className="field-compare-head mb-4 flex-none">
-        <div className="flex min-w-0 items-baseline gap-4 whitespace-nowrap">
+    /* min-w-0:grid 項目預設最小寬度是內容寬度,標題列一長就會把整欄撐出小卡 */
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {narrow ? (
+        /* 室內那張卡只有 1632 寬,卡內也沒有拼接縫穿過 —— 一行寫完,
+           「平均」由小卡標題列說明,差值推到最右邊並小一階字級才放得下 */
+        <div className="mb-4 flex min-w-0 flex-none items-baseline gap-2 overflow-hidden whitespace-nowrap">
           <span className="text-sm text-white/60">{spec.label}</span>
-          <span className="text-sm text-white/40">平均</span>
           <span className="flex items-baseline gap-3">
-            <span className="inline-block h-4 w-4 self-center rounded-full" style={{ background: PHASE.before.color }} />
+            {dot("before")}
             <span className="text-[2.25rem] leading-[1.1] text-white/65">{fmt(before)}</span>
           </span>
           <span className="text-sm text-white/35">→</span>
           <span className="flex items-baseline gap-3">
-            <span className="inline-block h-4 w-4 self-center rounded-full" style={{ background: PHASE.after.color }} />
+            {dot("after")}
             <span className="text-[2.75rem] font-semibold leading-[1.1] text-white">{fmt(after)}</span>
           </span>
-        </div>
-        <div className="flex min-w-0 items-baseline justify-end gap-6 whitespace-nowrap">
-          <span className="text-sm text-white/50">平均差值</span>
-          {d !== null && (
-            <span className={`text-base font-semibold ${d >= 0 ? "text-mint" : "text-danger"}`}>
-              {d > 0 ? "▲+" : d < 0 ? "▼" : ""}
-              {Math.abs(d).toFixed(spec.digits)}
-            </span>
-          )}
           <span className="text-sm text-white/50">{spec.unit}</span>
+          {delta && (
+            <span className={`ml-auto text-sm font-semibold ${d! >= 0 ? "text-mint" : "text-danger"}`}>{delta}</span>
+          )}
         </div>
-      </div>
-      <TrendChart spec={spec} series={series} bare xTicks={[0, 20, 40, 60, 80, 100]} />
+      ) : (
+        /* 室外那張橫跨 x = 9600 的拼接縫:標題列分左右兩段(間距跨縫)。
+           左段只放名稱 + 平均 + 兩個數值,單位跟右段的平均差值寫在一起 —— 再多就會壓到縫 */
+        <div className="field-compare-head mb-4 flex-none">
+          <div className="flex min-w-0 items-baseline gap-4 whitespace-nowrap">
+            <span className="text-sm text-white/60">{spec.label}</span>
+            <span className="text-sm text-white/40">平均</span>
+            <span className="flex items-baseline gap-3">
+              {dot("before")}
+              <span className="text-[2.25rem] leading-[1.1] text-white/65">{fmt(before)}</span>
+            </span>
+            <span className="text-sm text-white/35">→</span>
+            <span className="flex items-baseline gap-3">
+              {dot("after")}
+              <span className="text-[2.75rem] font-semibold leading-[1.1] text-white">{fmt(after)}</span>
+            </span>
+          </div>
+          <div className="flex min-w-0 items-baseline justify-end gap-6 whitespace-nowrap">
+            <span className="text-sm text-white/50">平均差值</span>
+            {delta && (
+              <span className={`text-base font-semibold ${d! >= 0 ? "text-mint" : "text-danger"}`}>{delta}</span>
+            )}
+            <span className="text-sm text-white/50">{spec.unit}</span>
+          </div>
+        </div>
+      )}
+      <TrendChart
+        spec={spec}
+        series={series}
+        bare
+        xTicks={narrow ? [0, 50, 100] : [0, 20, 40, 60, 80, 100]}
+      />
     </div>
   );
 }

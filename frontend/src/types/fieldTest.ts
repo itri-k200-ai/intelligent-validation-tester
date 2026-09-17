@@ -29,6 +29,11 @@ export type LinkQuality = {
   rssiDbm: number;
   rsrqDb: number;
   sinrDb: number;
+  /** 以下是 AMR 即時遙測畫面上的欄位(UAV 那邊目前沒有) */
+  rsrpDbm?: number | null;
+  rttMs?: number | null;
+  /** 服務小區 PCI */
+  pci?: number | null;
   ulMbps: number | null;
   dlMbps: number | null;
   packetLossPct: number | null;
@@ -83,9 +88,8 @@ export type FieldVehicleStatus = {
   altitudeM?: number;
   verticalSpeedMps?: number;
   satellites?: number;
-  /** 以下只有 AMR 有:這趟已行駛距離、前方最近障礙物距離 */
-  odometerM?: number;
-  obstacleM?: number;
+  /** 只有 AMR 有:SLAM 定位品質(即時遙測畫面上的「定位品質」) */
+  localizationPct?: number;
 };
 
 export type FieldMission = {

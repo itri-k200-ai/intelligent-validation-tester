@@ -2577,6 +2577,11 @@ html.wall-mode .field-head-row {
 html.wall-mode .field-wall--half .field-head-row {
   grid-template-columns: 1728px 1824px 1632px;
 }
+/* 室內的測試環境靠左:它那一欄的右界(9552)不是路徑卡右緣,靠右反而飄在中間;
+   靠左就貼齊效能卡的左緣(x = 7728)。 */
+html.wall-mode .field-wall--half .field-head-row > span:nth-of-type(1) {
+  justify-content: flex-start;
+}
 
 /* 左卡(室外):標題 / 影像 / 即時小卡。
    即時小卡的標題列要在 y = 2160 之上、內容從 y = 2208 起,所以高度由下往上算:
@@ -2692,7 +2697,10 @@ html.wall-mode .field-sub-body {
 }
 
 /* 右卡身(室內,右卡內距起算 x = 5904):AMR 測試路徑 3648 / IM xApp 啟用前後 1632,
-   卡距跨 x = 9600(路線圖本身跨 x = 7680) */
+   卡距跨 x = 9600(路線圖本身跨 x = 7680)。
+   分界只能落在縫上:擺在 9600 是地圖大、效能卡 1632;擺在 7680 則相反(效能 3552)。
+   中間值(例如 6:4)會讓 x = 9600 穿過效能卡,卡內文字得整組推到縫右邊,
+   縮排吃掉 417 之後可用文字寬反而跟 1632 差不多,地圖卻白白變小 —— 所以不取。 */
 html.wall-mode .field-status-body {
   min-height: 0;
   display: grid;
@@ -2789,3 +2797,5 @@ html.wall-mode .field-scenario-switch button {
   height: 100%;
   border-radius: 9999px;
 }
+
+

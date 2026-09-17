@@ -11,6 +11,11 @@
 export type FloorRect = { x1: number; y1: number; x2: number; y2: number };
 
 export type FloorPlan = {
+  /**
+   * 地圖要畫出來的範圍。整層樓比卡片瘦,照整層畫左右會空一大塊,所以只畫測試用到的
+   * 區域,超出的部分由 SVG 裁掉(資料仍完整,方便之後換路徑)。
+   */
+  view: FloorRect;
   /** 外牆 */
   outline: FloorRect;
   /** 房間 / 隔間 */
@@ -25,6 +30,9 @@ export type FloorPlan = {
 
 /** 工研院 51 館 5 樓(測試場域 RU 分佈圖) */
 export const ITRI_B51_5F: FloorPlan = {
+  // 上緣切在走廊北側那排房間的南牆(y = -6.8),裁切邊剛好是一條牆線,地圖才填得滿卡寬;
+  // 再往北的 0A000 / 0K500 那一排測試不會用到。右緣留到 53.2 才框得住門外的 RU 135。
+  view: { x1: 0, y1: -28.5, x2: 53.2, y2: -6.8 },
   outline: { x1: 0, y1: -28.5, x2: 51.6, y2: 0 },
   rooms: [
     // 走廊下側
