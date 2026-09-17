@@ -13,14 +13,18 @@ import {
 } from "recharts";
 
 import { LiveVideo } from "@/components/Site/LiveVideo";
-import type { FloorPlan, FloorRect } from "@/config/floorPlans";
+import type { FieldBackdrop, FloorPlan, FloorRect } from "@/config/floorPlans";
 import {
   FIELD_SCENARIOS,
   type FieldScenario,
   type TrendMetric,
   type TrendSpec,
 } from "@/config/fieldScenarios";
+import { useFieldTestCamera } from "@/hooks/FieldTest/useFieldTestCamera";
+import { useFieldTestLive, type FieldLive } from "@/hooks/FieldTest/useFieldTestLive";
 import { useFieldTestMission } from "@/hooks/FieldTest/useFieldTestMission";
+import { cameraSources } from "@/lib/fieldCameras";
+import { formatRate, pickRateUnit } from "@/lib/formatRate";
 import type {
   FieldMission,
   FieldRun,
@@ -58,13 +62,44 @@ const VEHICLE_ICON: Record<FieldScenarioId, LucideIcon> = { outdoor: Plane, indo
 export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
   const sc = FIELD_SCENARIOS[scenario];
   const { mission } = useFieldTestMission(scenario);
-  if (!mission) return <p className="p-2 text-sm text-white/40">載入中…</p>;
+  // 即時值另外抓:牆上永遠要是現在的數字,跟有沒有在跑驗測無關
+  const { live } = useFieldTestLive(scenario);
+  // 還沒有驗測資料(或平台連不上)也要畫出完整版面 —— 欄位名稱、平面圖、路徑都在,
+  // 只有值是「—」。牆是無人看顧的,空白畫面看起來像壞了。
+  // 車載影像要先確認上游在推流、名額沒滿才掛上去(最後一格是載具車載)
+  const { streamUrl } = useFieldTestCamera(scenario);
+  const base = mission ?? emptyMission(sc, scenario);
+  const data: FieldMission = {
+    ...base,
+    cameras: base.cameras.map((src, i) => (i === base.cameras.length - 1 ? (streamUrl ?? src) : src)),
+  };
 
   return sc.layout === "live-results" ? (
-    <LiveResultsLayout scenario={scenario} sc={sc} mission={mission} />
+    <LiveResultsLayout scenario={scenario} sc={sc} mission={data} live={live} />
   ) : (
-    <CameraGridLayout scenario={scenario} sc={sc} mission={mission} />
+    <CameraGridLayout scenario={scenario} sc={sc} mission={data} live={live} />
   );
+}
+
+/** 沒資料時的骨架:兩趟都 pending、沒有樣本,其餘取設定檔(影像照樣要播) */
+function emptyMission(sc: FieldScenario, scenario: FieldScenarioId): FieldMission {
+  const blank = (phase: OptimizationPhase): FieldRun => ({
+    phase,
+    status: "pending",
+    progress: 0,
+    reachedWaypoints: 0,
+    position: null,
+    link: null,
+    samples: [],
+  });
+  return {
+    testcase: sc.testcase,
+    route: sc.route,
+    currentRun: 1,
+    runs: [blank("before"), blank("after")],
+    vehicle: {},
+    cameras: cameraSources(scenario),
+  };
 }
 
 // ── 版面:左即時、右結果(室外)─────────────────────────────────────────
@@ -73,10 +108,12 @@ function LiveResultsLayout({
   scenario,
   sc,
   mission,
+  live,
 }: {
   scenario: FieldScenarioId;
   sc: Extract<FieldScenario, { layout: "live-results" }>;
   mission: FieldMission;
+  live: FieldLive | null;
 }) {
   const run = mission.runs[mission.currentRun];
   const allRuns = mission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
@@ -98,14 +135,13 @@ function LiveResultsLayout({
             className="field-sub--lower"
             scenario={scenario}
             title={sc.live.vehicleTitle}
-            vehicle={mission.vehicle}
-            position={run?.position ?? null}
+            vehicle={{ ...mission.vehicle, ...live?.vehicle }}
+            position={live?.position ?? run?.position ?? null}
           />
           <SignalSub
             className="field-sub--lower"
-            scenario={scenario}
             title={sc.live.signalTitle}
-            run={run}
+            link={live?.link ?? run?.link ?? null}
           />
         </div>
       </section>
@@ -128,7 +164,7 @@ function LiveResultsLayout({
         <div className="field-status-body field-status-body--results">
           <Sub icon={Route} title={sc.routeTitle}>
             <MissionProgress mission={mission} />
-            <RouteMap mission={mission} />
+            <RouteMap mission={mission} livePosition={live?.position ?? null} />
           </Sub>
 
           {/* 室外情境要呈現的是:在具備干擾的環境中,UAV 移動時傳輸穩不穩定。
@@ -152,10 +188,12 @@ function CameraGridLayout({
   scenario,
   sc,
   mission,
+  live,
 }: {
   scenario: FieldScenarioId;
   sc: Extract<FieldScenario, { layout: "camera-grid" }>;
   mission: FieldMission;
+  live: FieldLive | null;
 }) {
   const run = mission.runs[mission.currentRun];
   const allRuns = mission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
@@ -180,15 +218,14 @@ function CameraGridLayout({
             <VehicleSub
               scenario={scenario}
               title={sc.live.vehicleTitle}
-              vehicle={mission.vehicle}
-              position={run?.position ?? null}
+              vehicle={{ ...mission.vehicle, ...live?.vehicle }}
+              position={live?.position ?? run?.position ?? null}
             />
             <SignalSub
-            className="field-sub--lower"
-            scenario={scenario}
-            title={sc.live.signalTitle}
-            run={run}
-          />
+              className="field-sub--lower"
+              title={sc.live.signalTitle}
+              link={live?.link ?? run?.link ?? null}
+            />
           </div>
         </div>
       </section>
@@ -211,7 +248,12 @@ function CameraGridLayout({
             }
           >
             <MissionProgress mission={mission} />
-            <RouteMap mission={mission} floorPlan={sc.floorPlan} />
+            <RouteMap
+              mission={mission}
+              floorPlan={sc.floorPlan}
+              backdrop={sc.backdrop}
+              livePosition={live?.position ?? null}
+            />
           </Sub>
 
           {/* 與室外同一種比較:兩趟的平均與平均差值(圖例在路徑小卡的標題列) */}
@@ -337,7 +379,7 @@ function MetricGrid({ items }: { items: Reading[] }) {
 
 // ── 即時數值小卡 ─────────────────────────────────────────────────────
 
-/** 載具即時數值:室外 UAV 與室內 AMR 各看各的參數,都是 3 欄 × 2 列 */
+/** 載具即時數值:室外 UAV 與室內 AMR 各看各的參數,都是 3 欄 × 2 列。上游沒給就顯示 — */
 function vehicleReadings(
   scenario: FieldScenarioId,
   v: FieldVehicleStatus,
@@ -346,30 +388,30 @@ function vehicleReadings(
   const battery: Reading = {
     label: "電量",
     unit: "%",
-    value: v.batteryPct,
-    tone: v.batteryPct < 30 ? "text-danger" : undefined,
+    value: v.batteryPct ?? null,
+    tone: v.batteryPct !== undefined && v.batteryPct < 30 ? "text-danger" : undefined,
   };
   if (scenario === "indoor") {
     // 照 AMR 即時遙測畫面:SLAM 位置 x / y、yaw、定位品質,再加上速度與電量
     return [
       { label: "位置 x", unit: "m", value: position?.x.toFixed(1) ?? null },
       { label: "位置 y", unit: "m", value: position?.y.toFixed(1) ?? null },
-      { label: "yaw", unit: "°", value: v.headingDeg.toFixed(0) },
+      // 顯示上游的 yaw(-180~180);地圖箭頭另外用 headingDeg 換算過
+      { label: "yaw", unit: "°", value: (v.yawDeg ?? v.headingDeg)?.toFixed(0) ?? null },
       { label: "定位品質", value: v.localizationPct ?? null },
-      { label: "速度", unit: "m/s", value: v.speedMps.toFixed(2) },
+      { label: "速度", unit: "m/s", value: v.speedMps?.toFixed(2) ?? null },
       battery,
     ];
   }
-  // 模式字串較長,字級小一階才放得進欄寬
-  const mode: Reading = { label: "模式", value: v.mode, size: "text-[2rem]" };
   return [
     // 欄寬窄,「相對高度 m」會被截斷
     { label: "高度", unit: "m", value: v.altitudeM?.toFixed(1) ?? null },
-    { label: "地速", unit: "m/s", value: v.speedMps.toFixed(1) },
+    { label: "地速", unit: "m/s", value: v.speedMps?.toFixed(1) ?? null },
     { label: "垂直", unit: "m/s", value: v.verticalSpeedMps?.toFixed(1) ?? null },
     battery,
     { label: "衛星數", value: v.satellites ?? null },
-    mode,
+    // 模式字串較長,字級小一階才放得進欄寬
+    { label: "模式", value: v.mode ?? null, size: "text-[2rem]" },
   ];
 }
 
@@ -395,76 +437,113 @@ function VehicleSub({
   );
 }
 
-/** 通訊品質數值:室內照 AMR 即時遙測畫面的欄位,室外沿用 UAV 的鏈路指標 */
-function signalReadings(scenario: FieldScenarioId, link: LinkQuality | null): Reading[] {
-  if (scenario === "indoor") {
-    return [
-      { label: "SINR", unit: "dB", value: link?.sinrDb.toFixed(1) ?? null },
-      { label: "RSRP", unit: "dBm", value: link?.rsrpDbm?.toFixed(1) ?? null },
-      { label: "RSRQ", unit: "dB", value: link?.rsrqDb.toFixed(1) ?? null },
-      { label: "RTT", unit: "ms", value: link?.rttMs?.toFixed(1) ?? null },
-      // 遙測畫面寫「吞吐 DL / UL」,這裡欄寬只有 502,配上單位會被截 —— 用 DL / UL
-      { label: "DL", unit: "Mbps", value: link?.dlMbps?.toFixed(0) ?? null },
-      { label: "UL", unit: "Mbps", value: link?.ulMbps?.toFixed(1) ?? null },
-    ];
-  }
+/**
+ * 通訊品質數值。欄位對齊外部平台的 /live —— 只有 SINR / RSRP / RSRQ / RTT /
+ * 吞吐 DL / UL;SNR、RSSI、丟包上游沒有,所以兩個情境都不放。
+ * (欄寬 502,「吞吐 DL」配上單位會被截,用 DL / UL。)
+ */
+function signalReadings(link: LinkQuality | null): Reading[] {
+  // 吞吐量的單位跟著數值跑(kbps / Mbps / Gbps),不然閒置時 Mbps 會全是 0
+  const rate = (kbps: number | null | undefined) => formatRate(kbps);
   return [
-    { label: "SNR", unit: "dB", value: link?.snrDb.toFixed(1) ?? null },
-    { label: "RSSI", unit: "dBm", value: link?.rssiDbm.toFixed(1) ?? null },
-    { label: "RSRQ", unit: "dB", value: link?.rsrqDb.toFixed(1) ?? null },
-    { label: "上行", unit: "Mbps", value: link?.ulMbps?.toFixed(1) ?? null },
-    { label: "下行", unit: "Mbps", value: link?.dlMbps?.toFixed(0) ?? null },
-    { label: "丟包", unit: "%", value: link?.packetLossPct?.toFixed(2) ?? null },
+    { label: "SINR", unit: "dB", value: link?.sinrDb?.toFixed(1) ?? null },
+    { label: "RSRP", unit: "dBm", value: link?.rsrpDbm?.toFixed(1) ?? null },
+    { label: "RSRQ", unit: "dB", value: link?.rsrqDb?.toFixed(1) ?? null },
+    { label: "RTT", unit: "ms", value: link?.rttMs?.toFixed(1) ?? null },
+    { label: "DL", ...rate(link?.dlKbps) },
+    { label: "UL", ...rate(link?.ulKbps) },
   ];
 }
 
 /** UAV / AMR 通訊品質:目前這趟的鏈路數值 */
 function SignalSub({
-  scenario,
   title,
-  run,
+  link,
   className,
 }: {
-  scenario: FieldScenarioId;
   title: string;
-  run: FieldRun | undefined;
+  link: LinkQuality | null;
   className?: string;
 }) {
   return (
     <Sub className={className} icon={Signal} title={title}>
-      <MetricGrid items={signalReadings(scenario, run?.link ?? null)} />
+      <MetricGrid items={signalReadings(link)} />
     </Sub>
   );
 }
 
 // ── 測試路徑 ─────────────────────────────────────────────────────────
 
-/** 同一條路徑上疊出兩趟軌跡(啟用前 / 啟用後)與載具目前位置;有平面圖就墊在最底下 */
-function RouteMap({ mission, floorPlan }: { mission: FieldMission; floorPlan?: FloorPlan }) {
+/**
+ * 路線圖:兩趟軌跡(啟用前 / 啟用後)與載具目前位置。
+ *
+ * 兩種底:
+ *  - 有 backdrop(圖檔 + extent):用世界座標畫,軌跡取載具實際回報的座標 ——
+ *    圖與座標同一個系,不必校正。視野自動縮到活動範圍,不然整層樓只有一小段有東西。
+ *  - 沒有 backdrop:畫向量平面圖與規劃路線(室外沒有底圖,就只有路線)。
+ */
+function RouteMap({
+  mission,
+  floorPlan,
+  backdrop,
+  livePosition,
+}: {
+  mission: FieldMission;
+  floorPlan?: FloorPlan;
+  backdrop?: FieldBackdrop;
+  /** 即時位置(來自 /live);沒有就用目前那趟的最後位置 */
+  livePosition?: { x: number; y: number } | null;
+}) {
   const { route, runs, vehicle } = mission;
-  const live = runs[mission.currentRun]?.position ?? null;
-
-  // 路徑點是 x 向東、y 向北(公尺);SVG 的 y 向下,畫的時候把 y 取負。
-  // 有平面圖就以它的 view 為範圍(只畫測試用到的區域,超出的牆線由 SVG 裁掉);
-  // 沒有平面圖(室外)才用路徑本身的範圍。
-  const view = floorPlan?.view;
-  const extent = view
-    ? [
-        { x: view.x1, y: view.y1 },
-        { x: view.x2, y: view.y2 },
-      ]
-    : [...route, ...(live ? [live] : [])];
-  const xs = extent.map((p) => p.x);
-  const ys = extent.map((p) => -p.y);
-  const minX = Math.min(...xs);
-  const minY = Math.min(...ys);
-  const spanX = Math.max(...xs) - minX;
-  const spanY = Math.max(...ys) - minY;
-  // u = 一個視覺單位:線寬、點大小都乘它,路徑範圍不管幾公尺比例都一致
-  const u = Math.max(spanX, spanY) / 300 || 1;
-  // view 已經框好要畫的範圍,留一點點邊就好;室外沒有底圖,路徑要留寬一點
-  const pad = (view ? 3 : 20) * u;
+  const live = livePosition ?? runs[mission.currentRun]?.position ?? null;
   const pts = (list: { x: number; y: number }[]) => list.map((p) => `${p.x},${-p.y}`).join(" ");
+
+  // 每趟的實際軌跡(樣本裡的座標);沒有座標的樣本(例如 UAV 只有 GPS)就沒有軌跡
+  const tracks = runs.map((r) => ({
+    phase: r.phase,
+    points: r.samples
+      .filter((s): s is typeof s & { x: number; y: number } =>
+        typeof s.x === "number" && typeof s.y === "number",
+      )
+      .map((s) => ({ x: s.x, y: s.y })),
+  }));
+
+  // 視野:有底圖就看「軌跡 + 目前位置」,並留邊、夾在底圖範圍內
+  const focus = [...tracks.flatMap((t) => t.points), ...(live ? [live] : [])];
+  const view = floorPlan?.view;
+  let minX: number;
+  let minY: number;
+  let spanX: number;
+  let spanY: number;
+  if (backdrop) {
+    const ext = backdrop.extent;
+    const margin = 6;
+    const x0 = focus.length ? Math.max(ext.xMin, Math.min(...focus.map((p) => p.x)) - margin) : ext.xMin;
+    const x1 = focus.length ? Math.min(ext.xMax, Math.max(...focus.map((p) => p.x)) + margin) : ext.xMax;
+    const y0 = focus.length ? Math.max(ext.yMin, Math.min(...focus.map((p) => p.y)) - margin) : ext.yMin;
+    const y1 = focus.length ? Math.min(ext.yMax, Math.max(...focus.map((p) => p.y)) + margin) : ext.yMax;
+    minX = x0;
+    minY = -y1;
+    spanX = Math.max(x1 - x0, 1);
+    spanY = Math.max(y1 - y0, 1);
+  } else {
+    const extent = view
+      ? [
+          { x: view.x1, y: view.y1 },
+          { x: view.x2, y: view.y2 },
+        ]
+      : [...route, ...(live ? [live] : [])];
+    const xs = extent.map((p) => p.x);
+    const ys = extent.map((p) => -p.y);
+    minX = Math.min(...xs);
+    minY = Math.min(...ys);
+    spanX = Math.max(...xs) - minX;
+    spanY = Math.max(...ys) - minY;
+  }
+  // u = 一個視覺單位:線寬、點大小都乘它,範圍不管幾公尺比例都一致
+  const u = Math.max(spanX, spanY) / 300 || 1;
+  // view / backdrop 已經框好範圍,留一點點邊就好;室外沒有底圖,路線要留寬一點
+  const pad = (view || backdrop ? 3 : 20) * u;
   const start = route[0];
 
   return (
@@ -476,45 +555,74 @@ function RouteMap({ mission, floorPlan }: { mission: FieldMission; floorPlan?: F
         role="img"
         aria-label="測試路徑與兩趟軌跡"
       >
-        {floorPlan && <FloorPlanLayer plan={floorPlan} u={u} />}
-        <polyline
-          points={pts(route)}
-          fill="none"
-          stroke="rgba(255,255,255,0.35)"
-          strokeWidth={2 * u}
-          strokeDasharray={`${7 * u} ${6 * u}`}
-          strokeLinejoin="round"
-        />
-        {/* 先畫啟用前、再畫啟用後,重疊的路段以啟用後為準 */}
-        {runs.map((r) =>
-          r.reachedWaypoints > 0 ? (
-            <polyline
-              key={r.phase}
-              points={pts([...route.slice(0, r.reachedWaypoints), ...(r.position ? [r.position] : [])])}
-              fill="none"
-              stroke={PHASE[r.phase].color}
-              strokeWidth={4 * u}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-          ) : null,
+        {backdrop && (
+          <image
+            href={backdrop.src}
+            x={backdrop.extent.xMin}
+            y={-backdrop.extent.yMax}
+            width={backdrop.extent.xMax - backdrop.extent.xMin}
+            height={backdrop.extent.yMax - backdrop.extent.yMin}
+            preserveAspectRatio="none"
+            opacity={0.85}
+          />
         )}
-        {/* RU 疊在軌跡上面,路徑經過 RU 時才不會被蓋掉 */}
-        {floorPlan?.radios.map((ru) => (
-          <g key={ru.id} transform={`translate(${ru.x} ${-ru.y})`}>
-            <circle r={5.5 * u} fill={CHART_SURFACE} stroke={RADIO_RING} strokeWidth={1.2 * u} />
-            <circle r={2 * u} fill={RADIO_RING} />
-          </g>
-        ))}
-        {start && (
+        {!backdrop && floorPlan && <FloorPlanLayer plan={floorPlan} u={u} />}
+        {!backdrop && (
+          <polyline
+            points={pts(route)}
+            fill="none"
+            stroke="rgba(255,255,255,0.35)"
+            strokeWidth={2 * u}
+            strokeDasharray={`${7 * u} ${6 * u}`}
+            strokeLinejoin="round"
+          />
+        )}
+        {/* 先畫啟用前、再畫啟用後,重疊的路段以啟用後為準 */}
+        {backdrop
+          ? tracks.map((t) =>
+              t.points.length > 1 ? (
+                <polyline
+                  key={t.phase}
+                  points={pts(t.points)}
+                  fill="none"
+                  stroke={PHASE[t.phase].color}
+                  strokeWidth={4 * u}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+              ) : null,
+            )
+          : runs.map((r) =>
+              r.reachedWaypoints > 0 ? (
+                <polyline
+                  key={r.phase}
+                  points={pts([...route.slice(0, r.reachedWaypoints), ...(r.position ? [r.position] : [])])}
+                  fill="none"
+                  stroke={PHASE[r.phase].color}
+                  strokeWidth={4 * u}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+              ) : null,
+            )}
+        {/* RU 疊在軌跡上面,路徑經過 RU 時才不會被蓋掉。RU 座標屬於向量平面圖 */}
+        {!backdrop &&
+          floorPlan?.radios.map((ru) => (
+            <g key={ru.id} transform={`translate(${ru.x} ${-ru.y})`}>
+              <circle r={5.5 * u} fill={CHART_SURFACE} stroke={RADIO_RING} strokeWidth={1.2 * u} />
+              <circle r={2 * u} fill={RADIO_RING} />
+            </g>
+          ))}
+        {!backdrop && start && (
           <circle cx={start.x} cy={-start.y} r={6 * u} fill="#4C8DFF" stroke="#0A172F" strokeWidth={1.5 * u} />
         )}
         {live && (
-          <g transform={`translate(${live.x} ${-live.y})`}>
+          <g className="field-live-marker" transform={`translate(${live.x} ${-live.y})`}>
             <circle r={16 * u} fill="#80FFE8" fillOpacity={0.2} />
+            {/* 箭頭圖形朝上、SVG rotate 順時針,headingDeg 後端已由 SLAM yaw 換算過(0 = 正北) */}
             <path
               d="M0,-10 L7.5,8 L0,4 L-7.5,8 Z"
-              transform={`rotate(${vehicle.headingDeg}) scale(${1.2 * u})`}
+              transform={`rotate(${vehicle.headingDeg ?? 0}) scale(${1.2 * u})`}
               fill="#80FFE8"
               stroke="#0A172F"
               strokeWidth={1.2}
@@ -621,15 +729,15 @@ function MissionProgress({ mission }: { mission: FieldMission }) {
 
 /** IM xApp 啟用前後的兩張圖(室內,和室外一樣比兩趟平均) */
 const SIGNAL_CHARTS: [TrendSpec, TrendSpec] = [
-  { label: "SNR", unit: "dB", metric: "snrDb", digits: 1 },
+  { label: "SINR", unit: "dB", metric: "sinrDb", digits: 1 },
   // 卡內可用的文字寬只有縫右邊那 1569,名稱用短的
-  { label: "下行", unit: "Mbps", metric: "dlMbps", digits: 0 },
+  { label: "下行", unit: "kbps", metric: "dlKbps", digits: 0, kind: "rate" },
 ];
 
 /** QoE xApp 啟用前後的兩張圖 */
 const THROUGHPUT_CHARTS: [TrendSpec, TrendSpec] = [
-  { label: "下行吞吐量", unit: "Mbps", metric: "dlMbps", digits: 0 },
-  { label: "上行吞吐量", unit: "Mbps", metric: "ulMbps", digits: 1 },
+  { label: "下行吞吐量", unit: "kbps", metric: "dlKbps", digits: 0, kind: "rate" },
+  { label: "上行吞吐量", unit: "kbps", metric: "ulKbps", digits: 1, kind: "rate" },
 ];
 
 /** 圖表字級與筆畫都以牆面 3× 畫布計:2px 線 = 6、1px 格線 = 3 */
@@ -660,21 +768,34 @@ function TrendChart({
   series,
   bare = false,
   xTicks = [0, 50, 100],
+  scale = 1,
+  unitOverride,
+  digitsOverride,
 }: {
   spec: TrendSpec;
   series: { phase: OptimizationPhase; samples: FieldSample[] }[];
   bare?: boolean;
   /** 圖跨拼接縫時,避開會落在縫上的刻度 */
   xTicks?: number[];
+  /** 吞吐量:換成所屬小卡選定的單位,y 軸才跟標題一致 */
+  scale?: number;
+  unitOverride?: string;
+  digitsOverride?: number;
 }) {
-  // 依 progress 合併成一列一個 x;沒跑到的進度留空,線自然停在目前位置
+  const shownUnit = unitOverride ?? unit;
+  const shownDigits = digitsOverride ?? digits;
+  // 依 progress 合併成一列一個 x。兩趟的取樣筆數通常不一樣(例:59 / 57),換算出來的
+  // 進度落在不同的 x 上,所以多數列只有其中一趟有值 —— 這種空格是「那一趟在這個進度
+  // 沒有取樣點」,不是資料中斷,要靠 connectNulls 跨過去,否則每個點都成為孤立線段
+  // (配上 strokeLinecap="round" 會被畫成一顆圓點,整張圖看起來沒有線)。
+  // 還沒跑到的進度根本不在 rows 裡,所以線仍然停在目前位置。
   const byProgress = new Map<number, Record<string, number>>();
   series.forEach((s) =>
     s.samples.forEach((pt) => {
       const val = sampleValue(pt, metric);
       if (val === null) return;
       const row = byProgress.get(pt.progress) ?? { progress: pt.progress };
-      row[s.phase] = val;
+      row[s.phase] = val / scale;
       byProgress.set(pt.progress, row);
     }),
   );
@@ -687,9 +808,9 @@ function TrendChart({
         <div className="mb-4 flex flex-none items-baseline gap-5">
           <span className="text-sm text-white/60">{label}</span>
           <span className="text-[2.75rem] font-semibold leading-[1.1] text-white">
-            {latest === null ? "—" : latest.toFixed(digits)}
+            {latest === null ? "—" : (latest / scale).toFixed(shownDigits)}
           </span>
-          <span className="text-sm text-white/50">{unit}</span>
+          <span className="text-sm text-white/50">{shownUnit}</span>
         </div>
       )}
       <div className="relative min-h-0 flex-1">
@@ -715,7 +836,7 @@ function TrendChart({
               axisLine={false}
               tickCount={4}
               width={150}
-              allowDecimals={false}
+              allowDecimals={shownDigits > 0}
               domain={["auto", "auto"]}
             />
             <Tooltip
@@ -725,7 +846,7 @@ function TrendChart({
               itemStyle={{ color: "#FFFFFF", padding: "4px 0" }}
               labelFormatter={(val) => `測試進度 ${val}%`}
               formatter={(val, name) => [
-                `${Number(val).toFixed(digits)} ${unit}`,
+                `${Number(val).toFixed(shownDigits)} ${shownUnit}`,
                 PHASE[name as OptimizationPhase]?.short ?? String(name),
               ]}
             />
@@ -740,7 +861,7 @@ function TrendChart({
                 strokeLinejoin="round"
                 dot={false}
                 activeDot={{ r: 12, fill: PHASE[s.phase].color, stroke: CHART_SURFACE, strokeWidth: 6 }}
-                connectNulls={false}
+                connectNulls
                 isAnimationActive={false}
               />
             ))}
@@ -752,7 +873,7 @@ function TrendChart({
                 <ReferenceDot
                   key={`end-${s.phase}`}
                   x={end.progress}
-                  y={val}
+                  y={val / scale}
                   r={12}
                   fill={PHASE[s.phase].color}
                   stroke={CHART_SURFACE}
@@ -809,7 +930,13 @@ function ThroughputCompare({
   const before = mean("before");
   const after = mean("after");
   const d = before !== null && after !== null ? after - before : null;
-  const fmt = (val: number | null) => (val === null ? "—" : val.toFixed(spec.digits));
+  // 吞吐量:用兩趟平均挑一次單位,數值、差值、y 軸都跟著它
+  const chosen =
+    spec.kind === "rate"
+      ? pickRateUnit([before, after])
+      : { unit: spec.unit, scale: 1, digits: spec.digits };
+  const fmt = (val: number | null) =>
+    val === null ? "—" : (val / chosen.scale).toFixed(chosen.digits);
   const dot = (phase: OptimizationPhase) => (
     <span className="inline-block h-4 w-4 self-center rounded-full" style={{ background: PHASE[phase].color }} />
   );
@@ -838,7 +965,7 @@ function ThroughputCompare({
             {dot("after")}
             <span className="text-[2.75rem] font-semibold leading-[1.1] text-white">{fmt(after)}</span>
           </span>
-          <span className="text-sm text-white/50">{spec.unit}</span>
+          <span className="text-sm text-white/50">{chosen.unit}</span>
           {delta && (
             <span className={`ml-auto text-sm font-semibold ${d! >= 0 ? "text-mint" : "text-danger"}`}>{delta}</span>
           )}
@@ -865,7 +992,7 @@ function ThroughputCompare({
             {delta && (
               <span className={`text-base font-semibold ${d! >= 0 ? "text-mint" : "text-danger"}`}>{delta}</span>
             )}
-            <span className="text-sm text-white/50">{spec.unit}</span>
+            <span className="text-sm text-white/50">{chosen.unit}</span>
           </div>
         </div>
       )}
@@ -874,6 +1001,9 @@ function ThroughputCompare({
         series={series}
         bare
         xTicks={narrow ? [0, 50, 100] : [0, 20, 40, 60, 80, 100]}
+        scale={chosen.scale}
+        unitOverride={chosen.unit}
+        digitsOverride={chosen.digits}
       />
     </div>
   );

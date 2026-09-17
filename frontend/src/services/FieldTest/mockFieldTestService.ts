@@ -1,46 +1,22 @@
+import { FIELD_SCENARIOS } from "@/config/fieldScenarios";
 import type {
   FieldMission,
+  FieldRun,
   FieldSample,
   FieldScenarioId,
+  LinkQuality,
   OptimizationPhase,
-  RouteWaypoint,
 } from "@/types/fieldTest";
 
 /**
  * 場域測試的假資料(固定值)。
  *
- * 對應的 tester 還沒串,先給中牆一份靜態資料看版面:載具沿同一條路徑跑兩趟,
- * 第一趟「啟用前」已跑完、第二趟「啟用後」跑到一半。
+ * 給沒有外部平台時看版面用(NEXT_PUBLIC_USE_MOCK=true):載具沿同一條路徑跑兩趟,
+ * 第一趟「啟用前」已跑完、第二趟「啟用後」跑到一半。欄位與實際串接後一致
+ * (見 services/FieldTest/fieldTestService.ts),所以畫面不會因為換來源而改。
+ *
+ * 路徑與測試項目都取自 config/fieldScenarios,不在這裡另外定義。
  */
-
-// 公尺,出發點為原點,x 向東、y 向北。
-/** 室外:無人機菱形航線 */
-const UAV_ROUTE: RouteWaypoint[] = [
-  { id: "H", kind: "start", x: 0, y: 0 },
-  { id: "C1", kind: "checkpoint", x: 120, y: -10 },
-  { id: "M1", kind: "mission", x: 165, y: -55 },
-  { id: "C2", kind: "checkpoint", x: 210, y: -100 },
-  { id: "M2", kind: "mission", x: 165, y: -145 },
-  { id: "C3", kind: "checkpoint", x: 120, y: -190 },
-  { id: "M3", kind: "mission", x: 75, y: -145 },
-  { id: "C4", kind: "checkpoint", x: 30, y: -100 },
-  { id: "R", kind: "return", x: 10, y: -20 },
-];
-
-/**
- * 室內:AMR 沿 51 館 5 樓走廊前進,從 505 門進 190㎡ 辦公區繞一段,再從 504 門回走廊。
- * 座標與 config/floorPlans.ts 的平面圖相同(原點在平面圖左上角),全長約 62.6 m。
- */
-const AMR_ROUTE: RouteWaypoint[] = [
-  { id: "S", kind: "start", x: 2.2, y: -14.8 },
-  { id: "C1", kind: "checkpoint", x: 12.8, y: -14.8 },
-  { id: "M1", kind: "mission", x: 24.7, y: -14.8 },
-  { id: "C2", kind: "checkpoint", x: 35.3, y: -14.8 },
-  { id: "M2", kind: "mission", x: 35.3, y: -7.6 },
-  { id: "C3", kind: "checkpoint", x: 44.9, y: -7.6 },
-  { id: "M3", kind: "mission", x: 44.9, y: -14.8 },
-  { id: "R", kind: "return", x: 50.4, y: -14.8 },
-];
 
 /**
  * 假資料用:室外航線上受干擾、訊號會下滑的兩段(路徑進度 %)。
@@ -60,7 +36,7 @@ function interference(p: number) {
 }
 
 /**
- * 沿路徑每 4% 取一筆。路徑中段離基地台最遠,訊號最差;啟用後 SNR、下行吞吐量整體較高。
+ * 沿路徑每 4% 取一筆。路徑中段離基地台最遠,訊號最差;啟用後 SINR、下行吞吐量整體較高。
  * 用固定公式算出來,每次都一樣(不是動態模擬)。
  */
 function samples(scenario: FieldScenarioId, phase: OptimizationPhase, upTo: number): FieldSample[] {
@@ -69,42 +45,116 @@ function samples(scenario: FieldScenarioId, phase: OptimizationPhase, upTo: numb
     const far = Math.sin((Math.PI * p) / 100);
     const boost = phase === "after" ? 1 : 0;
     if (scenario === "outdoor") {
-      const climb = Math.min(p / 12, 1);
-      const cruising = climb === 1;
       out.push({
         progress: p,
-        altitudeM: +(30 * climb + (cruising ? 0.4 * Math.sin(p * 0.9) : 0)).toFixed(1),
-        speedMps: +(6 * climb + (cruising ? 0.3 * Math.sin(p * 1.3) : 0)).toFixed(1),
-        batteryPct: Math.round(98 - p * 0.2),
         // 受干擾的路段訊號下滑:啟用前掉很多,啟用後只掉一點
-        snrDb: +(19 - (boost ? 3 : 11) * interference(p) + 0.8 * Math.sin(p * 0.7)).toFixed(1),
-        dlMbps: Math.round((165 + 6 * Math.sin(p * 0.5)) * (1 - (boost ? 0.15 : 0.65) * interference(p))),
-        ulMbps: +((22 + 1.5 * Math.sin(p * 0.6)) * (1 - (boost ? 0.15 : 0.65) * interference(p))).toFixed(1),
+        sinrDb: +(19 - (boost ? 3 : 11) * interference(p) + 0.8 * Math.sin(p * 0.7)).toFixed(1),
+        dlKbps: 1000 * Math.round((165 + 6 * Math.sin(p * 0.5)) * (1 - (boost ? 0.15 : 0.65) * interference(p))),
+        ulKbps: 1000 * +((22 + 1.5 * Math.sin(p * 0.6)) * (1 - (boost ? 0.15 : 0.65) * interference(p))).toFixed(1),
       });
     } else {
-      // 每走完一排走道要轉彎減速(轉角約每 1/8 路徑一個)
-      const straight = Math.abs(Math.sin((Math.PI * p) / 12.5));
       out.push({
         progress: p,
-        speedMps: +(p === 0 ? 0 : 0.4 + 0.8 * straight).toFixed(2),
-        batteryPct: Math.round(96 - p * 0.12),
-        snrDb: +(22 - 10 * far + 5 * boost + 1.2 * Math.sin(p * 0.9)).toFixed(1),
-        dlMbps: Math.round(280 - 120 * far + 60 * boost + 8 * Math.sin(p * 0.6)),
-        ulMbps: +(45 - 16 * far + 12 * boost + 2 * Math.sin(p * 0.7)).toFixed(1),
+        sinrDb: +(22 - 10 * far + 5 * boost + 1.2 * Math.sin(p * 0.9)).toFixed(1),
+        dlKbps: 1000 * Math.round(280 - 120 * far + 60 * boost + 8 * Math.sin(p * 0.6)),
+        ulKbps: 1000 * +(45 - 16 * far + 12 * boost + 2 * Math.sin(p * 0.7)).toFixed(1),
       });
     }
   }
   return out;
 }
 
+const OUTDOOR_LINK: Record<OptimizationPhase, LinkQuality> = {
+  before: {
+    sinrDb: 10.4,
+    rsrpDbm: -96.0,
+    rsrqDb: -12.0,
+    rttMs: 34.2,
+    dlKbps: 98000,
+    ulKbps: 12500,
+    cqi: 7,
+    pci: 132,
+    cellId: 2146306,
+    band: "n79",
+    nrMode: "SA",
+    connected: true,
+  },
+  after: {
+    sinrDb: 17.1,
+    rsrpDbm: -84.5,
+    rsrqDb: -9.8,
+    rttMs: 21.6,
+    dlKbps: 141000,
+    ulKbps: 21300,
+    cqi: 11,
+    pci: 132,
+    cellId: 2146306,
+    band: "n79",
+    nrMode: "SA",
+    connected: true,
+  },
+};
+
+const INDOOR_LINK: Record<OptimizationPhase, LinkQuality> = {
+  before: {
+    sinrDb: 16.0,
+    rsrpDbm: -86.2,
+    rsrqDb: -10.5,
+    rttMs: 28.6,
+    dlKbps: 210000,
+    ulKbps: 38000,
+    cqi: 9,
+    pci: 132,
+    cellId: 2146306,
+    band: "n79",
+    nrMode: "SA",
+    connected: true,
+  },
+  after: {
+    sinrDb: 21.3,
+    rsrpDbm: -74.8,
+    rsrqDb: -8.6,
+    rttMs: 18.4,
+    dlKbps: 268000,
+    ulKbps: 52500,
+    cqi: 12,
+    pci: 132,
+    cellId: 2146306,
+    band: "n79",
+    nrMode: "SA",
+    connected: true,
+  },
+};
+
+/** 第一趟跑完、第二趟跑到 64% */
+function runs(scenario: FieldScenarioId, live: { x: number; y: number }, reached: number): FieldRun[] {
+  const link = scenario === "outdoor" ? OUTDOOR_LINK : INDOOR_LINK;
+  return [
+    {
+      phase: "before",
+      status: "finished",
+      progress: 100,
+      reachedWaypoints: FIELD_SCENARIOS[scenario].route.length,
+      position: null,
+      link: link.before,
+      samples: samples(scenario, "before", 100),
+    },
+    {
+      phase: "after",
+      status: "running",
+      progress: 64,
+      reachedWaypoints: reached,
+      position: live,
+      link: link.after,
+      samples: samples(scenario, "after", 64),
+    },
+  ];
+}
+
 const MISSIONS: Record<FieldScenarioId, FieldMission> = {
   outdoor: {
-    testcase: {
-      code: "uav.interference_mobility",
-      name: "QoE xApp 效能測試",
-      environment: "工研院52館外大草坪",
-    },
-    route: UAV_ROUTE,
+    testcase: FIELD_SCENARIOS.outdoor.testcase,
+    route: FIELD_SCENARIOS.outdoor.route,
     currentRun: 1,
     vehicle: {
       headingDeg: 315,
@@ -116,120 +166,39 @@ const MISSIONS: Record<FieldScenarioId, FieldMission> = {
       mode: "MISSION",
     },
     cameras: [null, null],
-    runs: [
-      {
-        phase: "before",
-        status: "finished",
-        progress: 100,
-        reachedWaypoints: UAV_ROUTE.length,
-        position: null,
-        link: {
-          snrDb: 9.0,
-          sinrDb: 10.4,
-          rssiDbm: -96.0,
-          rsrqDb: -12.0,
-          dlMbps: 98,
-          ulMbps: 12.5,
-          packetLossPct: 1.8,
-          cqi: 7,
-          band: "n79",
-          nrMode: "SA",
-        },
-        samples: samples("outdoor", "before", 100),
-      },
-      {
-        phase: "after",
-        status: "running",
-        progress: 64,
-        reachedWaypoints: 6,
-        // M3 → C4 中間
-        position: { x: 52, y: -122 },
-        link: {
-          snrDb: 15.6,
-          sinrDb: 17.1,
-          rssiDbm: -89.5,
-          rsrqDb: -9.8,
-          dlMbps: 141,
-          ulMbps: 21.3,
-          packetLossPct: 0.4,
-          cqi: 11,
-          band: "n79",
-          nrMode: "SA",
-        },
-        samples: samples("outdoor", "after", 64),
-      },
-    ],
+    // M3 → C4 中間
+    runs: runs("outdoor", { x: 52, y: -122 }, 6),
   },
   indoor: {
-    testcase: {
-      code: "amr.interference_mitigation",
-      name: "IM xApp 效能測試",
-      environment: "工研院51館5樓",
-    },
-    route: AMR_ROUTE,
+    testcase: FIELD_SCENARIOS.indoor.testcase,
+    route: FIELD_SCENARIOS.indoor.route,
     currentRun: 1,
     vehicle: {
-      headingDeg: 0,
+      headingDeg: 0, // 地圖箭頭:0 = 朝北
+      yawDeg: 90, // SLAM yaw:90 = 朝北(顯示用,與上游同一種表示法)
       speedMps: 0.69,
       batteryPct: 88,
       localizationPct: 74,
       mode: "AUTO",
     },
     cameras: [null, null, null, null],
-    runs: [
-      {
-        phase: "before",
-        status: "finished",
-        progress: 100,
-        reachedWaypoints: AMR_ROUTE.length,
-        position: null,
-        link: {
-          snrDb: 15.2,
-          sinrDb: 16.0,
-          rssiDbm: -78.5,
-          rsrqDb: -10.5,
-          rsrpDbm: -86.2,
-          rttMs: 28.6,
-          pci: 132,
-          dlMbps: 210,
-          ulMbps: 38.0,
-          packetLossPct: 0.9,
-          cqi: 9,
-          band: "n79",
-          nrMode: "SA",
-        },
-        samples: samples("indoor", "before", 100),
-      },
-      {
-        phase: "after",
-        status: "running",
-        progress: 64,
-        reachedWaypoints: 4,
-        // C2 → M2 途中:剛從 505 門進辦公區,往北走
-        position: { x: 35.3, y: -8.5 },
-        link: {
-          snrDb: 20.4,
-          sinrDb: 21.3,
-          rssiDbm: -72.0,
-          rsrqDb: -8.6,
-          rsrpDbm: -74.8,
-          rttMs: 18.4,
-          pci: 132,
-          dlMbps: 268,
-          ulMbps: 52.5,
-          packetLossPct: 0.2,
-          cqi: 12,
-          band: "n79",
-          nrMode: "SA",
-        },
-        samples: samples("indoor", "after", 64),
-      },
-    ],
+    // C2 → M2 途中:剛從 505 門進辦公區,往北走
+    runs: runs("indoor", { x: 35.3, y: -8.5 }, 4),
   },
 };
 
 export const mockFieldTestService = {
-  async mission(scenario: FieldScenarioId): Promise<FieldMission> {
+  async mission(scenario: FieldScenarioId, _opts?: { sinceSeq?: number; signal?: AbortSignal }): Promise<FieldMission> {
     return MISSIONS[scenario];
+  },
+  /** 即時數值:mock 沒有真的輪詢來源,直接回目前那趟的值 */
+  async live(scenario: FieldScenarioId, _signal?: AbortSignal) {
+    const mission = MISSIONS[scenario];
+    const run = mission.runs[mission.currentRun];
+    return {
+      link: run?.link ?? null,
+      vehicle: mission.vehicle,
+      position: run?.position ?? null,
+    };
   },
 };

@@ -25,40 +25,46 @@ export type RouteWaypointKind = "start" | "checkpoint" | "mission" | "return";
 export type RouteWaypoint = { id: string; kind: RouteWaypointKind; x: number; y: number };
 
 export type LinkQuality = {
-  snrDb: number;
-  rssiDbm: number;
-  rsrqDb: number;
-  sinrDb: number;
-  /** 以下是 AMR 即時遙測畫面上的欄位(UAV 那邊目前沒有) */
-  rsrpDbm?: number | null;
-  rttMs?: number | null;
-  /** 服務小區 PCI */
-  pci?: number | null;
-  ulMbps: number | null;
-  dlMbps: number | null;
-  packetLossPct: number | null;
-  /** 頻段,例如 n79 */
-  band: string;
+  /**
+   * UE 端量到的 5G 訊號。欄位對齊外部平台的 /live(SINR / RSRP / RSRQ / RTT /
+   * 吞吐 / 服務細胞)—— 上游沒有 SNR、RSSI、丟包,所以這裡也不放。
+   */
+  sinrDb: number | null;
+  rsrpDbm: number | null;
+  rsrqDb: number | null;
+  rttMs: number | null;
+  /** 吞吐量用上游原始的 kbps;顯示時再依大小換成 Mbps / Gbps */
+  dlKbps: number | null;
+  ulKbps: number | null;
   cqi: number | null;
-  /** SA / NSA */
+  pci: number | null;
+  cellId: number | null;
+  band: string;
   nrMode: string;
+  /** 附著狀態 / RRC 狀態 */
+  connected?: boolean;
+  linkState?: string;
 };
 
 /** 啟用前 / 啟用後 —— 載具沿同一條路徑各跑一趟,比較兩趟的結果。 */
 export type OptimizationPhase = "before" | "after";
 
-/** 沿路徑取樣的一筆數據;兩趟用同一個 x(路徑進度)才對得起來比較 */
+/**
+ * 沿路徑取樣的一筆數據;兩趟用同一個 x(路徑進度)才對得起來比較。
+ *
+ * 上游只給取樣序號與相對秒數,沒有路徑進度 —— progress 由後端依該趟的取樣
+ * 位置估算(跑完那趟就是準的),elapsedS 留著給圖表之後改用時間軸。
+ */
 export type FieldSample = {
   /** 路徑進度 0–100 */
   progress: number;
-  /** 移動速度(UAV 為地速) */
-  speedMps: number;
-  /** 相對高度 —— 只有 UAV 有 */
-  altitudeM?: number;
-  batteryPct: number;
-  snrDb: number;
-  dlMbps: number;
-  ulMbps: number;
+  sinrDb?: number | null;
+  dlKbps?: number | null;
+  ulKbps?: number | null;
+  elapsedS?: number | null;
+  /** 取樣當下的位置(AMR 為 SLAM 公尺座標)—— 兩趟的實際軌跡 */
+  x?: number | null;
+  y?: number | null;
 };
 
 export type FieldRun = {
@@ -76,23 +82,33 @@ export type FieldRun = {
   samples: FieldSample[];
 };
 
-/** 載具目前的即時狀態(左側即時數值、路徑圖箭頭用) */
+/**
+ * 載具目前的即時狀態(左側即時數值、路徑圖箭頭用)。
+ * 每個欄位都是選填 —— UAV 與 AMR 能拿到的東西不一樣,上游沒有就不顯示。
+ */
 export type FieldVehicleStatus = {
-  /** 0 = 正北,順時針 */
-  headingDeg: number;
-  speedMps: number;
-  batteryPct: number;
+  /** 地圖箭頭用:0 = 正北,順時針 */
+  headingDeg?: number;
+  /** AMR 的 SLAM yaw(度,-180~180,0 = 朝 +x)—— 顯示用,與上游同一種表示法 */
+  yawDeg?: number;
+  speedMps?: number;
+  batteryPct?: number;
   /** 控制模式,例如 MISSION / AUTO */
-  mode: string;
+  mode?: string;
   /** 以下只有 UAV 有 */
   altitudeM?: number;
   verticalSpeedMps?: number;
   satellites?: number;
-  /** 只有 AMR 有:SLAM 定位品質(即時遙測畫面上的「定位品質」) */
+  /** 以下只有 AMR 有:SLAM 定位品質(0–100)與充電中 */
   localizationPct?: number;
+  charging?: boolean;
 };
 
 export type FieldMission = {
+  /** 外部平台的 run_id(mock 沒有) */
+  runId?: string;
+  /** 增量拉樣本用:下次帶回 since_seq */
+  nextSeq?: number;
   testcase: FieldTestcase;
   route: RouteWaypoint[];
   /** 依執行順序:[啟用前, 啟用後] */

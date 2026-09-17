@@ -4,6 +4,8 @@ import { dataQualityService as realDataQuality } from "./DataValidation/dataQual
 import { mockDataQualityService } from "./DataValidation/mockDataQualityService";
 import { dutService as realDut } from "./Dut/dutService";
 import { mockDutService } from "./Dut/mockDutService";
+import { fieldTestService as realFieldTest } from "./FieldTest/fieldTestService";
+import { mockFieldTestService } from "./FieldTest/mockFieldTestService";
 import { mockOverviewService } from "./Overview/mockOverviewService";
 import { overviewService as realOverview } from "./Overview/overviewService";
 import { mockScenarioService } from "./Scenario/mockScenarioService";
@@ -27,3 +29,5 @@ export const scenarioService = USE_MOCK ? mockScenarioService : realScenario;
 // /api/selection + WS /ws/selection(跨電腦、別團隊的左 app 才連動得起來)。
 export const selectionService = USE_MOCK ? mockSelectionService : realSelection;
 export const validationRunService = USE_MOCK ? mockValidationRunService : realValidationRun;
+// 場域測試(智慧網路中牆):real 打自己的 /api/field-tests/*(後端再去接外部平台)
+export const fieldTestService = USE_MOCK ? mockFieldTestService : realFieldTest;

@@ -10,6 +10,27 @@
 /** 兩個對角點(矩形)或兩個端點(牆線) */
 export type FloorRect = { x1: number; y1: number; x2: number; y2: number };
 
+/**
+ * 路線圖的底圖圖檔。
+ *
+ * 圖放 frontend/public 下,`extent` 是這張圖涵蓋的世界座標範圍(公尺,要與載具
+ * 回報的座標同一個系)—— 有了它,軌跡與載具位置就會自動疊在正確的位置,不必另外校正。
+ * 換底圖只要換 src 與 extent 兩個值。
+ */
+export type FieldBackdrop = {
+  src: string;
+  extent: { xMin: number; xMax: number; yMin: number; yMax: number };
+};
+
+/**
+ * 工研院 51 館 5 樓的 SLAM 地圖(從 AMR 的 /map/raster 轉出來的示範底圖)。
+ * extent 直接取上游 /map 回的 extent,解析度 0.05 m/px。
+ */
+export const ITRI_B51_5F_SLAM: FieldBackdrop = {
+  src: "/images/floorplan/slam-b51-5f.png",
+  extent: { xMin: -101.25, xMax: 6.3, yMin: -10.1, yMax: 18.05 },
+};
+
 export type FloorPlan = {
   /**
    * 地圖要畫出來的範圍。整層樓比卡片瘦,照整層畫左右會空一大塊,所以只畫測試用到的
