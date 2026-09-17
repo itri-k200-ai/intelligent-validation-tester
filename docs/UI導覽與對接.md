@@ -19,6 +19,8 @@ O-RAN 近即時 RIC(Near-RT RIC)驗測電視牆。一套系統驅動三面實體
 **資料來源**
 - **RICtester**(實際驗測系統):DUT、測試資料、執行紀錄、探針日誌。中/右牆與左牆選單都吃這裡。
 - **IVT 通用層**:攝影機/環境影像,以及「左→中右」切換的 WebSocket 廣播。
+- **Performance_tester**(外部場域測試平台):智慧網路情境的 UE 遙測與驗測流程數據。
+  只有後端連得到它,前端一律打 `/api/field-tests/*`(見第 4 節)。
 
 ---
 
@@ -54,7 +56,8 @@ O-RAN 近即時 RIC(Near-RT RIC)驗測電視牆。一套系統驅動三面實體
 
 #### 室外(UAV)
 **情境說明**:於室外場域(工研院52館外大草坪)營造具備干擾的網路環境,讓 UAV 在干擾區與非干擾區間移動,
-觀察移動過程中的訊號穩定度(**室外 tester 尚未串接,目前是前端靜態假資料**)。
+觀察移動過程中的訊號穩定度。資料來自外部 Performance_tester(見第 4 節);
+`NEXT_PUBLIC_USE_MOCK=true` 時走前端靜態假資料。
 UAV 沿同一條航線飛兩趟:第一趟**啟用前**、第二趟**啟用後**,一次只跑一個測試項目(QoE xApp 效能測試)。
 測項清單由左螢幕負責,中牆只專注目前這個測試。
 干擾範圍會隨環境變動,**畫面上不標示固定的干擾區**,只呈現兩趟的訊號起伏。
@@ -76,7 +79,7 @@ UAV 沿同一條航線飛兩趟:第一趟**啟用前**、第二趟**啟用後**,
 - 版面規劃:`docs/外部文件/前端UI建議/2026-09-13_智慧網路實驗室_室外UAV情境中牆UI規劃.png`。
 
 #### 室內(AMR)
-與室外情境同一套零件(**同樣尚未串接,前端靜態假資料**),載具換成室內 AMR,
+與室外情境同一套零件(資料同樣來自 Performance_tester),載具換成室內 AMR,
 在工研院51館5樓沿同一條路徑跑兩趟(啟用前 / 啟用後),測試項目為 IM xApp 效能測試。
 同樣左邊看即時狀態、右邊看測試結果,但有 4 路影像,所以左右各占半面牆:
 - **左 · 即時狀態**:只有影像與即時數值。
@@ -106,7 +109,63 @@ DUT(受測物)                 區域(國內 / 國外)
 
 ---
 
-## 4. 左螢幕控制對接(給其他團隊)
+## 4. 場域測試資料串接(智慧網路情境)
+
+外部平台文件:`docs/外部文件/後端規格/2026-09-17_Performance_tester_對外整合API.md`。
+
+**為什麼要經後端**:那支 API 用 `X-API-Key`,金鑰不能進瀏覽器(`NEXT_PUBLIC_*` 會被打包);
+而且前後端可能分兩台部署,只有後端那台連得到場域網段。所以前端只打自己的 `/api/field-tests/*`。
+
+### 後端 `backend/apps/field_tests`
+
+| 檔案 | 做什麼 |
+|---|---|
+| `client.py` | 唯一會碰外部平台的地方:帶 `X-API-Key`、timeout、錯誤轉換、MJPEG 轉送 |
+| `targets.py` | 情境 → `(cid, ref, plan_id)`,值放 `FIELD_TEST_TARGETS` |
+| `transform.py` | kbps→Mbps、弧度→度、階段名稱→`before`/`after`、組出兩趟 |
+| `views.py` / `urls.py` | 對前端的端點(下表) |
+
+| 前端要的 | 我們的端點 | 打上游 |
+|---|---|---|
+| 這次驗測的兩趟 | `GET /api/field-tests/missions/<scenario>/` | A3 + A4(`since_seq` 增量) |
+| 即時數值 | `GET /api/field-tests/live/<scenario>/` | B2 + B4 + B5 |
+| 方案清單 / 觸發 / 中止 | `GET /plans/`、`POST /runs/`、`POST /runs/<run_id>/abort/` | A1 / A2 / A5 |
+| 車載影像 | `GET /api/field-tests/camera/<scenario>/stream`(MJPEG)、`/snapshot` | B6 |
+| 設定對帳 | `GET /api/field-tests/targets/` | — |
+
+**環境變數**(只在後端那台)
+```
+PERF_TESTER_BASE=http://<PLATFORM_HOST>:8011/api
+PERF_TESTER_API_KEY=                     # 平台目前為空 = 免帶
+PERF_TESTER_PHASE_MAP={"部署前":"before","部署後":"after"}
+FIELD_TEST_TARGETS={"indoor":{"cid":"<cid>","ref":"amr-01","plan_id":"<plan>"},
+                    "outdoor":{"cid":"<cid>","ref":"<ref>","plan_id":"<plan>"}}
+```
+`cid` 來自 `GET /api/ctrl-conns`、`plan_id` 來自 `GET /api/pipeline-plans`,部署時填。
+
+### 前端
+
+- `services/FieldTest/fieldTestService.ts` 打上面的端點;`services/index.ts` 依
+  `NEXT_PUBLIC_USE_MOCK` 在它與 mock 之間切換,畫面不知道差別。
+- 前端只補「後端不知道的東西」:路徑幾何與測試項目(`config/fieldScenarios.ts`)、
+  平面圖(`config/floorPlans.ts`)、以及依座標算出走到第幾個路徑點。
+- `useFieldTestMission` 在有趟在跑時每 2 秒回抓,跑完停。
+- 車載影像是 MJPEG,`LiveVideo` 依網址分流(MJPEG 用 `<img>`、HLS 用 hls.js)。
+
+### 注意
+
+- **上游沒有 SNR / RSSI / 丟包**,`/live` 只有 SINR / RSRP / RSRQ / RTT / 吞吐,
+  所以兩個情境的通訊品質卡都改成這六項。
+- **MJPEG 過 nginx 要 `proxy_buffering off;`**,否則長連線不出圖;上游同時最多 3 路,
+  畫面不顯示時要把 `<img>` 移除。
+- **路徑進度是後端估的**:上游只給取樣序號與相對秒數,沒有路徑進度;跑完那趟才準確,
+  每筆另附 `elapsedS`,之後要改時間軸可以直接用。
+- **AMR 座標**:上游是 SLAM 公尺座標,平面圖座標原點在圖左上角 —— 兩者要一致,
+  換算放 `transform.py`,不要讓前端算。
+
+---
+
+## 5. 左螢幕控制對接(給其他團隊)
 
 左螢幕之後由**其他團隊**開發,可裝在**不同電腦**。它只要在使用者選擇時打**一支 API**,中/右牆就即時跟著切換。
 
