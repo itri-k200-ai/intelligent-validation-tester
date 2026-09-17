@@ -23,6 +23,8 @@ export type TrendSpec = {
   digits: number;
   /** rate = 吞吐量:單位依當下數值大小自動換(見 lib/formatRate) */
   kind?: "rate";
+  /** false = 不標兩趟的平均差值(不是這次要改善的指標,只看趨勢);預設會標 */
+  delta?: boolean;
 };
 
 type ScenarioBase = {

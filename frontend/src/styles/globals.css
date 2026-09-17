@@ -2545,8 +2545,11 @@ html.wall-mode .field-wall {
   gap: var(--fw-gap);
 }
 /* 室內左右各半:左卡到 x = 5712、右卡從 5808 起,卡距跨 x = 5760 */
+/* 室內:左卡 5472(144~5616)、右卡 5712~11376。即時數值那兩張小卡縮成 1632 之後
+   左卡就不必吃到 5760 的縫 —— 分界左移 96,全部讓給效能卡。
+   x = 5760 落在右卡的左內距裡(5712~5808),縫上不會有文字。 */
 html.wall-mode .field-wall--half {
-  grid-template-columns: calc(5760px - 3rem - var(--fw-gap) / 2) minmax(0, 1fr);
+  grid-template-columns: 5472px minmax(0, 1fr);
 }
 html.wall-mode .field-card {
   display: grid;
@@ -2573,9 +2576,9 @@ html.wall-mode .field-head-row {
   column-gap: var(--fw-gap);
   align-items: center;
 }
-/* 室內右卡從 x = 5904 起只剩三段:1728 / 1824 / 1632,間距跨 x = 7680 / 9600 */
+/* 室內右卡從 x = 5808 起只剩三段:1824 / 1824 / 1632,間距跨 x = 7680 / 9600 */
 html.wall-mode .field-wall--half .field-head-row {
-  grid-template-columns: 1728px 1824px 1632px;
+  grid-template-columns: 1824px 1824px 1632px;
 }
 /* 室內的測試環境靠左:它那一欄的右界(9552)不是路徑卡右緣,靠右反而飄在中間;
    靠左就貼齊效能卡的左緣(x = 7728)。 */
@@ -2609,10 +2612,12 @@ html.wall-mode .field-video-row {
   align-items: start;
 }
 /* 室內左卡身(y = 880~2952,左卡內距起算 x = 240):2×2 影像 3552 / 即時小卡 1728,欄距跨 x = 3840 */
+/* 影像 3552(2×1728)+ 即時數值 1632,欄距跨 x = 3840。
+   1632 是數值格的下限:三欄 + 欄距要裝得下最寬的「RSRP dBm」(474)。 */
 html.wall-mode .field-live-grid {
   min-height: 0;
   display: grid;
-  grid-template-columns: 3552px 1728px;
+  grid-template-columns: 3552px 1632px;
   column-gap: var(--fw-gap);
 }
 /* 影像各 1728×972(16:9),上下貼齊卡身:第一列 y 880~1852、第二列 1980~2952。
@@ -2696,27 +2701,45 @@ html.wall-mode .field-sub-body {
   padding: var(--fw-sub-pad) calc(21px * var(--wall));
 }
 
-/* 右卡身(室內,右卡內距起算 x = 5904):AMR 測試路徑 3648 / IM xApp 啟用前後 1632,
-   卡距跨 x = 9600(路線圖本身跨 x = 7680)。
-   分界只能落在縫上:擺在 9600 是地圖大、效能卡 1632;擺在 7680 則相反(效能 3552)。
-   中間值(例如 6:4)會讓 x = 9600 穿過效能卡,卡內文字得整組推到縫右邊,
-   縮排吃掉 417 之後可用文字寬反而跟 1632 差不多,地圖卻白白變小 —— 所以不取。 */
+/* 右卡身(室內,右卡內距起算 x = 5808,可用 5472 = 3168 + 卡距 96 + 2208):
+   AMR 測試路徑 : IM xApp 啟用前後 = 6 : 4 —— 1632 的折線圖太小看不出趨勢。
+   分界(8976~9072)不在拼接縫上,所以 x = 9600 會穿過效能卡(卡內容 9135~11217):
+   卡內文字因此分兩段擺 —— 縫左邊 417 只放圖的名稱與 y 軸刻度,其餘全部推到縫右邊 9648 起
+   (見 .field-compare-head--half 與 .field-sub--head-past-seam);
+   x 軸刻度落在 9285 / 10186 / 11087,也不壓縫,
+   只有格線與折線本身跨過去(圖形可以跨)。 */
 html.wall-mode .field-status-body {
   min-height: 0;
   display: grid;
-  grid-template-columns: 3648px 1632px;
+  grid-template-columns: 3168px 2208px;
   column-gap: var(--fw-gap);
 }
 /* 測試結果(室外):UAV 測試路徑 3648 / 吞吐量對比 3552,卡距跨 x = 7680 */
 html.wall-mode .field-status-body--results {
   grid-template-columns: 3648px 3552px;
 }
+/* 效能卡的標題列文字要推到 x = 9600 縫的右邊(9648 起)—— 剛好與大卡標題列的
+   「測試項目」那一欄對齊。576 = 卡左緣 9072 到 9648。 */
+html.wall-mode .field-sub--head-past-seam .field-sub-head {
+  padding-left: 576px;
+}
+
 /* 吞吐量對比標題列兩段(小卡內容 x = 7791~11217):左段到 9552、右段從 9648 起,間距跨 x = 9600 */
 html.wall-mode .field-compare-head {
   display: grid;
-  grid-template-columns: 1761px 1569px;
+  /* 右段吃剩下的寬(≈1569);兩欄都寫死會因為卡寬的小數位多出 2px 溢出 */
+  grid-template-columns: 1761px minmax(0, 1fr);
   column-gap: var(--fw-gap);
   align-items: baseline;
+}
+/* 室內效能卡(內容 x = 9135~11217)同樣被 x = 9600 穿過,縫左邊只放圖的名稱,
+   數值 / 單位 / 平均差值都在右段。
+   左段 441(9135~9576)是「平均 SINR」(429)的下限;間距收成 72 之後 9576~9648
+   仍完整包住 x = 9600 的邊框(9594~9606),右段起點維持 9648,與小卡標題對齊。 */
+html.wall-mode .field-compare-head--half {
+  /* 右段吃剩下的寬(≈1569);寫死會因為卡寬的小數位多出 2px 溢出 */
+  grid-template-columns: 441px minmax(0, 1fr);
+  column-gap: 72px;
 }
 /* 路線圖上方的測試進度列:標籤 + 兩段式長條 + 百分比。
    條子是圖形,可以跨 x = 5760 / 7680 的拼接縫;文字只有左邊的標籤與最右邊的百分比,

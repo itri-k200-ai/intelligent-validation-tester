@@ -242,7 +242,9 @@ function CameraGridLayout({
             title={sc.routeTitle}
             aside={
               <span className="flex items-center gap-8">
-                {sc.floorPlan && <RadioLegend />}
+                {/* RU 圖例只在畫向量平面圖時才有意義:有底圖(SLAM)時 RouteMap 不畫 RU 標記,
+                    而且圖例會被地圖卡左移後的 x = 7680 縫切到 */}
+                {sc.floorPlan && !sc.backdrop && <RadioLegend />}
                 <PhaseLegend />
               </span>
             }
@@ -257,8 +259,9 @@ function CameraGridLayout({
           </Sub>
 
           {/* 與室外同一種比較:兩趟的平均與平均差值(圖例在路徑小卡的標題列) */}
-          {/* 卡窄:標題列只放得下「平均」,圖例在路徑卡那邊 */}
-          <Sub icon={Signal} title="IM xApp 啟用前後" aside="平均">
+          {/* 卡寬 2208 但被 x = 9600 的縫穿過:標題列文字整組推到縫右邊(見 CSS)。
+              「平均」寫在每張圖自己的名稱上,標題列就不再重複一次 */}
+          <Sub icon={Signal} title="IM xApp 啟用前後" className="field-sub--head-past-seam">
             <div className="field-split">
               <ThroughputCompare runs={mission.runs} spec={SIGNAL_CHARTS[0]} series={allRuns} upTo={upTo} narrow />
               <ThroughputCompare runs={mission.runs} spec={SIGNAL_CHARTS[1]} series={allRuns} upTo={upTo} narrow />
@@ -356,10 +359,13 @@ type Reading = {
   size?: string;
 };
 
-/** 3 欄 × 2 列的即時數值:標籤(含單位)在上、數值在下 */
+/**
+ * 3 欄 × 2 列的即時數值:標籤(含單位)在上、數值在下。
+ * 小卡縮到 1632 後欄距收成 gap-x-3(36):三欄各 478,裝得下最寬的「RSRP dBm」(474)。
+ */
 function MetricGrid({ items }: { items: Reading[] }) {
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-x-4">
+    <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-x-3">
       {items.map(({ label, unit, value, tone = "text-white", size = "text-[2.75rem]" }) => (
         <div key={label} className="flex min-w-0 flex-col justify-center gap-2">
           <span className="truncate whitespace-nowrap text-sm text-white/55">
@@ -728,10 +734,16 @@ function MissionProgress({ mission }: { mission: FieldMission }) {
 // ── 折線圖 ───────────────────────────────────────────────────────────
 
 /** IM xApp 啟用前後的兩張圖(室內,和室外一樣比兩趟平均) */
+/**
+ * IM xApp 啟用前後的兩張圖。下行放上面那一格 —— 它才是這張卡的重點,而上面那格比較高
+ * (999 : 708)。下行留在下面又要更高的話,圖會往上跨過 y = 2160 的拼接縫,y 軸刻度
+ * 文字就會被電視邊框切到:兩格的高度是由「間距跨縫」反推的,見 globals.css .field-split。
+ */
 const SIGNAL_CHARTS: [TrendSpec, TrendSpec] = [
-  { label: "SINR", unit: "dB", metric: "sinrDb", digits: 1 },
-  // 卡內可用的文字寬只有縫右邊那 1569,名稱用短的
-  { label: "下行", unit: "kbps", metric: "dlKbps", digits: 0, kind: "rate" },
+  // 名稱自己帶「平均」(縫左邊那段 417 放得下),小卡標題列就不必再寫一次
+  { label: "平均下行", unit: "kbps", metric: "dlKbps", digits: 0, kind: "rate" },
+  // SINR 不是這次要改善的目標,只當背景資訊看趨勢 —— 不標平均差值、兩趟同權重
+  { label: "平均 SINR", unit: "dB", metric: "sinrDb", digits: 1, delta: false },
 ];
 
 /** QoE xApp 啟用前後的兩張圖 */
@@ -940,8 +952,17 @@ function ThroughputCompare({
   const dot = (phase: OptimizationPhase) => (
     <span className="inline-block h-4 w-4 self-center rounded-full" style={{ background: PHASE[phase].color }} />
   );
+  /* 沒有要改善的指標(spec.delta === false):不標平均差值,兩趟也用同一個字級與亮度 ——
+     放大加亮「啟用後」會看起來像是這個指標被優化過。 */
+  const plain = spec.delta === false;
+  const beforeCls = plain
+    ? "text-[2.25rem] font-semibold leading-[1.1] text-white/75"
+    : "text-[2.25rem] leading-[1.1] text-white/65";
+  const afterCls = plain
+    ? "text-[2.25rem] font-semibold leading-[1.1] text-white/75"
+    : "text-[2.75rem] font-semibold leading-[1.1] text-white";
   const delta =
-    d === null ? null : (
+    d === null || spec.delta === false ? null : (
       <>
         {d > 0 ? "▲+" : d < 0 ? "▼" : ""}
         {Math.abs(d).toFixed(spec.digits)}
@@ -952,23 +973,27 @@ function ThroughputCompare({
     /* min-w-0:grid 項目預設最小寬度是內容寬度,標題列一長就會把整欄撐出小卡 */
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {narrow ? (
-        /* 室內那張卡只有 1632 寬,卡內也沒有拼接縫穿過 —— 一行寫完,
-           「平均」由小卡標題列說明,差值推到最右邊並小一階字級才放得下 */
-        <div className="mb-4 flex min-w-0 flex-none items-baseline gap-2 overflow-hidden whitespace-nowrap">
-          <span className="text-sm text-white/60">{spec.label}</span>
-          <span className="flex items-baseline gap-3">
-            {dot("before")}
-            <span className="text-[2.25rem] leading-[1.1] text-white/65">{fmt(before)}</span>
-          </span>
-          <span className="text-sm text-white/35">→</span>
-          <span className="flex items-baseline gap-3">
-            {dot("after")}
-            <span className="text-[2.75rem] font-semibold leading-[1.1] text-white">{fmt(after)}</span>
-          </span>
-          <span className="text-sm text-white/50">{chosen.unit}</span>
-          {delta && (
-            <span className={`ml-auto text-sm font-semibold ${d! >= 0 ? "text-mint" : "text-danger"}`}>{delta}</span>
-          )}
+        /* 室內那張卡(內容 x = 9232~11218)被 x = 9600 的縫穿過:縫左邊只剩 320,
+           只放得下圖的名稱;數值、單位與平均差值都在縫右邊那 1570。
+           「平均」由小卡標題列說明一次,差值貼右緣並小一階字級才放得下 */
+        <div className="field-compare-head field-compare-head--half mb-4 flex-none">
+          {/* 名稱不換行:左段是照「平均 SINR」的寬度定的,換行會把圖往下擠 */}
+          <span className="whitespace-nowrap text-sm text-white/60">{spec.label}</span>
+          <div className="flex min-w-0 items-baseline gap-2 overflow-hidden whitespace-nowrap">
+            <span className="flex items-baseline gap-3">
+              {dot("before")}
+              <span className={beforeCls}>{fmt(before)}</span>
+            </span>
+            <span className="text-sm text-white/35">→</span>
+            <span className="flex items-baseline gap-3">
+              {dot("after")}
+              <span className={afterCls}>{fmt(after)}</span>
+            </span>
+            <span className="text-sm text-white/50">{chosen.unit}</span>
+            {delta && (
+              <span className={`ml-auto text-sm font-semibold ${d! >= 0 ? "text-mint" : "text-danger"}`}>{delta}</span>
+            )}
+          </div>
         </div>
       ) : (
         /* 室外那張橫跨 x = 9600 的拼接縫:標題列分左右兩段(間距跨縫)。
@@ -979,16 +1004,16 @@ function ThroughputCompare({
             <span className="text-sm text-white/40">平均</span>
             <span className="flex items-baseline gap-3">
               {dot("before")}
-              <span className="text-[2.25rem] leading-[1.1] text-white/65">{fmt(before)}</span>
+              <span className={beforeCls}>{fmt(before)}</span>
             </span>
             <span className="text-sm text-white/35">→</span>
             <span className="flex items-baseline gap-3">
               {dot("after")}
-              <span className="text-[2.75rem] font-semibold leading-[1.1] text-white">{fmt(after)}</span>
+              <span className={afterCls}>{fmt(after)}</span>
             </span>
           </div>
           <div className="flex min-w-0 items-baseline justify-end gap-6 whitespace-nowrap">
-            <span className="text-sm text-white/50">平均差值</span>
+            {spec.delta !== false && <span className="text-sm text-white/50">平均差值</span>}
             {delta && (
               <span className={`text-base font-semibold ${d! >= 0 ? "text-mint" : "text-danger"}`}>{delta}</span>
             )}
