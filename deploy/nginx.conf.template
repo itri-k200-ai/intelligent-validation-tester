@@ -67,6 +67,24 @@ http {
             proxy_set_header   X-Real-IP         $remote_addr;
         }
 
+        # 車載 MJPEG 影像 —— 長連線,要跟一般 API 分開設:
+        #   proxy_buffering off   MJPEG 是一直流的 multipart,開 buffering 會
+        #                         先攢一段才吐,牆上看起來卡頓且延遲
+        #   read/send timeout     預設 60s 會在上游短暫停頓時切線;牆整天掛著,
+        #                         這裡放長
+        # (前綴比 /api/ 長,nginx 走最長前綴,會優先命中這條)
+        location /api/field-tests/camera/ {
+            proxy_pass         http://backend_web;
+            proxy_http_version 1.1;
+            proxy_buffering    off;
+            proxy_read_timeout 24h;
+            proxy_send_timeout 24h;
+            proxy_set_header   Host              $host;
+            proxy_set_header   X-Real-IP         $remote_addr;
+            proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header   X-Forwarded-Proto $scheme;
+        }
+
         location /api/ {
             proxy_pass         http://backend_web;
             proxy_set_header   Host              $host;
