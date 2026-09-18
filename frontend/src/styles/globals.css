@@ -2799,6 +2799,43 @@ html.wall-mode .field-scenario-switch button {
   line-height: 1.2;
 }
 
+/* ── 圖表名稱下面的指標開關(例:下行 DL / 上行 UL)─────────────────────
+   一次只畫一個指標,y 軸與標題列的數值都跟著選到的那個。
+   開關要塞在效能卡標題列縫左邊那段(441 寬、約 145 高),所以比情境切換再小一階。 */
+.field-metric-switch {
+  display: flex;
+  gap: 0.375rem;
+  margin-top: 0.25rem;
+}
+.field-metric-switch button {
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+.field-metric-switch button.is-active {
+  /* 選中用「啟用後」的系列色,跟情境切換一致 */
+  border-color: rgba(28, 158, 136, 0.9);
+  background: rgba(28, 158, 136, 0.3);
+  color: #ffffff;
+}
+html.wall-mode .field-metric-switch {
+  gap: calc(8px * var(--wall));
+  margin-top: calc(6px * var(--wall));
+}
+html.wall-mode .field-metric-switch button {
+  /* 1px 的框在牆上等於 1 顆實體像素,遠看等於沒有框 —— 跟著 --wall 放大 */
+  border-width: calc(1px * var(--wall));
+  /* !important:前面的 `html.wall-mode main button` 也是 !important(字級 72、內距 60),
+     不擋掉的話兩顆按鈕會撐到 456,塞不進縫左邊那段 441。情境切換在 topbar 不受影響。 */
+  height: calc(26px * var(--wall)) !important;
+  min-height: 0 !important;
+  padding: 0 calc(12px * var(--wall)) !important;
+  font-size: calc(18px * var(--wall)) !important;
+  line-height: 1.2;
+}
+
 /* ── 測試進度:同一條路徑跑兩趟 ────────────────────────────────────────
    一條長條切成兩半(左半第一趟、右半第二趟),中間留一道細縫當分界;
    各半自己填到該趟的百分比,顏色對照標題列的啟用前 / 啟用後圖例。 */

@@ -1,6 +1,6 @@
 "use client";
 import { Bot, Plane, Route, Signal, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   CartesianGrid,
   Line,
@@ -263,8 +263,15 @@ function CameraGridLayout({
               「平均」寫在每張圖自己的名稱上,標題列就不再重複一次 */}
           <Sub icon={Signal} title="IM xApp 啟用前後" className="field-sub--head-past-seam">
             <div className="field-split">
-              <ThroughputCompare runs={mission.runs} spec={SIGNAL_CHARTS[0]} series={allRuns} upTo={upTo} narrow />
-              <ThroughputCompare runs={mission.runs} spec={SIGNAL_CHARTS[1]} series={allRuns} upTo={upTo} narrow />
+              <ThroughputCompare
+                runs={mission.runs}
+                spec={RATE_CHARTS[0]}
+                alt={RATE_CHARTS[1]}
+                series={allRuns}
+                upTo={upTo}
+                narrow
+              />
+              <ThroughputCompare runs={mission.runs} spec={SINR_CHART} series={allRuns} upTo={upTo} narrow />
             </div>
           </Sub>
         </div>
@@ -739,12 +746,19 @@ function MissionProgress({ mission }: { mission: FieldMission }) {
  * (999 : 708)。下行留在下面又要更高的話,圖會往上跨過 y = 2160 的拼接縫,y 軸刻度
  * 文字就會被電視邊框切到:兩格的高度是由「間距跨縫」反推的,見 globals.css .field-split。
  */
-const SIGNAL_CHARTS: [TrendSpec, TrendSpec] = [
-  // 名稱自己帶「平均」(縫左邊那段 417 放得下),小卡標題列就不必再寫一次
-  { label: "平均下行", unit: "kbps", metric: "dlKbps", digits: 0, kind: "rate" },
-  // SINR 不是這次要改善的目標,只當背景資訊看趨勢 —— 不標平均差值、兩趟同權重
-  { label: "平均 SINR", unit: "dB", metric: "sinrDb", digits: 1, delta: false },
+/** 上格:吞吐量。兩個指標同時畫,用開關決定看哪一組(名稱自己帶「平均」) */
+const RATE_CHARTS: [TrendSpec, TrendSpec] = [
+  { label: "平均下行", short: "DL", unit: "kbps", metric: "dlKbps", digits: 0, kind: "rate" },
+  { label: "平均上行", short: "UL", unit: "kbps", metric: "ulKbps", digits: 1, kind: "rate" },
 ];
+/** 下格:SINR 不是這次要改善的目標,只當背景資訊看趨勢 —— 不標平均差值、兩趟同權重 */
+const SINR_CHART: TrendSpec = {
+  label: "平均 SINR",
+  unit: "dB",
+  metric: "sinrDb",
+  digits: 1,
+  delta: false,
+};
 
 /** QoE xApp 啟用前後的兩張圖 */
 const THROUGHPUT_CHARTS: [TrendSpec, TrendSpec] = [
@@ -920,22 +934,31 @@ function sharedProgress(runs: FieldRun[]) {
 function ThroughputCompare({
   runs,
   spec,
+  alt,
   series,
   upTo,
   narrow = false,
 }: {
   runs: FieldRun[];
   spec: TrendSpec;
+  /**
+   * 同一張圖的另一個指標(例:下行 / 上行)。一次只顯示一個,名稱下面的開關決定看哪一個,
+   * 標題列的數值、單位、平均差值與 y 軸都跟著它 —— 兩者量級差很多(約 100 kbps 對 4000),
+   * 疊在一起沒有一條 y 軸讀得準。
+   */
+  alt?: TrendSpec;
   series: { phase: OptimizationPhase; samples: FieldSample[] }[];
   /** 平均只算到這個路徑進度(見 sharedProgress) */
   upTo: number;
-  /** 窄卡(室內 1632):標題列排成一行,x 刻度回到 50% 一格 */
+  /** 窄卡(室內效能卡):標題列排成一行,x 刻度回到 50% 一格 */
   narrow?: boolean;
 }) {
+  const [altOn, setAltOn] = useState(false);
+  const active = alt && altOn ? alt : spec;
   const mean = (phase: OptimizationPhase) => {
     const values = (runs.find((r) => r.phase === phase)?.samples ?? [])
       .filter((pt) => pt.progress <= upTo)
-      .map((pt) => sampleValue(pt, spec.metric))
+      .map((pt) => sampleValue(pt, active.metric))
       .filter((val): val is number => val !== null);
     return values.length ? values.reduce((sum, val) => sum + val, 0) / values.length : null;
   };
@@ -944,17 +967,17 @@ function ThroughputCompare({
   const d = before !== null && after !== null ? after - before : null;
   // 吞吐量:用兩趟平均挑一次單位,數值、差值、y 軸都跟著它
   const chosen =
-    spec.kind === "rate"
+    active.kind === "rate"
       ? pickRateUnit([before, after])
-      : { unit: spec.unit, scale: 1, digits: spec.digits };
+      : { unit: active.unit, scale: 1, digits: active.digits };
   const fmt = (val: number | null) =>
     val === null ? "—" : (val / chosen.scale).toFixed(chosen.digits);
   const dot = (phase: OptimizationPhase) => (
     <span className="inline-block h-4 w-4 self-center rounded-full" style={{ background: PHASE[phase].color }} />
   );
-  /* 沒有要改善的指標(spec.delta === false):不標平均差值,兩趟也用同一個字級與亮度 ——
+  /* 沒有要改善的指標(delta === false):不標平均差值,兩趟也用同一個字級與亮度 ——
      放大加亮「啟用後」會看起來像是這個指標被優化過。 */
-  const plain = spec.delta === false;
+  const plain = active.delta === false;
   const beforeCls = plain
     ? "text-[2.25rem] font-semibold leading-[1.1] text-white/75"
     : "text-[2.25rem] leading-[1.1] text-white/65";
@@ -962,10 +985,10 @@ function ThroughputCompare({
     ? "text-[2.25rem] font-semibold leading-[1.1] text-white/75"
     : "text-[2.75rem] font-semibold leading-[1.1] text-white";
   const delta =
-    d === null || spec.delta === false ? null : (
+    d === null || active.delta === false ? null : (
       <>
         {d > 0 ? "▲+" : d < 0 ? "▼" : ""}
-        {Math.abs(d).toFixed(spec.digits)}
+        {(Math.abs(d) / chosen.scale).toFixed(chosen.digits)}
       </>
     );
 
@@ -977,8 +1000,26 @@ function ThroughputCompare({
            只放得下圖的名稱;數值、單位與平均差值都在縫右邊那 1570。
            「平均」由小卡標題列說明一次,差值貼右緣並小一階字級才放得下 */
         <div className="field-compare-head field-compare-head--half mb-4 flex-none">
-          {/* 名稱不換行:左段是照「平均 SINR」的寬度定的,換行會把圖往下擠 */}
-          <span className="whitespace-nowrap text-sm text-white/60">{spec.label}</span>
+          <span className="flex min-w-0 flex-col items-start">
+            {/* 名稱不換行:左段是照「平均 SINR」的寬度定的,換行會把圖往下擠 */}
+            <span className="whitespace-nowrap text-sm text-white/60">{active.label}</span>
+            {alt && (
+              <span className="field-metric-switch" role="group" aria-label={`切換 ${spec.label} / ${alt.label}`}>
+                {[spec, alt].map((s) => (
+                  <button
+                    key={s.metric}
+                    type="button"
+                    onClick={() => setAltOn(s === alt)}
+                    className={s === active ? "is-active" : undefined}
+                    aria-pressed={s === active}
+                    title={s.label}
+                  >
+                    {s.short ?? s.label}
+                  </button>
+                ))}
+              </span>
+            )}
+          </span>
           <div className="flex min-w-0 items-baseline gap-2 overflow-hidden whitespace-nowrap">
             <span className="flex items-baseline gap-3">
               {dot("before")}
@@ -1000,7 +1041,7 @@ function ThroughputCompare({
            左段只放名稱 + 平均 + 兩個數值,單位跟右段的平均差值寫在一起 —— 再多就會壓到縫 */
         <div className="field-compare-head mb-4 flex-none">
           <div className="flex min-w-0 items-baseline gap-4 whitespace-nowrap">
-            <span className="text-sm text-white/60">{spec.label}</span>
+            <span className="text-sm text-white/60">{active.label}</span>
             <span className="text-sm text-white/40">平均</span>
             <span className="flex items-baseline gap-3">
               {dot("before")}
@@ -1013,7 +1054,7 @@ function ThroughputCompare({
             </span>
           </div>
           <div className="flex min-w-0 items-baseline justify-end gap-6 whitespace-nowrap">
-            {spec.delta !== false && <span className="text-sm text-white/50">平均差值</span>}
+            {active.delta !== false && <span className="text-sm text-white/50">平均差值</span>}
             {delta && (
               <span className={`text-base font-semibold ${d! >= 0 ? "text-mint" : "text-danger"}`}>{delta}</span>
             )}
@@ -1022,7 +1063,7 @@ function ThroughputCompare({
         </div>
       )}
       <TrendChart
-        spec={spec}
+        spec={active}
         series={series}
         bare
         xTicks={narrow ? [0, 50, 100] : [0, 20, 40, 60, 80, 100]}
