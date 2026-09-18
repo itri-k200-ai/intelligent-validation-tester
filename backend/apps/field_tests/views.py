@@ -147,10 +147,31 @@ def _latest_run_id(plan_id: str | None) -> str | None:
         runs = [r for r in runs if str(r.get("plan_id") or "") == str(plan_id)] or runs
     if not runs:
         return None
-    running = [r for r in runs if r.get("status") == "running"]
-    # 沒有在跑的就挑最新一次(created 是 epoch 秒)
-    pick = (running or sorted(runs, key=lambda r: r.get("created") or 0, reverse=True))[0]
+    running = [r for r in runs if r.get("status") in {"running", "ready"}]
+    if running:
+        return running[0].get("run_id") or running[0].get("id")
+
+    # 沒有在跑的就挑最新一次(created 是 epoch 秒)。但平台上留著不少半途失敗的紀錄:
+    # 有的一筆樣本都沒收到(status=error、phases={}),有的只跑完第一趟 —— 這張卡是
+    # 「啟用前後」比較,抓到這種牆上會整片或半片變「—」。所以已結束的紀錄優先挑
+    # 最近一次兩趟都有資料的,退而求其次才是最近一次有任何資料的。
+    # (正在跑的那筆在上面就先回掉了,不會被這裡的偏好蓋掉。)
+    newest = sorted(runs, key=lambda r: r.get("created") or 0, reverse=True)
+    complete = [r for r in newest if _has_both_passes(r)]
+    with_samples = [r for r in newest if r.get("n_samples") is None or r.get("n_samples")]
+    pick = (complete or with_samples or newest)[0]
     return pick.get("run_id") or pick.get("id")
+
+
+def _has_both_passes(run: dict) -> bool:
+    """兩趟都收到足夠的資料。
+
+    phases 是 {階段名: 筆數},階段名由平台決定,所以只看值。實測會出現
+    {優化前: 62, 優化後: 1} 這種「第二趟剛起步就斷掉」的紀錄 —— 一筆樣本畫不成
+    對照,所以要求短的那趟至少有長的一半(比用絕對筆數更不怕取樣週期改變)。
+    """
+    counts = list((run.get("phases") or {}).values())
+    return len(counts) >= 2 and all(counts) and min(counts) * 2 >= max(counts)
 
 
 class PlanListView(WallReadView):

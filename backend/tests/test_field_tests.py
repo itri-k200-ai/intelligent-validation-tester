@@ -227,6 +227,95 @@ def test_mission_endpoint_returns_two_passes(monkeypatch):
 
 
 @override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_mission_skips_a_newest_run_with_no_samples(monkeypatch):
+    """平台上會留下「開起來就失敗、一筆樣本都沒收到」的紀錄。
+
+    抓到那筆整面牆會變成「—」,所以要退到最近一次真的有樣本的。
+    """
+    extra = {
+        "/ext/validations": {
+            "validations": [
+                {
+                    "run_id": "old",
+                    "status": "done",
+                    "created": 100,
+                    "n_samples": 8,
+                    "phases": {"優化前": 5, "優化後": 3},
+                },
+                {
+                    "run_id": "empty",
+                    "status": "error",
+                    "created": 200,
+                    "n_samples": 0,
+                    "phases": {},
+                },
+            ]
+        },
+        "/ext/validations/old": {"status": "done", "phases": {"優化前": 5, "優化後": 3}},
+        "/ext/validations/old/samples": {"next_seq": 8, "samples": _samples(5, 3)},
+    }
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(extra))
+    body = APIClient().get("/api/field-tests/missions/indoor/").json()
+    assert body["runId"] == "old"
+    assert [len(r["samples"]) for r in body["runs"]] == [5, 3]
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_mission_prefers_a_finished_run_that_has_both_passes(monkeypatch):
+    """只跑完第一趟的紀錄對「啟用前後」這張卡沒用 —— 已結束的優先挑兩趟都有的。"""
+    extra = {
+        "/ext/validations": {
+            "validations": [
+                {
+                    "run_id": "both",
+                    "status": "done",
+                    "created": 100,
+                    "n_samples": 8,
+                    "phases": {"優化前": 5, "優化後": 3},
+                },
+                {
+                    "run_id": "half",
+                    "status": "error",
+                    "created": 200,
+                    "n_samples": 5,
+                    "phases": {"優化前": 5},
+                },
+                # 第二趟剛起步就斷掉(實測有 62 / 1 這種),一筆樣本畫不成對照
+                {
+                    "run_id": "barely",
+                    "status": "error",
+                    "created": 300,
+                    "n_samples": 63,
+                    "phases": {"優化前": 62, "優化後": 1},
+                },
+            ]
+        },
+        "/ext/validations/both": {"status": "done", "phases": {"優化前": 5, "優化後": 3}},
+        "/ext/validations/both/samples": {"next_seq": 8, "samples": _samples(5, 3)},
+    }
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(extra))
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "both"
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_mission_keeps_a_running_run_even_before_its_first_sample(monkeypatch):
+    """反過來:正在跑的那筆就算還沒收到樣本,也要顯示它(等一下就有了)。"""
+    extra = {
+        "/ext/validations": {
+            "validations": [
+                {"run_id": "old", "status": "done", "created": 100, "n_samples": 8},
+                {"run_id": "fresh", "status": "running", "created": 200, "n_samples": 0},
+            ]
+        },
+        "/ext/validations/fresh": {"status": "running", "phases": {}},
+        "/ext/validations/fresh/samples": {"next_seq": 0, "samples": []},
+    }
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(extra))
+    body = APIClient().get("/api/field-tests/missions/indoor/").json()
+    assert body["runId"] == "fresh"
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
 def test_open_endpoint_ignores_a_stale_token(monkeypatch):
     """牆面可能帶著過期 JWT(token 一小時就過期),唯讀端點不該因此變 401。"""
     monkeypatch.setattr(perf_client, "get", _fake_ctrl_get())
