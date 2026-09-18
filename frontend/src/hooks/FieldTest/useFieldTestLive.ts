@@ -24,8 +24,10 @@ export function useFieldTestLive(scenario: FieldScenarioId) {
     // 帶 signal:切換情境(或離開頁面)時直接中斷,壞掉的那台才不會一直佔著後端
     queryFn: ({ signal }) => fieldTestService.live(scenario, signal),
     // 上游 /live 約 2 秒一筆,而且一趟來回要 2~4 秒 —— 設 1.5 秒只會讓請求互相堆疊。
-    // refetchInterval 是「上次結束後再等」,所以 3 秒等於實際 5~7 秒更新一次。
-    refetchInterval: 3000,
+    // refetchInterval 是「上次結束後再等」,所以實際週期 = 這個值 + 上游耗時。
+    // 這支要經 relay 打到車上,實測 1.7~3.9 秒 —— 設 1 秒換算下來約 2.7~4.9 秒
+    // 更新一次。再往下調沒有意義,瓶頸是上游不是這裡。
+    refetchInterval: 1000,
     refetchIntervalInBackground: false,
     // 失敗不重試:下一輪很快就來,重試只會把上游塞得更慢
     retry: false,
