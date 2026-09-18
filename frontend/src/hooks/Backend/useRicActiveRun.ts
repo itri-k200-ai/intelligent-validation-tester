@@ -1,7 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 
-import { RIC_SOURCES, type RicSourceId } from "@/config/ricSources";
+import { BACKEND_RIC_SOURCES, type RicSourceId } from "@/config/ricSources";
 import { ricRead } from "@/services/Backend/ricBackendService";
 
 /**
@@ -109,7 +109,7 @@ export function useRicActiveRun() {
     queryKey: ["ric", "active-run"],
     refetchInterval: POLL_MS,
     queryFn: async (): Promise<RicActiveRun | null> => {
-      const settled = await Promise.allSettled(RIC_SOURCES.map((s) => activeRunOf(s.id)));
+      const settled = await Promise.allSettled(BACKEND_RIC_SOURCES.map((s) => activeRunOf(s.id)));
       const found = settled
         .flatMap((r) => (r.status === "fulfilled" && r.value ? [r.value] : []))
         // 正在跑的優先;都沒在跑就看誰比較晚開始

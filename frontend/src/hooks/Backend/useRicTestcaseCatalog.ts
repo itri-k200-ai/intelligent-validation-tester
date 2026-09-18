@@ -1,7 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 
-import { DEFAULT_RIC_SOURCE, RIC_SOURCES, type RicSourceId } from "@/config/ricSources";
+import { BACKEND_RIC_SOURCES, DEFAULT_RIC_SOURCE, type RicSourceId } from "@/config/ricSources";
 import { ricBackend } from "@/services/Backend/ricBackendService";
 
 export type RicCatalogEntry = {
@@ -34,14 +34,14 @@ export function useRicTestcaseCatalog(source?: RicSourceId) {
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const settled = await Promise.allSettled(
-        RIC_SOURCES.map(async (src) => {
+        BACKEND_RIC_SOURCES.map(async (src) => {
           const rows = (await ricBackend.testcases(undefined, src.id)) as RicCatalogEntry[];
           return [src.id, new Map(rows.map((r) => [r.testcase_code, r]))] as const;
         }),
       );
       settled.forEach((r, i) => {
         if (r.status === "rejected")
-          console.error(`[ric] 來源 ${RIC_SOURCES[i].id} 取測項型錄失敗:`, r.reason);
+          console.error(`[ric] 來源 ${BACKEND_RIC_SOURCES[i].id} 取測項型錄失敗:`, r.reason);
       });
       return new Map(
         settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : [])),

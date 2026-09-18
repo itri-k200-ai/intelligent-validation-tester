@@ -32,6 +32,10 @@ http {
     upstream ric_near_backend { server ${RIC_HOST}:${RIC_NEAR_BACKEND_PORT}; }
     upstream ric_non_adapter  { server ${RIC_HOST}:${RIC_NON_ADAPTER_PORT}; }
     upstream ric_non_backend  { server ${RIC_HOST}:${RIC_NON_BACKEND_PORT}; }
+    # imctrl —— 在另一台主機(見 deploy/.env 的 RIC_IM_HOST),只有 adapter
+    # 沒有 back_end。目前只給左螢幕的 API 工具手動打,牆面不吃它的資料
+    # (見 frontend/src/config/ricSources.ts 的 onWall)。
+    upstream ric_im_adapter   { server ${RIC_IM_HOST}:${RIC_IM_ADAPTER_PORT}; }
     # 環境影像 HLS —— 攝影機拆回 IVT 通用層,走 ivt-mediamtx(同 compose 網路內)
     upstream ivt_hls          { server mediamtx:8888; }
 
@@ -63,6 +67,12 @@ http {
         }
         location /ric/non/api/back_end/ {
             proxy_pass         http://ric_non_backend/api/back_end/;
+            proxy_set_header   Host              $host;
+            proxy_set_header   X-Real-IP         $remote_addr;
+        }
+        # imctrl(只有 adapter)
+        location /ric/im/autoTest/ {
+            proxy_pass         http://ric_im_adapter/autoTest/;
             proxy_set_header   Host              $host;
             proxy_set_header   X-Real-IP         $remote_addr;
         }

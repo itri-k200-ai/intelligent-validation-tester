@@ -133,6 +133,9 @@ services:
       RIC_NON_ADAPTER_PORT: ${RIC_NON_ADAPTER_PORT:-5110}
       RIC_NON_BACKEND_PORT: ${RIC_NON_BACKEND_PORT:-5010}
       RIC_HLS_PORT: ${RIC_HLS_PORT:-8890}
+      # imctrl —— 另一台主機,只有 adapter
+      RIC_IM_HOST: ${RIC_IM_HOST:-host.docker.internal}
+      RIC_IM_ADAPTER_PORT: ${RIC_IM_ADAPTER_PORT:-8012}
     # RIC_HOST 用預設 host.docker.internal(同機)時才需要
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -7,7 +7,7 @@
 // 扁平欄位,下游元件不必知道 adapter 是哪一版。
 
 import {
-  RIC_SOURCES,
+  WALL_RIC_SOURCES,
   ricSourceBase,
   type RicSourceId,
 } from "@/config/ricSources";
@@ -121,14 +121,14 @@ export const adapterService = {
   // 用 allSettled —— 某一套 tester 掛了不影響其他套照常顯示。
   async testList(): Promise<AdapterDut[]> {
     const settled = await Promise.allSettled(
-      RIC_SOURCES.map(async (src) => {
+      WALL_RIC_SOURCES.map(async (src) => {
         const raw = await req<unknown>(src.id, "/autoTest/testList");
         return arr(raw).map((d) => normalizeDut(obj(d), src.id));
       }),
     );
     settled.forEach((r, i) => {
       if (r.status === "rejected")
-        console.error(`[adapter] 來源 ${RIC_SOURCES[i].id} 取測試清單失敗:`, r.reason);
+        console.error(`[adapter] 來源 ${WALL_RIC_SOURCES[i].id} 取測試清單失敗:`, r.reason);
     });
     return settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
   },

@@ -8,7 +8,7 @@
 
 import {
   DEFAULT_RIC_SOURCE,
-  RIC_SOURCES,
+  BACKEND_RIC_SOURCES,
   ricSourceBase,
   type RicSourceId,
 } from "@/config/ricSources";
@@ -82,14 +82,14 @@ export async function ricReadAll<T = Record<string, unknown>>(
   filter: Record<string, unknown> = {},
 ): Promise<(T & { __source: RicSourceId })[]> {
   const settled = await Promise.allSettled(
-    RIC_SOURCES.map(async (src) => {
+    BACKEND_RIC_SOURCES.map(async (src) => {
       const rows = await ricRead<T>(module, table, filter, src.id);
       return rows.map((r) => ({ ...r, __source: src.id }));
     }),
   );
   settled.forEach((r, i) => {
     if (r.status === "rejected")
-      console.error(`[ricBackend] 來源 ${RIC_SOURCES[i].id} 讀 ${module}/${table} 失敗:`, r.reason);
+      console.error(`[ricBackend] 來源 ${BACKEND_RIC_SOURCES[i].id} 讀 ${module}/${table} 失敗:`, r.reason);
   });
   return settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
 }
