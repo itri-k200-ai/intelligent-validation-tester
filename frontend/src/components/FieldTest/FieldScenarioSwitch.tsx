@@ -3,13 +3,19 @@ import { FIELD_SCENARIOS } from "@/config/fieldScenarios";
 import { useFieldScenarioStore } from "@/stores/fieldScenarioStore";
 import type { FieldScenarioId } from "@/types/fieldTest";
 
-/** 按鈕只放「室外 / 室內」—— topbar 高度固定,標題與專案列之後放不下長標籤 */
+/** 按鈕只放「室內 / 室外」—— 順序依規格圖(室內在前) */
 const OPTIONS: { id: FieldScenarioId; label: string }[] = [
-  { id: "outdoor", label: "室外" },
   { id: "indoor", label: "室內" },
+  { id: "outdoor", label: "室外" },
 ];
 
-/** 標題下方的情境切換(室外 / 室內);樣式見 globals.css .field-scenario-switch */
+/**
+ * 標題**旁**的情境切換(室內 / 室外)。版位與尺寸依前端規格圖
+ * (docs/除錯截圖/影像 (4).png):icon 46×46、字 24px、對齊放在標題旁。
+ *
+ * icon 尚未提供 —— 先用 .field-scenario-icon 佔位(固定 46×46 的空盒),
+ * 之後把圖塞進那個 span 即可,不用再動版面。
+ */
 export function FieldScenarioSwitch() {
   const scenario = useFieldScenarioStore((s) => s.scenario);
   const setScenario = useFieldScenarioStore((s) => s.setScenario);
@@ -25,6 +31,8 @@ export function FieldScenarioSwitch() {
           aria-pressed={o.id === scenario}
           title={FIELD_SCENARIOS[o.id].title}
         >
+          {/* icon 之後補:圖放進這個 span,尺寸已經固定成規格的 46×46 */}
+          <span className="field-scenario-icon" aria-hidden="true" />
           {o.label}
         </button>
       ))}

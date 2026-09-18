@@ -1439,9 +1439,35 @@ html.wall-mode .war-room-main {
 html.wall-mode .war-room-main-topbar {
   /* grid template 在 base rule(下方)定義,wall-mode 只蓋高度與 padding。
      不另外給背景色 / border,讓 topbar 融入主牆背景。 */
-  height: calc(169px * var(--wall));
+  /* 前端規格(影像 (4).png):畫面頂部到卡片上緣 129px。
+     這段距離全部由 topbar 的高度負責 —— main-body 的 padding-top 已設為 0,
+     所以 topbar 高度 = 規格值,量出來就是 129(×--wall 換算到畫布 = 387)。
+     原本 169px,且下面還多一層 2rem padding,實際是 161。 */
+  height: calc(129px * var(--wall));
   padding: 0 calc(12px * var(--wall));
   align-items: center;
+}
+/* 標題置中 + 切換鈕掛在標題旁(規格:對齊放置於標題旁)。
+   按鈕用 absolute 脫離文件流 —— 它不佔寬度,所以標題還是精準置中,
+   牆面的中線對位不會因為多了按鈕而偏掉。 */
+.war-room-main-title-row {
+  display: flex;
+  justify-content: center;
+}
+.war-room-main-title-anchor {
+  position: relative;
+  display: inline-block;
+}
+.war-room-main-title-anchor .field-scenario-switch {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 0.75rem;
+  white-space: nowrap;
+}
+html.wall-mode .war-room-main-title-anchor .field-scenario-switch {
+  margin-left: calc(24px * var(--wall));
 }
 html.wall-mode .war-room-main-title-text {
   font-size: calc(56px * var(--wall)) !important;
@@ -1536,7 +1562,10 @@ html.wall-mode .war-room-main-body {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 2rem 3rem 3rem;
+  /* padding-top 為 0 —— 規格的 129px 指的是「畫面頂部到卡片上緣」的**總**
+     距離,那段距離整個由 topbar 的高度負責(見 .war-room-main-topbar)。
+     這裡若再補 padding,實際距離會變成 129 + 32 = 161,對不上規格。 */
+  padding: 0 3rem 3rem;
   position: relative;
   isolation: isolate;
 }
@@ -2553,9 +2582,14 @@ html.wall-mode .field-wall--half {
 }
 html.wall-mode .field-card {
   display: grid;
-  /* 身的頂 = 1080 - 小卡標題列高 - 5px(小卡標題列底貼在 y = 1075,文字不碰拼接縫);
-     身的高度 = 內容區底(3240 - 4rem)- 大卡底內距 - 身的頂 */
-  grid-template-rows: minmax(0, 1fr) calc(2160px - 4rem - var(--fw-pad) + var(--fw-sub-head) + 5px);
+  /* 標題列只佔內容高度,剩下的全給卡身 —— 多出來的可用高度要讓下面的框框
+     長高,而不是變成標題與框框之間的空隙。
+     (舊寫法是 row1 = 1fr、row2 寫死:
+        grid-template-rows: minmax(0,1fr) calc(2160px - 4rem - var(--fw-pad) + var(--fw-sub-head) + 5px);
+      那是為了讓小卡標題列底貼在 y = 1075、避開 y = 1080 的拼接縫。topbar 改成
+      129px 之後可用高度多了 216px,全被 row1 吃掉,標題與框框就被拉開。) */
+  grid-template-rows: auto minmax(0, 1fr);
+  row-gap: 24px;
   padding: 60px var(--fw-pad) var(--fw-pad);
 }
 html.wall-mode .field-card-head {
@@ -2563,11 +2597,14 @@ html.wall-mode .field-card-head {
   display: flex;
   flex-direction: column;
 }
-/* 標題靠左(規劃圖也是靠左;右卡正中間剛好是拼接縫) */
+/* 標題靠左(規劃圖也是靠左;右卡正中間剛好是拼接縫)。
+   字重 400:大卡標題(即時狀態 / 測試狀態總覽)依前端回饋不要粗體。
+   只縮限在 .field-wall 之內 —— RIC 測試牆的 band 標題仍維持 700。 */
 html.wall-mode .field-wall .dut-wall-band-title {
   margin-bottom: 0;
   line-height: 1.25;
   text-align: left;
+  font-weight: 400;
 }
 /* 右卡標題列四段(右卡內距起算 x = 3984):1728 / 1824 / 1824 / 1632,間距跨 x = 5760 / 7680 / 9600 */
 html.wall-mode .field-head-row {
@@ -2576,14 +2613,18 @@ html.wall-mode .field-head-row {
   column-gap: var(--fw-gap);
   align-items: center;
 }
-/* 室內右卡從 x = 5808 起只剩三段:1824 / 1824 / 1632,間距跨 x = 7680 / 9600 */
+/* 室內右卡從 x = 5808 起。欄寬改成對齊下面兩張小卡的右緣(前端要求):
+     標題        5808 → 7056   (1248)
+     測試環境    7152 → 8976   (1824)  右界 = AMR 測試路徑卡右緣 8976
+     測試項目    9072 → 11280  (2208)  右界 = IM xApp 卡右緣 11280,寬度也同卡寬
+   1248 + 96 + 1824 = 3168 = 路徑卡寬,所以兩欄合起來正好蓋住那張卡。 */
 html.wall-mode .field-wall--half .field-head-row {
-  grid-template-columns: 1824px 1824px 1632px;
+  grid-template-columns: 1248px 1824px 2208px;
 }
-/* 室內的測試環境靠左:它那一欄的右界(9552)不是路徑卡右緣,靠右反而飄在中間;
-   靠左就貼齊效能卡的左緣(x = 7728)。 */
-html.wall-mode .field-wall--half .field-head-row > span:nth-of-type(1) {
-  justify-content: flex-start;
+/* 兩欄都靠右 —— 文字結尾各自貼齊下面那張卡的右緣 */
+html.wall-mode .field-wall--half .field-head-row > span:nth-of-type(1),
+html.wall-mode .field-wall--half .field-head-row > span:nth-of-type(2) {
+  justify-content: flex-end;
 }
 
 /* 左卡(室外):標題 / 影像 / 即時小卡。
@@ -2629,6 +2670,9 @@ html.wall-mode .field-video-grid {
   grid-template-columns: repeat(2, 1728px);
   justify-content: space-between;
   align-content: space-between;
+  /* 上排(室內固定攝影機 1 / 2)往下挪一點 —— 前端回饋原本貼齊卡身頂端太高。
+     只加在頂端,下排仍然靠卡身底部(align-content: space-between)。 */
+  padding-top: 36px;
 }
 /* 即時小卡上下兩張:下卡高度同室外 .field-live-row(標題列在 y = 2160 之上、數值從 y = 2208 起),
    上卡 y = 880~1833,標題列 880~1075 與右卡小卡對齊 */
@@ -2718,10 +2762,13 @@ html.wall-mode .field-status-body {
 html.wall-mode .field-status-body--results {
   grid-template-columns: 3648px 3552px;
 }
-/* 效能卡的標題列文字要推到 x = 9600 縫的右邊(9648 起)—— 剛好與大卡標題列的
-   「測試項目」那一欄對齊。576 = 卡左緣 9072 到 9648。 */
+/* 原本把效能卡的標題列文字推到 x = 9600 縫的右邊(9648 起),與大卡標題列的
+   「測試項目」對齊。依前端回饋改回靠左 —— 要與左邊的「AMR 測試路徑」同一
+   個起始線,兩張小卡的標題才對得齊。
+   ⚠ 代價:標題文字會橫跨 x = 9600 的實體拼接縫(開「框線」就看得到)。
+   class 與這條規則保留著,要改回去只要把 padding-left 打開即可。 */
 html.wall-mode .field-sub--head-past-seam .field-sub-head {
-  padding-left: 576px;
+  padding-left: calc(21px * var(--wall));
 }
 
 /* 吞吐量對比標題列兩段(小卡內容 x = 7791~11217):左段到 9552、右段從 9648 起,間距跨 x = 9600 */
@@ -2765,18 +2812,29 @@ html.wall-mode .field-split {
    (components/FieldTest/FieldScenarioSwitch)。
    中牆 topbar 是固定高 169px × 3 = 507:標題(168)+ 專案列(約 106)之後只剩
    約 100px,所以這一列連間距壓在 96px 以內,main 的內容區才不會被推離 y = 579。 */
+/* 情境切換(室內 / 室外)—— 規格:放在標題旁、icon 46×46、字 24px。
+   icon 未提供,.field-scenario-icon 先佔住 46×46 的位置。 */
 .field-scenario-switch {
   display: flex;
-  justify-content: center;
+  align-items: center;
   gap: 0.5rem;
-  margin-top: 0.5rem;
 }
 .field-scenario-switch button {
-  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 0.5rem;
   border: 1px solid rgba(255, 255, 255, 0.35);
-  padding: 0.125rem 0.75rem;
+  padding: 0.125rem 0.5rem;
   font-size: 0.8125rem;
   color: rgba(255, 255, 255, 0.75);
+}
+.field-scenario-icon {
+  display: inline-block;
+  flex: none;
+  /* 佔位:之後把 icon 放進這個 span,尺寸不用再改 */
+  width: 1.15em;
+  height: 1.15em;
 }
 .field-scenario-switch button.is-active {
   /* 選中用「啟用後」的系列色,跟牆上其他綠色狀態一致 */
@@ -2785,18 +2843,23 @@ html.wall-mode .field-split {
   color: #ffffff;
 }
 html.wall-mode .field-scenario-switch {
-  /* 標題置中 → 兩顆等寬按鈕的正中央就是主牆中線 x = 5760 的拼接縫。
-     間隙給到 96px(同卡距),縫穩穩落在空隙中間,左右各留 48。 */
-  gap: 96px;
-  margin-top: calc(4px * var(--wall));
+  /* 已經移到標題旁,不再需要為主牆中線 x=5760 的拼接縫留大間隙 */
+  gap: calc(12px * var(--wall));
 }
 html.wall-mode .field-scenario-switch button {
   /* 1px 的框在牆上等於 1 顆實體像素,遠看等於沒有框 —— 跟著 --wall 放大 */
   border-width: calc(1px * var(--wall));
-  height: calc(28px * var(--wall));
-  padding: 0 calc(14px * var(--wall));
-  font-size: calc(20px * var(--wall));
+  border-radius: calc(8px * var(--wall));
+  gap: calc(8px * var(--wall));
+  padding: calc(6px * var(--wall)) calc(14px * var(--wall));
+  /* 規格:字體 24px */
+  font-size: calc(24px * var(--wall));
   line-height: 1.2;
+}
+html.wall-mode .field-scenario-icon {
+  /* 規格:icon 長寬 46×46 */
+  width: calc(46px * var(--wall));
+  height: calc(46px * var(--wall));
 }
 
 /* ── 圖表名稱下面的指標開關(例:下行 DL / 上行 UL)─────────────────────

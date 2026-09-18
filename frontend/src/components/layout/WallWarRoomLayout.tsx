@@ -19,7 +19,6 @@ import { useWallModeStore } from "@/stores/wallModeStore";
 import { Sidebar } from "./Sidebar";
 import { WallLeftSimulator } from "./WallLeftSimulator";
 import { FieldScenarioSwitch } from "@/components/FieldTest/FieldScenarioSwitch";
-import { WallSelectionStatus } from "./WallSelectionStatus";
 
 /**
  * 戰情室版面 — 對應實體三牆配置:
@@ -63,20 +62,24 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
               仍留一個空的第一欄,topbar 是 3 欄 grid,少一欄標題就不置中了。 */}
           <div aria-hidden="true" />
           <div className="war-room-main-title">
-            {title && (
-              <div className={`war-room-main-title-text ${accent ?? "text-white"}`}>
-                {title}
+            {/* 標題置中,情境切換掛在標題右邊。
+                anchor 包住標題本身、切換鈕用 absolute 掛在 anchor 右側 ——
+                這樣按鈕不佔版面寬度,標題仍然精準置中(牆面中線對得準)。 */}
+            <div className="war-room-main-title-row">
+              <div className="war-room-main-title-anchor">
+                {title && (
+                  <div className={`war-room-main-title-text ${accent ?? "text-white"}`}>
+                    {title}
+                  </div>
+                )}
+                {/* 場域測試的室外 / 室內切換 —— 中牆停在 /wall,是不是這個畫面看
+                    fieldScenarioStore.active(由 FieldTestScenarioContainer 掛載時設)。 */}
+                {fieldScenarioActive && <FieldScenarioSwitch />}
               </div>
-            )}
+            </div>
             {subtitle && (
               <div className="war-room-main-subtitle-text text-white/60">{subtitle}</div>
             )}
-            {/* 標題下方的「專案:XXX」—— 原本是 main 裡的獨立橫幅,依規格圖搬上來。
-                總覽頁不顯示(它不是被左螢幕選出來的檢視)。 */}
-            {!pathname.startsWith("/overview") && <WallSelectionStatus />}
-            {/* 場域測試的室外 / 室內切換 —— 中牆停在 /wall,是不是這個畫面看
-                fieldScenarioStore.active(由 FieldTestScenarioContainer 掛載時設)。 */}
-            {fieldScenarioActive && <FieldScenarioSwitch />}
           </div>
           <div className="war-room-main-topbar-actions">
             {isWall && (
