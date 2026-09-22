@@ -2629,6 +2629,13 @@ html.wall-mode .field-card--video {
   grid-template-rows: auto minmax(0, 1fr) calc(var(--fw-lower) + var(--fw-gap) + var(--fw-sub-head) + 12px);
   row-gap: 1.5rem;
 }
+/* 上排小卡(路徑、測試數據、室內的行駛狀態):標題列底在 y = 920,內容照預設 36 的內距
+   會從 956 開始 —— 第一排文字(測試進度、平均下行、位置 x…)剛好壓在 y = 1080 的縫上。
+   跟下排的做法一樣讓縫落在空白處:內容從 1080 + 48 = 1128 起,內距 = 1128 − 920 = 208。
+   (9/18 縮短 topbar 之後標題列上移,原本「小卡標題列底貼在 y = 1075」的安排就失效了) */
+html.wall-mode .field-wall .field-sub:not(.field-sub--lower) > .field-sub-body {
+  padding-top: 208px;
+}
 html.wall-mode .field-sub--lower .field-sub-body {
   padding-top: calc(var(--fw-gap) + 12px);
 }
