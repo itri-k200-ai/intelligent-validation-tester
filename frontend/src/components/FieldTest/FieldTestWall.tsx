@@ -1,6 +1,6 @@
 "use client";
 import { Bot, Plane, Route, Signal, type LucideIcon } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   CartesianGrid,
   Line,
@@ -204,17 +204,11 @@ function LiveResultsLayout({
           {/* 室外情境要呈現的是:在具備干擾的環境中,UAV 移動時傳輸穩不穩定。
               干擾範圍會隨環境變動,畫面上不標固定的干擾區,只呈現兩趟的吞吐量起伏與平均。
               場域內只觀察這台 UAV;上下兩張圖的間距跨 y = 2160 */}
-          {/* 跟室內同一組圖:上格吞吐量(DL / UL 開關切換),下格 SINR */}
+          {/* 跟室內同一組圖:上格平均上行、下格平均下行 */}
           <Sub icon={Signal} title="測試數據">
             <div className="field-split">
-              <ThroughputCompare
-                runs={mission.runs}
-                spec={RATE_CHARTS[0]}
-                alt={RATE_CHARTS[1]}
-                series={allRuns}
-                upTo={upTo}
-              />
-              <ThroughputCompare runs={mission.runs} spec={SINR_CHART} series={allRuns} upTo={upTo} />
+              <ThroughputCompare runs={mission.runs} spec={RATE_CHARTS[0]} series={allRuns} upTo={upTo} />
+              <ThroughputCompare runs={mission.runs} spec={RATE_CHARTS[1]} series={allRuns} upTo={upTo} />
             </div>
           </Sub>
         </div>
@@ -299,15 +293,8 @@ function CameraGridLayout({
               「平均」寫在每張圖自己的名稱上,標題列就不再重複一次 */}
           <Sub icon={Signal} title="測試數據" className="field-sub--head-past-seam">
             <div className="field-split">
-              <ThroughputCompare
-                runs={mission.runs}
-                spec={RATE_CHARTS[0]}
-                alt={RATE_CHARTS[1]}
-                series={allRuns}
-                upTo={upTo}
-                narrow
-              />
-              <ThroughputCompare runs={mission.runs} spec={SINR_CHART} series={allRuns} upTo={upTo} narrow />
+              <ThroughputCompare runs={mission.runs} spec={RATE_CHARTS[0]} series={allRuns} upTo={upTo} narrow />
+              <ThroughputCompare runs={mission.runs} spec={RATE_CHARTS[1]} series={allRuns} upTo={upTo} narrow />
             </div>
           </Sub>
         </div>
@@ -813,24 +800,13 @@ function MissionProgress({ mission, single = false }: { mission: FieldMission; s
 // ── 折線圖 ───────────────────────────────────────────────────────────
 
 /**
- * 「測試數據」卡的兩張圖,室內外共用:上格吞吐量、下格 SINR,都比兩趟的平均。
- * 吞吐量放上面那一格 —— 它才是這張卡的重點,而上面那格比較高(室內 999 : 708)。
- * 放在下面又要更高的話,圖會往上跨過 y = 2160 的拼接縫,y 軸刻度文字就會被電視邊框
- * 切到:兩格的高度是由「間距跨縫」反推的,見 globals.css .field-split。
+ * 「測試數據」卡的兩張圖,室內外共用:上格平均上行、下格平均下行,都比兩趟的平均
+ * (名稱自己帶「平均」)。兩格的高度是由「間距跨縫」反推的,見 globals.css .field-split。
  */
-/** 上格:吞吐量。下行 / 上行一次只畫一個,用 DL / UL 開關切換(名稱自己帶「平均」) */
 const RATE_CHARTS: [TrendSpec, TrendSpec] = [
-  { label: "平均下行", short: "DL", unit: "kbps", metric: "dlKbps", digits: 0, kind: "rate" },
-  { label: "平均上行", short: "UL", unit: "kbps", metric: "ulKbps", digits: 1, kind: "rate" },
+  { label: "平均上行", unit: "kbps", metric: "ulKbps", digits: 1, kind: "rate" },
+  { label: "平均下行", unit: "kbps", metric: "dlKbps", digits: 0, kind: "rate" },
 ];
-/** 下格:SINR 不是這次要改善的目標,只當背景資訊看趨勢 —— 不標平均差值、兩趟同權重 */
-const SINR_CHART: TrendSpec = {
-  label: "平均 SINR",
-  unit: "dB",
-  metric: "sinrDb",
-  digits: 1,
-  delta: false,
-};
 
 /** 圖表字級與筆畫都以牆面 3× 畫布計:2px 線 = 6、1px 格線 = 3 */
 const AXIS_TICK = { fontSize: 72, fill: "rgba(255,255,255,0.6)" };
@@ -1007,31 +983,22 @@ function sharedProgress(runs: FieldRun[]) {
 function ThroughputCompare({
   runs,
   spec,
-  alt,
   series,
   upTo,
   narrow = false,
 }: {
   runs: FieldRun[];
   spec: TrendSpec;
-  /**
-   * 同一張圖的另一個指標(例:下行 / 上行)。一次只顯示一個,名稱下面的開關決定看哪一個,
-   * 標題列的數值、單位、平均差值與 y 軸都跟著它 —— 兩者量級差很多(約 100 kbps 對 4000),
-   * 疊在一起沒有一條 y 軸讀得準。
-   */
-  alt?: TrendSpec;
   series: { phase: OptimizationPhase; samples: FieldSample[] }[];
   /** 平均只算到這個路徑進度(見 sharedProgress) */
   upTo: number;
   /** 窄卡(室內效能卡):標題列排成一行,x 刻度回到 50% 一格 */
   narrow?: boolean;
 }) {
-  const [altOn, setAltOn] = useState(false);
-  const active = alt && altOn ? alt : spec;
   const mean = (phase: OptimizationPhase) => {
     const values = (runs.find((r) => r.phase === phase)?.samples ?? [])
       .filter((pt) => pt.progress <= upTo)
-      .map((pt) => sampleValue(pt, active.metric))
+      .map((pt) => sampleValue(pt, spec.metric))
       .filter((val): val is number => val !== null);
     return values.length ? values.reduce((sum, val) => sum + val, 0) / values.length : null;
   };
@@ -1040,9 +1007,9 @@ function ThroughputCompare({
   const d = before !== null && after !== null ? after - before : null;
   // 吞吐量:用兩趟平均挑一次單位,數值、差值、y 軸都跟著它
   const chosen =
-    active.kind === "rate"
+    spec.kind === "rate"
       ? pickRateUnit([before, after])
-      : { unit: active.unit, scale: 1, digits: active.digits };
+      : { unit: spec.unit, scale: 1, digits: spec.digits };
   const fmt = (val: number | null) =>
     val === null ? "—" : (val / chosen.scale).toFixed(chosen.digits);
   const dot = (phase: OptimizationPhase) => (
@@ -1050,29 +1017,9 @@ function ThroughputCompare({
   );
   /* 沒有要改善的指標(delta === false):不標平均差值,兩趟也用同一個字級與亮度 ——
      放大加亮「啟用後」會看起來像是這個指標被優化過。 */
-  const plain = active.delta === false;
-  // 名稱(不換行)+ 有第二個指標時的 DL / UL 開關,窄版與寬版共用
-  const labelBlock = (
-    <span className="flex min-w-0 flex-col items-start">
-      <span className="whitespace-nowrap text-sm text-white/60">{active.label}</span>
-      {alt && (
-        <span className="field-metric-switch" role="group" aria-label={`切換 ${spec.label} / ${alt.label}`}>
-          {[spec, alt].map((s) => (
-            <button
-              key={s.metric}
-              type="button"
-              onClick={() => setAltOn(s === alt)}
-              className={s === active ? "is-active" : undefined}
-              aria-pressed={s === active}
-              title={s.label}
-            >
-              {s.short ?? s.label}
-            </button>
-          ))}
-        </span>
-      )}
-    </span>
-  );
+  const plain = spec.delta === false;
+  // 名稱不換行:窄版與寬版共用
+  const labelBlock = <span className="whitespace-nowrap text-sm text-white/60">{spec.label}</span>;
   const beforeCls = plain
     ? "text-[2.25rem] font-semibold leading-[1.1] text-white/75"
     : "text-[2.25rem] leading-[1.1] text-white/65";
@@ -1080,7 +1027,7 @@ function ThroughputCompare({
     ? "text-[2.25rem] font-semibold leading-[1.1] text-white/75"
     : "text-[2.75rem] font-semibold leading-[1.1] text-white";
   const delta =
-    d === null || active.delta === false ? null : (
+    d === null || spec.delta === false ? null : (
       <>
         {d > 0 ? "▲+" : d < 0 ? "▼" : ""}
         {(Math.abs(d) / chosen.scale).toFixed(chosen.digits)}
@@ -1151,7 +1098,7 @@ function ThroughputCompare({
         </div>
       )}
       <TrendChart
-        spec={active}
+        spec={spec}
         series={series}
         bare
         // 室內外都不標橫軸(理由見 TrendChart 的 xTicks)

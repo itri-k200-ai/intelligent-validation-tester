@@ -25,8 +25,6 @@ export type TrendSpec = {
   kind?: "rate";
   /** false = 不標兩趟的平均差值(不是這次要改善的指標,只看趨勢);預設會標 */
   delta?: boolean;
-  /** 切換開關上的短名(例:DL / UL);同一張圖可切換兩個指標時要有 */
-  short?: string;
 };
 
 type ScenarioBase = {

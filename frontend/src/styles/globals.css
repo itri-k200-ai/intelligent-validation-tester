@@ -2783,7 +2783,7 @@ html.wall-mode .field-compare-head {
 }
 /* 室內效能卡(內容 x = 9135~11217)同樣被 x = 9600 穿過,縫左邊只放圖的名稱,
    數值 / 單位 / 平均差值都在右段。
-   左段 441(9135~9576)是「平均 SINR」(429)的下限;間距收成 72 之後 9576~9648
+   左段 441(9135~9576)放得下圖名(「平均上行」384);間距收成 72 之後 9576~9648
    仍完整包住 x = 9600 的邊框(9594~9606),右段起點維持 9648,與小卡標題對齊。 */
 html.wall-mode .field-compare-head--half {
   /* 右段吃剩下的寬(≈1569);寫死會因為卡寬的小數位多出 2px 溢出 */
@@ -2861,43 +2861,6 @@ html.wall-mode .field-scenario-icon {
   /* 規格:icon 長寬 46×46 */
   width: calc(46px * var(--wall));
   height: calc(46px * var(--wall));
-}
-
-/* ── 圖表名稱下面的指標開關(例:下行 DL / 上行 UL)─────────────────────
-   一次只畫一個指標,y 軸與標題列的數值都跟著選到的那個。
-   開關要塞在效能卡標題列縫左邊那段(441 寬、約 145 高),所以比情境切換再小一階。 */
-.field-metric-switch {
-  display: flex;
-  gap: 0.375rem;
-  margin-top: 0.25rem;
-}
-.field-metric-switch button {
-  border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  padding: 0 0.5rem;
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.6);
-}
-.field-metric-switch button.is-active {
-  /* 選中用「啟用後」的系列色,跟情境切換一致 */
-  border-color: rgba(28, 158, 136, 0.9);
-  background: rgba(28, 158, 136, 0.3);
-  color: #ffffff;
-}
-html.wall-mode .field-metric-switch {
-  gap: calc(8px * var(--wall));
-  margin-top: calc(6px * var(--wall));
-}
-html.wall-mode .field-metric-switch button {
-  /* 1px 的框在牆上等於 1 顆實體像素,遠看等於沒有框 —— 跟著 --wall 放大 */
-  border-width: calc(1px * var(--wall));
-  /* !important:前面的 `html.wall-mode main button` 也是 !important(字級 72、內距 60),
-     不擋掉的話兩顆按鈕會撐到 456,塞不進縫左邊那段 441。情境切換在 topbar 不受影響。 */
-  height: calc(26px * var(--wall)) !important;
-  min-height: 0 !important;
-  padding: 0 calc(12px * var(--wall)) !important;
-  font-size: calc(18px * var(--wall)) !important;
-  line-height: 1.2;
 }
 
 /* ── 測試進度:同一條路徑跑兩趟 ────────────────────────────────────────
