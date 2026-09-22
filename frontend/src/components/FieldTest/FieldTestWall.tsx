@@ -237,19 +237,14 @@ function CameraGridLayout({
         </div>
 
         <div className="field-status-body">
+          {/* 卡頭不放「啟用前 / 啟用後」圖例(依室內版面規劃圖)。
+              RU 圖例只在畫向量平面圖時才有意義 —— 有 SLAM 底圖時 RouteMap 不畫 RU 標記 */}
           <Sub
             icon={Route}
             title={sc.routeTitle}
-            aside={
-              <span className="flex items-center gap-8">
-                {/* RU 圖例只在畫向量平面圖時才有意義:有底圖(SLAM)時 RouteMap 不畫 RU 標記,
-                    而且圖例會被地圖卡左移後的 x = 7680 縫切到 */}
-                {sc.floorPlan && !sc.backdrop && <RadioLegend />}
-                <PhaseLegend />
-              </span>
-            }
+            aside={sc.floorPlan && !sc.backdrop ? <RadioLegend /> : undefined}
           >
-            <MissionProgress mission={mission} />
+            <MissionProgress mission={mission} single />
             <RouteMap
               mission={mission}
               floorPlan={sc.floorPlan}
@@ -258,10 +253,10 @@ function CameraGridLayout({
             />
           </Sub>
 
-          {/* 與室外同一種比較:兩趟的平均與平均差值(圖例在路徑小卡的標題列) */}
-          {/* 卡寬 2208 但被 x = 9600 的縫穿過:標題列文字整組推到縫右邊(見 CSS)。
+          {/* 與室外同一種比較:兩趟的平均與平均差值。
+              卡寬 2208 但被 x = 9600 的縫穿過(見 CSS .field-sub--head-past-seam)。
               「平均」寫在每張圖自己的名稱上,標題列就不再重複一次 */}
-          <Sub icon={Signal} title="IM xApp 啟用前後" className="field-sub--head-past-seam">
+          <Sub icon={Signal} title="測試數據" className="field-sub--head-past-seam">
             <div className="field-split">
               <ThroughputCompare
                 runs={mission.runs}
@@ -701,14 +696,35 @@ function RadioLegend() {
 }
 
 /**
- * 路徑圖上方的測試進度。測試是同一條路徑跑兩趟(先 xApp 未啟用、再啟用),
- * 所以條子分兩半:左半第一趟、右半第二趟,各自填到自己的進度,中間留一道細縫。
- * 顏色對照標題列的啟用前 / 啟用後圖例,不再重複標字;右邊大字是目前這趟的百分比。
+ * 路徑圖上方的測試進度。測試是同一條路徑跑兩趟(先 xApp 未啟用、再啟用)。
+ *
+ * - 預設(室外):條子分兩半,左半第一趟、右半第二趟,各自填到自己的進度,中間留一道細縫;
+ *   顏色對照標題列的啟用前 / 啟用後圖例,右邊大字是目前這趟的百分比。
+ * - single(室內,依室內版面規劃圖):一整條,只填「目前這趟」的進度,百分比緊接在
+ *   標籤後面;單一顏色,不對應趟次(室內的卡頭已經不放啟用前 / 啟用後圖例)。
  */
-function MissionProgress({ mission }: { mission: FieldMission }) {
+function MissionProgress({ mission, single = false }: { mission: FieldMission; single?: boolean }) {
   const run = mission.runs[mission.currentRun];
   if (!run) return null;
   const pct = (r: FieldRun) => Math.round(Math.min(Math.max(r.progress, 0), 100));
+
+  if (single) {
+    return (
+      <div className="field-map-head">
+        <span className="flex-none text-sm text-white/60">測試進度</span>
+        {/* 固定寬度 + 等寬數字:從 5% 跑到 100% 時,後面的條子才不會跟著左右跳 */}
+        <span className="field-progress-pct flex-none text-[2.75rem] font-semibold leading-[1.1] text-white">
+          {pct(run)}%
+        </span>
+        <div className="field-progress-track field-progress-track--single">
+          {/* 規範 09:軌道 rgba(255,255,255,0.15) */}
+          <div className="field-progress-seg">
+            <div className="field-progress-fill" style={{ width: `${pct(run)}%`, background: PROGRESS_COLOR }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="field-map-head">
@@ -801,8 +817,12 @@ function TrendChart({
   spec: TrendSpec;
   series: { phase: OptimizationPhase; samples: FieldSample[] }[];
   bare?: boolean;
-  /** 圖跨拼接縫時,避開會落在縫上的刻度 */
-  xTicks?: number[];
+  /**
+   * 圖跨拼接縫時,避開會落在縫上的刻度。
+   * null = 不標橫軸刻度(只留基準線):室內那張卡的「走到哪」由測試進度條交代,
+   * 圖上再寫一次百分比容易跟進度條混淆,而且第一趟還在跑時那個百分比並不準。
+   */
+  xTicks?: number[] | null;
   /** 吞吐量:換成所屬小卡選定的單位,y 軸才跟標題一致 */
   scale?: number;
   unitOverride?: string;
@@ -847,14 +867,16 @@ function TrendChart({
               dataKey="progress"
               type="number"
               domain={[0, 100]}
-              ticks={xTicks}
+              ticks={xTicks ?? []}
               tickFormatter={(val: number) => `${val}%`}
-              tick={AXIS_TICK}
+              tick={xTicks ? AXIS_TICK : false}
               tickLine={false}
               tickMargin={44}
               stroke={AXIS_STROKE}
               strokeWidth={3}
-              height={130}
+              // 不標刻度時只留基準線,省下的高度讓給圖。但不能收到底:y 軸最低的刻度
+              // (例:0)是對齊基準線置中的,字高 72 的一半要有地方放,否則會被吃掉
+              height={xTicks ? 130 : 48}
             />
             <YAxis
               tick={AXIS_TICK}
@@ -1020,7 +1042,10 @@ function ThroughputCompare({
               </span>
             )}
           </span>
-          <div className="flex min-w-0 items-baseline gap-2 overflow-hidden whitespace-nowrap">
+          {/* 差值帶單位之後(▲+3.2 Mbps),大數字時一行放不下(例:197.0 → 257.0 Mbps ▲+60.0 Mbps
+              要 1838,縫右邊只有 1567)。所以允許換行:放得下就照規劃圖貼在同一行最右邊,
+              放不下才整段掉到下一行靠右 —— 不會被切掉。每一段各自不換行。 */}
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 whitespace-nowrap">
             <span className="flex items-baseline gap-3">
               {dot("before")}
               <span className={beforeCls}>{fmt(before)}</span>
@@ -1032,7 +1057,9 @@ function ThroughputCompare({
             </span>
             <span className="text-sm text-white/50">{chosen.unit}</span>
             {delta && (
-              <span className={`ml-auto text-sm font-semibold ${d! >= 0 ? "text-mint" : "text-danger"}`}>{delta}</span>
+              <span className={`ml-auto text-sm font-semibold ${d! >= 0 ? "text-mint" : "text-danger"}`}>
+                {delta} {chosen.unit}
+              </span>
             )}
           </div>
         </div>
@@ -1066,7 +1093,8 @@ function ThroughputCompare({
         spec={active}
         series={series}
         bare
-        xTicks={narrow ? [0, 50, 100] : [0, 20, 40, 60, 80, 100]}
+        // 室內不標橫軸(理由見 TrendChart 的 xTicks);室外維持 20% 一格(避開 x = 9600 的縫)
+        xTicks={narrow ? null : [0, 20, 40, 60, 80, 100]}
         scale={chosen.scale}
         unitOverride={chosen.unit}
         digitsOverride={chosen.digits}
@@ -1086,3 +1114,5 @@ const PHASE: Record<OptimizationPhase, { label: string; short: string; color: st
   before: { label: "啟用前", short: "啟用前", color: "#C07F22" },
   after: { label: "啟用後", short: "啟用後", color: "#1C9E88" },
 };
+/** 室內一整條的測試進度用這個色 —— 跟牆上其他綠色狀態一致,不代表哪一趟 */
+const PROGRESS_COLOR = "#1C9E88";

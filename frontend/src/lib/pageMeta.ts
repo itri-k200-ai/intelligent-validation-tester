@@ -95,13 +95,13 @@ export function getPageMeta(pathname: string): PageMeta {
 
   // 室外 / 室內合併成一頁,情境由標題下方的按鈕切換,標題不隨情境變
   if (seg[0] === "smart-network" || seg[0] === "outdoor-scenario" || seg[0] === "indoor-scenario") {
-    return { title: "智慧網路實驗室" };
+    return { title: "智慧網路" };
   }
 
   // 中牆的固定 URL —— 顯示什麼由 selection 決定,標題不隨內容變。
   // (右副牆自己的標題是「智慧網路簡介」,見 war-room-lab-title。)
   if (seg[0] === "wall") {
-    return { title: "智慧網路實驗室" };
+    return { title: "智慧網路" };
   }
 
   return { title: "" };

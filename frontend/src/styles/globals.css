@@ -2914,5 +2914,14 @@ html.wall-mode .field-metric-switch button {
   height: 100%;
   border-radius: 9999px;
 }
+/* 室內:一整條,只填目前這趟(見 MissionProgress 的 single) */
+.field-progress-track--single {
+  grid-template-columns: 1fr;
+}
+/* 百分比固定寬度:4 位(100%)也放得下,數字變長時條子不會被往右推 */
+.field-progress-pct {
+  min-width: 4.2ch;
+  font-variant-numeric: tabular-nums;
+}
 
 
