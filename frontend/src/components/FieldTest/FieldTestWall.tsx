@@ -42,9 +42,9 @@ import type {
 // 共用下面的小卡、路徑圖、折線圖。文字避開電視拼接縫,座標與推算見 globals.css .field-wall。
 //
 // live-results(室外):左即時、右結果
-//   ┌ 即時狀態 ───────────────────── ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 │ 啟用前 啟用後 ┐
-//   │ [固定攝影機 16:9][載具 16:9]   │ │ ┌測試路徑──────────┐ ┌QoE xApp 啟用前後───────────┐ │
-//   │ ┌飛行狀態──────┐ ┌UAV 通訊品質┐│ │ │ 測試進度 ──── 64% │ │ 下行 平均 120 → 155 Mbps   │ │
+//   ┌ 即時狀態 ───────────────────── ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 ────────────────────┐
+//   │ [固定攝影機 16:9][載具 16:9]   │ │ ┌測試路徑──────────┐ ┌測試數據────────────────────┐ │
+//   │ ┌飛行狀態──────┐ ┌UAV 通訊品質┐│ │ │ 測試進度 64% ──── │ │ 平均下行 ● 120 → ● 155 Mbps│ │
 //   │ │ 高度 地速 …   │ │ SNR RSSI …││ │ │ 路徑圖(兩趟)    │ │ 上行 ╱╲╱                  │ │
 //   └──────────────────────────────────┘ └──────────────────────────────────────────────────────┘
 //
@@ -149,31 +149,30 @@ function LiveResultsLayout({
       {/* ── 右:測試狀態總覽(路徑與進度不是「結果」,比較圖也要跑完才算結果,所以不叫測試結果)── */}
       <section className="dut-wall-band field-card">
         <div className="field-card-head">
-          <HeadRow
-            title="測試狀態總覽"
-            mission={mission}
-            right={
-              /* 右邊所有圖共用這份圖例 */
-              <span className="justify-self-end text-sm text-white/70">
-                <PhaseLegend />
-              </span>
-            }
-          />
+          {/* 不放「啟用前 / 啟用後」圖例 —— 跟室內一致(依版面規劃圖) */}
+          <HeadRow title="測試狀態總覽" mission={mission} />
         </div>
 
         <div className="field-status-body field-status-body--results">
           <Sub icon={Route} title={sc.routeTitle}>
-            <MissionProgress mission={mission} />
+            <MissionProgress mission={mission} single />
             <RouteMap mission={mission} livePosition={live?.position ?? null} />
           </Sub>
 
           {/* 室外情境要呈現的是:在具備干擾的環境中,UAV 移動時傳輸穩不穩定。
               干擾範圍會隨環境變動,畫面上不標固定的干擾區,只呈現兩趟的吞吐量起伏與平均。
               場域內只觀察這台 UAV;上下兩張圖的間距跨 y = 2160 */}
-          <Sub icon={Signal} title="QoE xApp 啟用前後">
+          {/* 跟室內同一組圖:上格吞吐量(DL / UL 開關切換),下格 SINR */}
+          <Sub icon={Signal} title="測試數據">
             <div className="field-split">
-              <ThroughputCompare runs={mission.runs} spec={THROUGHPUT_CHARTS[0]} series={allRuns} upTo={upTo} />
-              <ThroughputCompare runs={mission.runs} spec={THROUGHPUT_CHARTS[1]} series={allRuns} upTo={upTo} />
+              <ThroughputCompare
+                runs={mission.runs}
+                spec={RATE_CHARTS[0]}
+                alt={RATE_CHARTS[1]}
+                series={allRuns}
+                upTo={upTo}
+              />
+              <ThroughputCompare runs={mission.runs} spec={SINR_CHART} series={allRuns} upTo={upTo} />
             </div>
           </Sub>
         </div>
@@ -334,20 +333,6 @@ function Sub({
       </div>
       <div className="field-sub-body">{children}</div>
     </section>
-  );
-}
-
-/** 兩趟的圖例:色條 + 名稱(文字不上系列色) */
-function PhaseLegend() {
-  return (
-    <span className="flex items-center gap-8">
-      {(Object.keys(PHASE) as OptimizationPhase[]).map((p) => (
-        <span key={p} className="flex items-center gap-3">
-          <span className="inline-block h-[6px] w-12 rounded-full" style={{ background: PHASE[p].color }} />
-          {PHASE[p].short}
-        </span>
-      ))}
-    </span>
   );
 }
 
@@ -756,13 +741,13 @@ function MissionProgress({ mission, single = false }: { mission: FieldMission; s
 
 // ── 折線圖 ───────────────────────────────────────────────────────────
 
-/** IM xApp 啟用前後的兩張圖(室內,和室外一樣比兩趟平均) */
 /**
- * IM xApp 啟用前後的兩張圖。下行放上面那一格 —— 它才是這張卡的重點,而上面那格比較高
- * (999 : 708)。下行留在下面又要更高的話,圖會往上跨過 y = 2160 的拼接縫,y 軸刻度
- * 文字就會被電視邊框切到:兩格的高度是由「間距跨縫」反推的,見 globals.css .field-split。
+ * 「測試數據」卡的兩張圖,室內外共用:上格吞吐量、下格 SINR,都比兩趟的平均。
+ * 吞吐量放上面那一格 —— 它才是這張卡的重點,而上面那格比較高(室內 999 : 708)。
+ * 放在下面又要更高的話,圖會往上跨過 y = 2160 的拼接縫,y 軸刻度文字就會被電視邊框
+ * 切到:兩格的高度是由「間距跨縫」反推的,見 globals.css .field-split。
  */
-/** 上格:吞吐量。兩個指標同時畫,用開關決定看哪一組(名稱自己帶「平均」) */
+/** 上格:吞吐量。下行 / 上行一次只畫一個,用 DL / UL 開關切換(名稱自己帶「平均」) */
 const RATE_CHARTS: [TrendSpec, TrendSpec] = [
   { label: "平均下行", short: "DL", unit: "kbps", metric: "dlKbps", digits: 0, kind: "rate" },
   { label: "平均上行", short: "UL", unit: "kbps", metric: "ulKbps", digits: 1, kind: "rate" },
@@ -775,12 +760,6 @@ const SINR_CHART: TrendSpec = {
   digits: 1,
   delta: false,
 };
-
-/** QoE xApp 啟用前後的兩張圖 */
-const THROUGHPUT_CHARTS: [TrendSpec, TrendSpec] = [
-  { label: "下行吞吐量", unit: "kbps", metric: "dlKbps", digits: 0, kind: "rate" },
-  { label: "上行吞吐量", unit: "kbps", metric: "ulKbps", digits: 1, kind: "rate" },
-];
 
 /** 圖表字級與筆畫都以牆面 3× 畫布計:2px 線 = 6、1px 格線 = 3 */
 const AXIS_TICK = { fontSize: 72, fill: "rgba(255,255,255,0.6)" };
@@ -819,8 +798,9 @@ function TrendChart({
   bare?: boolean;
   /**
    * 圖跨拼接縫時,避開會落在縫上的刻度。
-   * null = 不標橫軸刻度(只留基準線):室內那張卡的「走到哪」由測試進度條交代,
+   * null = 不標橫軸刻度(只留基準線):「走到哪」由測試進度條交代,
    * 圖上再寫一次百分比容易跟進度條混淆,而且第一趟還在跑時那個百分比並不準。
+   * 中牆的圖目前都用 null(室內、室外)。
    */
   xTicks?: number[] | null;
   /** 吞吐量:換成所屬小卡選定的單位,y 軸才跟標題一致 */
@@ -1000,6 +980,28 @@ function ThroughputCompare({
   /* 沒有要改善的指標(delta === false):不標平均差值,兩趟也用同一個字級與亮度 ——
      放大加亮「啟用後」會看起來像是這個指標被優化過。 */
   const plain = active.delta === false;
+  // 名稱(不換行)+ 有第二個指標時的 DL / UL 開關,窄版與寬版共用
+  const labelBlock = (
+    <span className="flex min-w-0 flex-col items-start">
+      <span className="whitespace-nowrap text-sm text-white/60">{active.label}</span>
+      {alt && (
+        <span className="field-metric-switch" role="group" aria-label={`切換 ${spec.label} / ${alt.label}`}>
+          {[spec, alt].map((s) => (
+            <button
+              key={s.metric}
+              type="button"
+              onClick={() => setAltOn(s === alt)}
+              className={s === active ? "is-active" : undefined}
+              aria-pressed={s === active}
+              title={s.label}
+            >
+              {s.short ?? s.label}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
+  );
   const beforeCls = plain
     ? "text-[2.25rem] font-semibold leading-[1.1] text-white/75"
     : "text-[2.25rem] leading-[1.1] text-white/65";
@@ -1022,29 +1024,11 @@ function ThroughputCompare({
            只放得下圖的名稱;數值、單位與平均差值都在縫右邊那 1570。
            「平均」由小卡標題列說明一次,差值貼右緣並小一階字級才放得下 */
         <div className="field-compare-head field-compare-head--half mb-4 flex-none">
-          <span className="flex min-w-0 flex-col items-start">
-            {/* 名稱不換行:左段是照「平均 SINR」的寬度定的,換行會把圖往下擠 */}
-            <span className="whitespace-nowrap text-sm text-white/60">{active.label}</span>
-            {alt && (
-              <span className="field-metric-switch" role="group" aria-label={`切換 ${spec.label} / ${alt.label}`}>
-                {[spec, alt].map((s) => (
-                  <button
-                    key={s.metric}
-                    type="button"
-                    onClick={() => setAltOn(s === alt)}
-                    className={s === active ? "is-active" : undefined}
-                    aria-pressed={s === active}
-                    title={s.label}
-                  >
-                    {s.short ?? s.label}
-                  </button>
-                ))}
-              </span>
-            )}
-          </span>
-          {/* 差值帶單位之後(▲+3.2 Mbps),大數字時一行放不下(例:197.0 → 257.0 Mbps ▲+60.0 Mbps
-              要 1838,縫右邊只有 1567)。所以允許換行:放得下就照規劃圖貼在同一行最右邊,
-              放不下才整段掉到下一行靠右 —— 不會被切掉。每一段各自不換行。 */}
+          {/* 名稱不換行:左段是照「平均 SINR」的寬度定的,換行會把圖往下擠 */}
+          {labelBlock}
+          {/* 差值緊跟在數值後面(不推到最右邊),一眼看得出是誰的差值。
+              大數字時一行放不下(例:197.0 → 257.0 Mbps ▲+60.0 Mbps 要 1838,縫右邊只有 1567),
+              所以允許換行:放不下時差值整段掉到下一行,不會被切掉。每一段各自不換行。 */}
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 whitespace-nowrap">
             <span className="flex items-baseline gap-3">
               {dot("before")}
@@ -1057,35 +1041,41 @@ function ThroughputCompare({
             </span>
             <span className="text-sm text-white/50">{chosen.unit}</span>
             {delta && (
-              <span className={`ml-auto text-sm font-semibold ${d! >= 0 ? "text-mint" : "text-danger"}`}>
+              // 跟單位只隔 36(gap-x-2 24 + ml-1 12),一眼看得出是誰的差值
+              <span className={`ml-1 text-sm font-semibold ${d! >= 0 ? "text-mint" : "text-danger"}`}>
                 {delta} {chosen.unit}
               </span>
             )}
           </div>
         </div>
       ) : (
-        /* 室外那張橫跨 x = 9600 的拼接縫:標題列分左右兩段(間距跨縫)。
-           左段只放名稱 + 平均 + 兩個數值,單位跟右段的平均差值寫在一起 —— 再多就會壓到縫 */
+        /* 室外:寫法同室內(名稱自帶「平均」、● 啟用前 → ● 啟用後 單位 差值)。
+           這張卡橫跨 x = 9600 的縫,縫剛好在卡片中間。名稱 + 數值 + 差值放不進縫左邊那段
+           (量過要 2281,只有 1761),差值只能放縫右邊。為了讓差值貼著數值:數值靠右對齊到
+           縫邊(結束在 9552),差值從縫另一側 9648 起,中間只隔電視邊框。名稱仍在最左邊 ——
+           名稱與數值之間留白,跟室內「名稱在縫左、數值在縫右」同一種排法。 */
         <div className="field-compare-head mb-4 flex-none">
-          <div className="flex min-w-0 items-baseline gap-4 whitespace-nowrap">
-            <span className="text-sm text-white/60">{active.label}</span>
-            <span className="text-sm text-white/40">平均</span>
-            <span className="flex items-baseline gap-3">
-              {dot("before")}
-              <span className={beforeCls}>{fmt(before)}</span>
-            </span>
-            <span className="text-sm text-white/35">→</span>
-            <span className="flex items-baseline gap-3">
-              {dot("after")}
-              <span className={afterCls}>{fmt(after)}</span>
+          <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 whitespace-nowrap">
+            {labelBlock}
+            <span className="flex items-baseline gap-2">
+              <span className="flex items-baseline gap-3">
+                {dot("before")}
+                <span className={beforeCls}>{fmt(before)}</span>
+              </span>
+              <span className="text-sm text-white/35">→</span>
+              <span className="flex items-baseline gap-3">
+                {dot("after")}
+                <span className={afterCls}>{fmt(after)}</span>
+              </span>
+              <span className="text-sm text-white/50">{chosen.unit}</span>
             </span>
           </div>
-          <div className="flex min-w-0 items-baseline justify-end gap-6 whitespace-nowrap">
-            {active.delta !== false && <span className="text-sm text-white/50">平均差值</span>}
+          <div className="flex min-w-0 items-baseline whitespace-nowrap">
             {delta && (
-              <span className={`text-base font-semibold ${d! >= 0 ? "text-mint" : "text-danger"}`}>{delta}</span>
+              <span className={`text-sm font-semibold ${d! >= 0 ? "text-mint" : "text-danger"}`}>
+                {delta} {chosen.unit}
+              </span>
             )}
-            <span className="text-sm text-white/50">{chosen.unit}</span>
           </div>
         </div>
       )}
@@ -1093,8 +1083,8 @@ function ThroughputCompare({
         spec={active}
         series={series}
         bare
-        // 室內不標橫軸(理由見 TrendChart 的 xTicks);室外維持 20% 一格(避開 x = 9600 的縫)
-        xTicks={narrow ? null : [0, 20, 40, 60, 80, 100]}
+        // 室內外都不標橫軸(理由見 TrendChart 的 xTicks)
+        xTicks={null}
         scale={chosen.scale}
         unitOverride={chosen.unit}
         digitsOverride={chosen.digits}
