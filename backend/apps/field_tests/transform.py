@@ -99,15 +99,57 @@ def sample(raw: dict, progress: float) -> dict:
         "ulKbps": rate_kbps(ue.get("thp_ul_kbps")),
         # 上游沒有路徑進度,留相對秒數給圖表之後改用時間軸
         "elapsedS": _num(raw.get("t")),
-        # 每一筆都有位置 —— 兩趟的實際軌跡就是這些點連起來(AMR 是 SLAM 公尺座標)
+        # 每一筆都有位置 —— 兩趟的實際軌跡就是這些點連起來。
+        # AMR 是 SLAM 公尺座標(x / y);UAV 是 GPS(lat / lon),原樣交給前端換算。
         "x": _num(ue.get("x")),
         "y": _num(ue.get("y")),
+        "lat": _geo(ue.get("lat"), 90),
+        "lon": _geo(ue.get("lon"), 180),
     }
     return {k: v for k, v in out.items() if v is not None}
 
 
-def vehicle(scenario: str, live: dict, robot: dict | None, localization: dict | None) -> dict:
-    """載具即時狀態。AMR 的速度 / 電量 / 定位品質在 B4、B5,UAV 只有 /live。"""
+def _geo(value: Any, limit: float) -> float | None:
+    """經緯度:超出範圍或剛好 0(GPS 還沒定位時常見的 0,0)都當作沒有。"""
+    n = _num(value)
+    if n is None or n == 0 or abs(n) > limit:
+        return None
+    return n
+
+
+def geo(live: dict) -> dict | None:
+    """UAV 目前的 GPS 位置(/live 的 lat / lon)。缺一個就當沒有。"""
+    lat, lon = _geo(live.get("lat"), 90), _geo(live.get("lon"), 180)
+    return None if lat is None or lon is None else {"lat": lat, "lon": lon}
+
+
+def _battery_from_targets(targets: dict | None) -> float | None:
+    """UAV 的電量在 /targets 的第一個目標。
+
+    文件寫的是 battery(百分比);實測離線時這欄不會出現,所以拿不到就不給。
+    也容忍包成物件({remaining / percent / pct})的寫法。
+    """
+    items = (targets or {}).get("targets") or []
+    if not items or not isinstance(items[0], dict):
+        return None
+    battery = items[0].get("battery")
+    if isinstance(battery, dict):
+        for key in ("remaining", "percent", "pct"):
+            if battery.get(key) is not None:
+                return _num(battery.get(key))
+        return None
+    return _num(battery)
+
+
+def vehicle(
+    scenario: str,
+    live: dict,
+    robot: dict | None,
+    localization: dict | None,
+    targets: dict | None = None,
+) -> dict:
+    """載具即時狀態。AMR 的速度 / 電量 / 定位品質在 B4、B5;UAV 的姿態與速度在 /live,
+    電量在 /targets。衛星數與飛行模式上游沒有提供,不給(畫面顯示「—」)。"""
     out: dict[str, Any] = {}
     if scenario == "indoor":
         # 位置與 yaw 在 /live;速度 / 電量 / 定位品質在 /robot(它慢,可能拿不到)。
@@ -133,6 +175,10 @@ def vehicle(scenario: str, live: dict, robot: dict | None, localization: dict | 
             {
                 "headingDeg": _num(live.get("heading")),
                 "altitudeM": _num(live.get("alt_rel")),
+                # 地速 / 垂直速度:上游 /live 的 gspeed、vspeed(m/s)
+                "speedMps": _num(live.get("gspeed")),
+                "verticalSpeedMps": _num(live.get("vspeed")),
+                "batteryPct": _battery_from_targets(targets),
             }
         )
     return {k: v for k, v in out.items() if v is not None}

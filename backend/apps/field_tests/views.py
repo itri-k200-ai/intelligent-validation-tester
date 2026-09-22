@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from django.conf import settings
 from django.http import StreamingHttpResponse
@@ -38,33 +39,45 @@ class WallReadView(APIView):
     permission_classes = [AllowAny]
 
 
+def _vehicle_extras(scenario: str) -> tuple[dict | None, dict | None]:
+    """/live 以外的載具狀態:AMR 的速度 / 電量 / 定位品質在 /robot,UAV 的電量在 /targets。
+
+    都是附帶的 —— 拿不到就讓那幾格空著,不要連訊號一起沒有。回 (robot, targets)。
+    """
+    robot = targets = None
+    try:
+        if scenario == "indoor":
+            robot = client.get(ctrl_path(scenario, "/robot"))
+        else:
+            targets = client.get(ctrl_path(scenario, "/targets"))
+    except client.PerfTesterError as exc:
+        logger.info("載具狀態(%s)拿不到(%s),只顯示 /live 的部分", scenario, exc.detail)
+    return robot, targets
+
+
 class LiveView(WallReadView):
     """GET /api/field-tests/live/<scenario>/ —— 即時數值(建議 1~2 秒輪詢)。
 
-    AMR 要多打 /robot、/pose、/localization(速度、電量、定位品質不在 /live)。
+    AMR 多打 /robot(速度、電量、定位品質不在 /live);UAV 多打 /targets(電量)。
     """
 
     def get(self, request, scenario: str):
-        """/live 是主角(訊號、位置、yaw 都在裡面);/robot 慢又只有速度電量,
-        拿不到就讓那幾格空著,不要連訊號一起沒有。"""
+        """/live 是主角(訊號、位置、yaw 都在裡面);其餘見 _vehicle_extras。"""
         try:
             live = (client.get(ctrl_path(scenario, "/live")) or {}).get("live") or {}
         except client.PerfTesterError as exc:
             return _error(exc)
 
-        robot = None
-        if scenario == "indoor":
-            try:
-                robot = client.get(ctrl_path(scenario, "/robot"))
-            except client.PerfTesterError as exc:
-                logger.info("robot 拿不到(%s),只顯示 /live 的部分", exc.detail)
+        robot, targets = _vehicle_extras(scenario)
 
         return Response(
             {
                 "ts": live.get("ts"),
                 "link": transform.link(live),
-                "vehicle": transform.vehicle(scenario, live, robot, None),
+                "vehicle": transform.vehicle(scenario, live, robot, None, targets),
                 "position": transform.position(scenario, live, None),
+                # UAV 的即時位置是 GPS,不能放進 position(那是公尺座標),由前端換算
+                "geo": transform.geo(live) if scenario != "indoor" else None,
             }
         )
 
@@ -97,11 +110,10 @@ class MissionView(WallReadView):
 
         # 即時遙測是附帶的:拿不到就只回驗測數據,不要整包失敗
         live: dict = {}
-        robot = None
+        robot = targets = None
         try:
             live = (client.get(ctrl_path(scenario, "/live")) or {}).get("live") or {}
-            if scenario == "indoor":
-                robot = client.get(ctrl_path(scenario, "/robot"))
+            robot, targets = _vehicle_extras(scenario)
         except client.PerfTesterError as exc:
             logger.info("即時遙測拿不到(%s),只回驗測數據", exc.detail)
 
@@ -118,7 +130,7 @@ class MissionView(WallReadView):
                 "phases": status_payload.get("phases") or {},
                 "currentRun": current,
                 "runs": runs,
-                "vehicle": transform.vehicle(scenario, live, robot, None),
+                "vehicle": transform.vehicle(scenario, live, robot, None, targets),
                 "link": transform.link(live),
             }
         )
@@ -143,8 +155,7 @@ def _latest_run_id(plan_id: str | None) -> str | None:
         )
     runs = [r for r in runs if isinstance(r, dict)]
     if plan_id:
-        # 實測平台的歷史 run 沒有 plan_id(只有 meta.environment_id),所以對不到就不過濾
-        runs = [r for r in runs if str(r.get("plan_id") or "") == str(plan_id)] or runs
+        runs = _runs_of_plan(runs, plan_id)
     if not runs:
         return None
     running = [r for r in runs if r.get("status") in {"running", "ready"}]
@@ -161,6 +172,39 @@ def _latest_run_id(plan_id: str | None) -> str | None:
     with_samples = [r for r in newest if r.get("n_samples") is None or r.get("n_samples")]
     pick = (complete or with_samples or newest)[0]
     return pick.get("run_id") or pick.get("id")
+
+
+_PLAN_ENV_TTL_S = 300.0
+_plan_env_cache: dict[str, tuple[float, str | None]] = {}
+
+
+def _plan_env_id(plan_id: str) -> str | None:
+    """方案的環境 ID(spec.env_id)。方案很少改,快取 5 分鐘,不用每次多打一支。"""
+    hit = _plan_env_cache.get(plan_id)
+    if hit and time.monotonic() - hit[0] < _PLAN_ENV_TTL_S:
+        return hit[1]
+    payload = client.get(f"/pipeline-plans/{plan_id}") or {}
+    plan = payload.get("plan") or payload
+    env_id = (plan.get("spec") or {}).get("env_id")
+    _plan_env_cache[plan_id] = (time.monotonic(), env_id)
+    return env_id
+
+
+def _runs_of_plan(runs: list[dict], plan_id: str) -> list[dict]:
+    """只留這個方案的驗測紀錄。
+
+    平台的驗測紀錄實測沒有 plan_id(/ext/validations 與 /validation-runs 都是 None),
+    只有 meta.environment_id;而室內、室外兩個方案的 env_id 不同。所以先照 plan_id 對,
+    對不到再用方案的 env_id 對。兩者都對不到就是「沒有這個情境的紀錄」—— 寧可空著,
+    也不要把另一個情境的資料放上牆(之前就發生過室外牆顯示室內 AMR 的驗測)。
+    """
+    by_plan = [r for r in runs if str(r.get("plan_id") or "") == str(plan_id)]
+    if by_plan:
+        return by_plan
+    env_id = _plan_env_id(plan_id)
+    if not env_id:
+        return []
+    return [r for r in runs if str((r.get("meta") or {}).get("environment_id") or "") == env_id]
 
 
 def _has_both_passes(run: dict) -> bool:
@@ -266,3 +310,68 @@ class TargetsView(WallReadView):
     def get(self, request):
         conf = dict(getattr(settings, "FIELD_TEST_TARGETS", {}) or {})
         return Response({"targets": conf, "base": getattr(settings, "PERF_TESTER_BASE", "")})
+
+
+# ── 室外底圖:平台場景的向量地圖 ─────────────────────────────────────────
+
+_SCENE_TTL_S = 600.0
+_scene_cache: dict[str, tuple[float, dict]] = {}
+
+
+def _scene_id(scenario: str) -> str | None:
+    """情境對應的平台場景。設定有指定 scene_id 就用它;沒有就找「綁在這台載具連線下」
+    的場景(平台的 /scenes 每筆都有 ctrl_conn_id,室外大草皮就綁在無人機那組)。"""
+    conf = target(scenario)
+    if conf.get("scene_id"):
+        return str(conf["scene_id"])
+    payload = client.get("/scenes") or {}
+    scenes = payload.get("scenes") if isinstance(payload, dict) else payload
+    for scene in scenes or []:
+        if isinstance(scene, dict) and str(scene.get("ctrl_conn_id") or "") == str(conf["cid"]):
+            return str(scene.get("id"))
+    return None
+
+
+class SceneView(WallReadView):
+    """GET /api/field-tests/scene/<scenario>/ —— 室外路線圖的底圖(向量地圖)。
+
+    代理平台的 /scenes/{id}/geometry:建築輪廓、道路、綠地(公尺座標)加上
+    center_lonlat(經緯度原點)。前端用同一個原點把 GPS 換成公尺,軌跡才疊得上。
+    場景幾乎不會變,快取 10 分鐘。
+    """
+
+    def get(self, request, scenario: str):
+        try:
+            scene_id = _scene_id(scenario)
+            if not scene_id:
+                return Response({"detail": "這個情境在平台上沒有對應的場景"}, status=404)
+            hit = _scene_cache.get(scene_id)
+            if hit and time.monotonic() - hit[0] < _SCENE_TTL_S:
+                return Response(hit[1])
+            geometry = client.get(f"/scenes/{scene_id}/geometry") or {}
+        except client.PerfTesterError as exc:
+            return _error(exc)
+
+        center = geometry.get("center_lonlat") or []
+        body = {
+            "sceneId": scene_id,
+            # 平台給的是 [lon, lat];轉成具名欄位,前端不必記順序
+            "center": (
+                {"lon": center[0], "lat": center[1]}
+                if isinstance(center, list) and len(center) == 2
+                else None
+            ),
+            "bounds": geometry.get("bounds_m"),
+            # 建築帶高度(公尺),3D 地圖依它立起來
+            "buildings": [
+                {"footprint": b.get("footprint"), "height": b.get("height")}
+                for b in geometry.get("buildings") or []
+                if b.get("footprint")
+            ],
+            "roads": [r.get("line") for r in geometry.get("roads") or [] if r.get("line")],
+            "greens": [
+                g.get("footprint") for g in geometry.get("greens") or [] if g.get("footprint")
+            ],
+        }
+        _scene_cache[scene_id] = (time.monotonic(), body)
+        return Response(body)

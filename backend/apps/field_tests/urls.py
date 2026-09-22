@@ -9,6 +9,7 @@ from .views import (
     PlanListView,
     RunAbortView,
     RunCreateView,
+    SceneView,
     TargetsView,
 )
 
@@ -21,6 +22,7 @@ urlpatterns = [
         "field-tests/runs/<str:run_id>/abort/", RunAbortView.as_view(), name="field-test-run-abort"
     ),
     path("field-tests/live/<str:scenario>/", LiveView.as_view(), name="field-test-live"),
+    path("field-tests/scene/<str:scenario>/", SceneView.as_view(), name="field-test-scene"),
     path("field-tests/missions/<str:scenario>/", MissionView.as_view(), name="field-test-mission"),
     path(
         "field-tests/camera/<str:scenario>/", CameraStatusView.as_view(), name="field-test-camera"
