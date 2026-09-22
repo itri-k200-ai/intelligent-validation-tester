@@ -37,6 +37,8 @@ type LivePayload = {
   link: LinkQuality | null;
   vehicle: FieldVehicleStatus;
   position: { x: number; y: number } | null;
+  /** UAV 目前的 GPS(室內為 null) */
+  geo?: { lat: number; lon: number } | null;
 };
 
 /** 走到第幾個路徑點 —— 上游只回座標,路徑幾何在前端,所以這裡算 */

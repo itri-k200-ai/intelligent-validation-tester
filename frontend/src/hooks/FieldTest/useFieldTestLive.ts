@@ -10,6 +10,8 @@ export type FieldLive = {
   link: LinkQuality | null;
   vehicle: FieldVehicleStatus;
   position: { x: number; y: number } | null;
+  /** UAV 目前的 GPS(室內為 null);地圖用前要換成公尺座標,見 lib/geoProjection */
+  geo?: { lat: number; lon: number } | null;
 };
 
 /**

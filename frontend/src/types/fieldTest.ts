@@ -65,6 +65,9 @@ export type FieldSample = {
   /** 取樣當下的位置(AMR 為 SLAM 公尺座標)—— 兩趟的實際軌跡 */
   x?: number | null;
   y?: number | null;
+  /** UAV 取樣當下的 GPS(度);畫軌跡前由前端換成 x / y(見 lib/geoProjection) */
+  lat?: number | null;
+  lon?: number | null;
 };
 
 export type FieldRun = {

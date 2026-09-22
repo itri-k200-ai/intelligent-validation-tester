@@ -1,6 +1,6 @@
 "use client";
 import { Bot, Plane, Route, Signal, type LucideIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   CartesianGrid,
   Line,
@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { SceneMap3D } from "@/components/FieldTest/SceneMap3D";
 import { LiveVideo } from "@/components/Site/LiveVideo";
 import type { FieldBackdrop, FloorPlan, FloorRect } from "@/config/floorPlans";
 import {
@@ -23,8 +24,10 @@ import {
 import { useFieldTestCamera } from "@/hooks/FieldTest/useFieldTestCamera";
 import { useFieldTestLive, type FieldLive } from "@/hooks/FieldTest/useFieldTestLive";
 import { useFieldTestMission } from "@/hooks/FieldTest/useFieldTestMission";
+import { useFieldTestScene } from "@/hooks/FieldTest/useFieldTestScene";
 import { cameraSources } from "@/lib/fieldCameras";
 import { formatRate, pickRateUnit } from "@/lib/formatRate";
+import { firstGeo, makeGeoProjector, projectMission } from "@/lib/geoProjection";
 import type {
   FieldMission,
   FieldRun,
@@ -68,7 +71,9 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
   // 只有值是「—」。牆是無人看顧的,空白畫面看起來像壞了。
   // 車載影像要先確認上游在推流、名額沒滿才掛上去(最後一格是載具車載)
   const { streamUrl } = useFieldTestCamera(scenario);
-  const base = mission ?? emptyMission(sc, scenario);
+  // 骨架要固定同一個物件:平台斷線時(很常見)每次 render 都生新的,會讓 3D 地圖不停重畫
+  const empty = useMemo(() => emptyMission(sc, scenario), [sc, scenario]);
+  const base = mission ?? empty;
   const data: FieldMission = {
     ...base,
     cameras: base.cameras.map((src, i) => (i === base.cameras.length - 1 ? (streamUrl ?? src) : src)),
@@ -118,6 +123,37 @@ function LiveResultsLayout({
   const run = mission.runs[mission.currentRun];
   const allRuns = mission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
   const upTo = sharedProgress(mission.runs);
+  // 底圖:平台場景的向量地圖(建築 / 道路 / 綠地,公尺座標)
+  const { scene } = useFieldTestScene(scenario);
+  // UAV 的位置是 GPS,要換成公尺座標才能畫。原點優先用場景的 center —— 跟底圖同一個
+  // 原點,軌跡才疊得上;還沒拿到場景就用第一趟第一個 GPS 點(再沒有就用目前位置)
+  const origin = scene?.center ?? firstGeo(mission) ?? live?.geo ?? null;
+  const project = origin ? makeGeoProjector(origin) : null;
+  const mapMission = project ? projectMission(mission, project) : mission;
+  const livePos = project && live?.geo ? project(live.geo) : null;
+  // 3D 地圖的軌跡:只在驗測資料或原點變了才重算。react-query 在資料沒變時會沿用
+  // 同一個物件,所以每秒的即時輪詢不會讓 3D 軌跡跟著重建
+  const sceneTracks = useMemo(
+    () =>
+      mapMission.runs.map((r) => ({
+        key: r.phase,
+        color: PHASE[r.phase].color,
+        points: r.samples.flatMap((s) =>
+          typeof s.x === "number" && typeof s.y === "number" ? [{ x: s.x, y: s.y }] : [],
+        ),
+      })),
+    // 依據只能是 runs 與原點:mission 本身每次 render 都是新物件(外層會補上攝影機位址),
+    // 拿它當依據等於每秒都重建 3D 軌跡、每秒重畫一次 —— 量過一個分頁會吃掉 2 顆核心
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mission.runs, origin?.lat, origin?.lon],
+  );
+  const uavX = livePos?.x;
+  const uavY = livePos?.y;
+  const uavAlt = live?.vehicle.altitudeM ?? null;
+  const sceneUav = useMemo(
+    () => (uavX !== undefined && uavY !== undefined ? { x: uavX, y: uavY, altM: uavAlt } : null),
+    [uavX, uavY, uavAlt],
+  );
 
   return (
     <div className="field-wall">
@@ -156,7 +192,13 @@ function LiveResultsLayout({
         <div className="field-status-body field-status-body--results">
           <Sub icon={Route} title={sc.routeTitle}>
             <MissionProgress mission={mission} single />
-            <RouteMap mission={mission} livePosition={live?.position ?? null} />
+            {/* 有場景就畫 3D(建築依高度立起來、無人機放在實際高度);
+                拿不到場景時退回 2D,只畫 GPS 軌跡 */}
+            {scene ? (
+              <SceneMap3D scene={scene} tracks={sceneTracks} uav={sceneUav} />
+            ) : (
+              <RouteMap mission={mapMission} livePosition={livePos} realFrame={!!project} />
+            )}
           </Sub>
 
           {/* 室外情境要呈現的是:在具備干擾的環境中,UAV 移動時傳輸穩不穩定。
@@ -480,13 +522,25 @@ function RouteMap({
   floorPlan,
   backdrop,
   livePosition,
+  realFrame = false,
 }: {
   mission: FieldMission;
   floorPlan?: FloorPlan;
   backdrop?: FieldBackdrop;
   /** 即時位置(來自 /live);沒有就用目前那趟的最後位置 */
   livePosition?: { x: number; y: number } | null;
+  /**
+   * 軌跡與位置是真實座標(室外由 GPS 換算)—— 沒有底圖也照樣畫取樣軌跡,並且不畫
+   * 寫死的示意航線:兩者座標系不同,混在一起會讓人以為照著那條線飛。
+   */
+  realFrame?: boolean;
 }) {
+  // 用取樣軌跡(真實座標)還是示意航線 + 路徑點
+  const real = !!backdrop || realFrame;
+  // 規劃路線只在「畫在向量平面圖上」時才畫 —— 那時的路徑點是照實際樓層描的。
+  // 室外的路徑點(config 的 UAV_ROUTE)只是早期的版面示意,跟 GPS 對不上,等於假資料,
+  // 所以沒有位置資料時地圖寧可空著,也不畫它。
+  const planned = !real && !!floorPlan;
   const { route, runs, vehicle } = mission;
   const live = livePosition ?? runs[mission.currentRun]?.position ?? null;
   const pts = (list: { x: number; y: number }[]) => list.map((p) => `${p.x},${-p.y}`).join(" ");
@@ -519,6 +573,19 @@ function RouteMap({
     minY = -y1;
     spanX = Math.max(x1 - x0, 1);
     spanY = Math.max(y1 - y0, 1);
+  } else if (realFrame) {
+    // 沒有底圖的真實座標(室外 GPS、場景還沒拿到):框住「軌跡 + 目前位置」並留邊。
+    // 範圍至少 40 m —— 只有一個點時才不會放大到什麼都看不出來
+    const xs = focus.length ? focus.map((p) => p.x) : [0];
+    const ys = focus.length ? focus.map((p) => p.y) : [0];
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    const half = Math.max(20, ((x1 - x0) / 2) * 1.1, ((y1 - y0) / 2) * 1.1);
+    const cx = (x0 + x1) / 2;
+    const cy = (y0 + y1) / 2;
+    minX = cx - half;
+    minY = -(cy + half);
+    spanX = half * 2;
+    spanY = half * 2;
   } else {
     const extent = view
       ? [
@@ -536,7 +603,7 @@ function RouteMap({
   // u = 一個視覺單位:線寬、點大小都乘它,範圍不管幾公尺比例都一致
   const u = Math.max(spanX, spanY) / 300 || 1;
   // view / backdrop 已經框好範圍,留一點點邊就好;室外沒有底圖,路線要留寬一點
-  const pad = (view || backdrop ? 3 : 20) * u;
+  const pad = (view || real ? 3 : 20) * u;
   const start = route[0];
 
   return (
@@ -560,7 +627,7 @@ function RouteMap({
           />
         )}
         {!backdrop && floorPlan && <FloorPlanLayer plan={floorPlan} u={u} />}
-        {!backdrop && (
+        {planned && (
           <polyline
             points={pts(route)}
             fill="none"
@@ -571,7 +638,7 @@ function RouteMap({
           />
         )}
         {/* 先畫啟用前、再畫啟用後,重疊的路段以啟用後為準 */}
-        {backdrop
+        {real
           ? tracks.map((t) =>
               t.points.length > 1 ? (
                 <polyline
@@ -585,7 +652,8 @@ function RouteMap({
                 />
               ) : null,
             )
-          : runs.map((r) =>
+          : planned &&
+            runs.map((r) =>
               r.reachedWaypoints > 0 ? (
                 <polyline
                   key={r.phase}
@@ -606,7 +674,7 @@ function RouteMap({
               <circle r={2 * u} fill={RADIO_RING} />
             </g>
           ))}
-        {!backdrop && start && (
+        {planned && start && (
           <circle cx={start.x} cy={-start.y} r={6 * u} fill="#4C8DFF" stroke="#0A172F" strokeWidth={1.5 * u} />
         )}
         {live && (
