@@ -69,6 +69,12 @@ const EQUIPMENT: DutItem[] = [
     icon: "/images/dut/amr.png",
   },
   {
+    // 室內 / 室外都用它當 5G UE(見「測試方法」);廠商放前面,同基站
+    name: "手機",
+    items: "三星 Samsung · Galaxy S24 —— 5G UE",
+    icon: "/images/dut/ue.png",
+  },
+  {
     name: "基站",
     // 廠商放前面 —— 牆上遠看先辨識是誰的設備,再看型號
     items: "和碩 Pegatron · 室外型 RU_PR2400-79EA",
@@ -164,8 +170,8 @@ export function RightWingEquip() {
   return (
     <div className="war-room-slot">
       <div className="war-room-slot-title">測試設備</div>
-      {/* --lg:只有 3 項,icon 放大讓版面不空 */}
-      <div className="war-room-cat-list war-room-cat-list--fill war-room-cat-list--lg">
+      {/* 4 項,排法同隔壁「待測物」(也是 4 項),兩格的列高才對得齊 */}
+      <div className="war-room-cat-list war-room-cat-list--fill war-room-cat-list--tight">
         {EQUIPMENT.map((e) => (
           <CatItem key={e.name} item={e} />
         ))}

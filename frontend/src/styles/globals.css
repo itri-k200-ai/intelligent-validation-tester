@@ -2054,16 +2054,11 @@ html.wall-mode .war-room-cat-list--fill {
   justify-content: center;
   gap: 2rem;
 }
-/* 待測物:合併 xApp / rApp 後只剩 4 項,間距放開、icon 一併放大 */
+/* 4 項的格子(待測物、測試設備):間距放開、icon 一併放大 */
 html.wall-mode .war-room-cat-list--tight {
   gap: 2.5rem;
 }
 html.wall-mode .war-room-cat-list--tight .war-room-cat-icon {
-  width: calc(72px * var(--wall));
-  height: calc(72px * var(--wall));
-}
-/* 測試設備:只有 3 項,icon 放大讓版面不空 */
-html.wall-mode .war-room-cat-list--lg .war-room-cat-icon {
   width: calc(72px * var(--wall));
   height: calc(72px * var(--wall));
 }
