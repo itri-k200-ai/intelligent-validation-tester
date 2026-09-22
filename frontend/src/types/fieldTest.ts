@@ -107,9 +107,27 @@ export type FieldVehicleStatus = {
   charging?: boolean;
 };
 
+/**
+ * 整個驗測流程的進度(方案的步驟:階段標記、載具移動、安裝 / 啟動 xApp、等待、比較…)。
+ * 測試進度條用這個,不用行駛進度 —— 要看的是「整個驗測走到哪」。
+ */
+export type FieldProcess = {
+  /** 方案共幾步(室內 12、室外 10) */
+  total: number;
+  /** 已完成幾步 */
+  done: number;
+  /** 現在在第幾步(0 起算);跑完是 null */
+  current: number | null;
+  /** 現在這一步在做什麼(例:安裝 xApp);跑完是「已完成」,失敗會帶「失敗」 */
+  label: string;
+  failed: boolean;
+};
+
 export type FieldMission = {
   /** 外部平台的 run_id(mock 沒有) */
   runId?: string;
+  /** 整個驗測流程的進度;平台查不到步驟時為 null */
+  process?: FieldProcess | null;
   /** 增量拉樣本用:下次帶回 since_seq */
   nextSeq?: number;
   testcase: FieldTestcase;

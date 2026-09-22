@@ -762,17 +762,20 @@ function MissionProgress({ mission, single = false }: { mission: FieldMission; s
   const pct = (r: FieldRun) => Math.round(Math.min(Math.max(r.progress, 0), 100));
 
   if (single) {
+    // 整個驗測流程的進度(已完成的步驟 ÷ 方案總步數),不是行駛進度
+    const p = mission.process;
+    const percent = p && p.total ? Math.round((p.done / p.total) * 100) : null;
     return (
       <div className="field-map-head">
         <span className="flex-none text-sm text-white/60">測試進度</span>
         {/* 固定寬度 + 等寬數字:從 5% 跑到 100% 時,後面的條子才不會跟著左右跳 */}
         <span className="field-progress-pct flex-none text-[2.75rem] font-semibold leading-[1.1] text-white">
-          {pct(run)}%
+          {percent === null ? "—" : `${percent}%`}
         </span>
         <div className="field-progress-track field-progress-track--single">
           {/* 規範 09:軌道 rgba(255,255,255,0.15) */}
           <div className="field-progress-seg">
-            <div className="field-progress-fill" style={{ width: `${pct(run)}%`, background: PROGRESS_COLOR }} />
+            <div className="field-progress-fill" style={{ width: `${percent ?? 0}%`, background: PROGRESS_COLOR }} />
           </div>
         </div>
       </div>

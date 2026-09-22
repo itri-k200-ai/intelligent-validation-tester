@@ -156,6 +156,8 @@ const MISSIONS: Record<FieldScenarioId, FieldMission> = {
     testcase: FIELD_SCENARIOS.outdoor.testcase,
     route: FIELD_SCENARIOS.outdoor.route,
     currentRun: 1,
+    // 開發用:第二趟正在跑(方案第 9 步)
+    process: { total: 12, done: 8, current: 8, label: "沿測試路線移動", failed: false },
     vehicle: {
       headingDeg: 315,
       altitudeM: 30.2,
@@ -173,6 +175,8 @@ const MISSIONS: Record<FieldScenarioId, FieldMission> = {
     testcase: FIELD_SCENARIOS.indoor.testcase,
     route: FIELD_SCENARIOS.indoor.route,
     currentRun: 1,
+    // 開發用:第二趟正在跑(方案第 9 步)
+    process: { total: 12, done: 8, current: 8, label: "沿測試路線移動", failed: false },
     vehicle: {
       headingDeg: 0, // 地圖箭頭:0 = 朝北
       yawDeg: 90, // SLAM yaw:90 = 朝北(顯示用,與上游同一種表示法)

@@ -132,6 +132,12 @@ class MissionView(WallReadView):
                 "runs": runs,
                 "vehicle": transform.vehicle(scenario, live, robot, None, targets),
                 "link": transform.link(live),
+                # 整個驗測流程走到第幾步(進度條用這個,不用行駛進度)
+                "process": _process(
+                    run_id,
+                    status_payload,
+                    conf.get("plan_id") if not request.query_params.get("run_id") else None,
+                ),
             }
         )
 
@@ -178,16 +184,82 @@ _PLAN_ENV_TTL_S = 300.0
 _plan_env_cache: dict[str, tuple[float, str | None]] = {}
 
 
-def _plan_env_id(plan_id: str) -> str | None:
-    """方案的環境 ID(spec.env_id)。方案很少改,快取 5 分鐘,不用每次多打一支。"""
+def _plan_spec(plan_id: str) -> dict:
+    """方案的 spec(環境 ID、步驟清單)。方案很少改,快取 5 分鐘,不用每次多打一支。"""
     hit = _plan_env_cache.get(plan_id)
     if hit and time.monotonic() - hit[0] < _PLAN_ENV_TTL_S:
         return hit[1]
     payload = client.get(f"/pipeline-plans/{plan_id}") or {}
     plan = payload.get("plan") or payload
-    env_id = (plan.get("spec") or {}).get("env_id")
-    _plan_env_cache[plan_id] = (time.monotonic(), env_id)
-    return env_id
+    spec = plan.get("spec") or {}
+    _plan_env_cache[plan_id] = (time.monotonic(), spec)
+    return spec
+
+
+def _plan_env_id(plan_id: str) -> str | None:
+    """方案的環境 ID(spec.env_id)。"""
+    return _plan_spec(plan_id).get("env_id")
+
+
+# 已結束的驗測不會再變:算過的流程進度直接沿用,不必每秒重打平台
+_process_cache: dict[str, dict] = {}
+
+
+def _process(run_id: str, status_payload: dict, plan_id: str | None) -> dict | None:
+    """整個驗測流程的進度(共幾步、完成幾步、現在在哪一步)。
+
+    來源依序:
+    1. /pipelines/{rid}:執行中的 pipeline,有游標(平台文件:「前端輪詢 GET /pipelines/{rid}
+       看該步完成」)。⚠ 執行中的實際格式還沒實測過,欄位名稱是照文件寬鬆地猜。
+    2. /validation-runs/{rid}:steps + results 一對一(實測格式,跑完一定有)。
+    3. 都拿不到:方案的步驟清單 + 目前階段(優化前 / 優化後)推一個大概位置。
+    都是附帶資訊,任何一步失敗都不影響整包回應。
+    """
+    status = str(status_payload.get("status") or "")
+    if run_id in _process_cache:
+        return _process_cache[run_id]
+    finished = status in {"done", "error", "aborted"}
+
+    if not finished:
+        try:
+            pipe = client.get(f"/pipelines/{run_id}") or {}
+            pipe = pipe.get("run") or pipe.get("pipeline") or pipe
+            steps = pipe.get("steps") or []
+            if steps:
+                cursor = pipe.get("cursor")
+                return transform.process(
+                    steps,
+                    pipe.get("results") or [],
+                    status,
+                    cursor if isinstance(cursor, int) else None,
+                )
+        except client.PerfTesterError:
+            pass
+
+    try:
+        rec = client.get(f"/validation-runs/{run_id}") or {}
+        if rec.get("steps"):
+            result = transform.process(rec["steps"], rec.get("results") or [], status)
+            if finished:
+                _process_cache[run_id] = result
+            return result
+    except client.PerfTesterError:
+        pass
+
+    # 退而求其次:方案步驟 + 目前階段 —— 只知道走到哪個階段標記
+    if not plan_id:
+        return None
+    try:
+        steps = _plan_spec(plan_id).get("steps") or []
+    except client.PerfTesterError:
+        return None
+    phase = status_payload.get("phase")
+    marker = next(
+        (i for i, s in enumerate(steps) if s.get("type") == "phase" and s.get("name") == phase),
+        None,
+    )
+    fake_results = [{"ok": True}] * ((marker + 1) if marker is not None else 0)
+    return transform.process(steps, fake_results, status)
 
 
 def _runs_of_plan(runs: list[dict], plan_id: str) -> list[dict]:

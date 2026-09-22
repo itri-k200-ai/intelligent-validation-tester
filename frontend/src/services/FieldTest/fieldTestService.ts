@@ -1,6 +1,7 @@
 import { FIELD_SCENARIOS } from "@/config/fieldScenarios";
 import type {
   FieldMission,
+  FieldProcess,
   FieldRun,
   FieldScenarioId,
   FieldVehicleStatus,
@@ -23,6 +24,7 @@ import { apiClient } from "../api/client";
 
 type MissionPayload = {
   runId?: string;
+  process?: FieldProcess | null;
   status?: string;
   nextSeq?: number;
   phases?: Record<string, number>;
@@ -80,6 +82,7 @@ export const fieldTestService = {
 
     return {
       runId: data.runId,
+      process: data.process ?? null,
       nextSeq: data.nextSeq,
       testcase: sc.testcase,
       route: sc.route,

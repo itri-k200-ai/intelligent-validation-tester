@@ -238,3 +238,74 @@ def build_runs(status: dict, samples: Iterable[dict]) -> list[dict]:
             }
         )
     return runs
+
+
+# ── 驗測流程進度(整個方案走到第幾步)──────────────────────────────────
+
+_XAPP_ACTION = {
+    "install": "安裝 xApp",
+    "start": "啟動 xApp",
+    "stop": "停止 xApp",
+    "uninstall": "解除安裝 xApp",
+}
+
+
+def step_label(step: dict) -> str:
+    """方案的一個步驟 → 牆上顯示的短名稱(一行放得下,不寫腳本代號)。"""
+    kind = step.get("type")
+    if kind == "phase":
+        return f"階段:{step.get('name') or ''}".rstrip(":")
+    if kind == "ue_control":
+        # collect=false 的是「移到起點」這類就位動作;其餘是沿測試路線移動、同時收資料
+        return "移動到起點" if step.get("collect") is False else "沿測試路線移動"
+    if kind == "xapp_action":
+        action = str(step.get("action") or "")
+        return _XAPP_ACTION.get(action, f"xApp {action}".strip())
+    if kind == "wait":
+        seconds = _num(step.get("seconds"))
+        return f"等待 {seconds:g} 秒" if seconds is not None else "等待"
+    if kind == "compare":
+        return "前後比較"
+    return str(step.get("label") or kind or "步驟")
+
+
+def _step_failed(result: dict) -> bool:
+    done = result.get("done") or {}
+    return result.get("ok") is False or bool(result.get("error")) or done.get("state") == "failed"
+
+
+def _step_running(result: dict) -> bool:
+    return (result.get("done") or {}).get("state") in {"running", "pending"}
+
+
+def process(steps: list[dict], results: list[dict], status: str, cursor: int | None = None) -> dict:
+    """整個驗測流程的進度:共幾步、完成幾步、現在在哪一步。
+
+    steps 與 results 是一對一、照順序對應的(實測 /validation-runs:12 步對 12 筆)。
+    cursor 是執行中 pipeline 的游標(目前在跑 steps[cursor]),有就以它為準。
+    """
+    total = len(steps)
+    failed_at = next((i for i, r in enumerate(results) if _step_failed(r)), None)
+    if status in {"done"} and failed_at is None:
+        return {"total": total, "done": total, "current": None, "label": "已完成", "failed": False}
+    if failed_at is not None or status in {"error", "aborted"}:
+        at = failed_at if failed_at is not None else min(len(results), max(total - 1, 0))
+        name = step_label(steps[at]) if 0 <= at < total else ""
+        word = "已中止" if status == "aborted" else "失敗"
+        return {
+            "total": total,
+            "done": at,
+            "current": at,
+            "label": f"{name}{word}".strip(),
+            "failed": True,
+        }
+
+    if cursor is not None:
+        current = cursor
+    elif results and _step_running(results[-1]):
+        current = len(results) - 1
+    else:
+        current = len(results)
+    current = max(0, min(current, total - 1)) if total else 0
+    label = step_label(steps[current]) if total else ""
+    return {"total": total, "done": current, "current": current, "label": label, "failed": False}
