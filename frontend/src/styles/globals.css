@@ -2808,7 +2808,7 @@ html.wall-mode .field-split {
    中牆 topbar 是固定高 169px × 3 = 507:標題(168)+ 專案列(約 106)之後只剩
    約 100px,所以這一列連間距壓在 96px 以內,main 的內容區才不會被推離 y = 579。 */
 /* 情境切換(室內 / 室外)—— 規格:放在標題旁、icon 46×46、字 24px。
-   icon 未提供,.field-scenario-icon 先佔住 46×46 的位置。 */
+   icon 是別團隊提供的 SVG(見 FieldScenarioSwitch),線色 currentColor 跟著字色。 */
 .field-scenario-switch {
   display: flex;
   align-items: center;
@@ -2825,9 +2825,8 @@ html.wall-mode .field-split {
   color: rgba(255, 255, 255, 0.75);
 }
 .field-scenario-icon {
-  display: inline-block;
+  display: block;
   flex: none;
-  /* 佔位:之後把 icon 放進這個 span,尺寸不用再改 */
   width: 1.15em;
   height: 1.15em;
 }
