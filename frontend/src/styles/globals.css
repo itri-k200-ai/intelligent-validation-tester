@@ -2596,36 +2596,43 @@ html.wall-mode .field-card-head {
   display: flex;
   flex-direction: column;
 }
-/* 標題靠左(規劃圖也是靠左;右卡正中間剛好是拼接縫)。
+/* 標題置中在自己那張大卡的上方(依前端回饋)。
    字重 400:大卡標題(即時狀態 / 測試狀態總覽)依前端回饋不要粗體。
    只縮限在 .field-wall 之內 —— RIC 測試牆的 band 標題仍維持 700。 */
 html.wall-mode .field-wall .dut-wall-band-title {
   margin-bottom: 0;
   line-height: 1.25;
-  text-align: left;
+  text-align: center;
   font-weight: 400;
 }
-/* 右卡標題列四段(右卡內距起算 x = 3984):1728 / 1824 / 1824 / 1632,間距跨 x = 5760 / 7680 / 9600 */
-html.wall-mode .field-head-row {
+/* 室外兩張卡的正中央都緊鄰拼接縫(左卡中心 1968 vs 縫 1920、右卡中心 7632 vs 縫 7680),
+   置中之後縫會從字的中間穿過。各自平移一點點,讓縫剛好落在字與字之間:
+     即時狀態     1667~2271(每字 151)→ 左移 49,縫 1920 落在「時|狀」之間
+     測試狀態總覽 7179~8087        → 右移 47,縫 7680 落在「狀|態」之間
+   (平移不影響版面;字級或字體換了要重算) */
+html.wall-mode .field-wall:not(.field-wall--half) > section:nth-of-type(1) .dut-wall-band-title {
+  transform: translateX(-49px);
+}
+html.wall-mode .field-wall:not(.field-wall--half) > section:nth-of-type(2) .dut-wall-band-title {
+  transform: translateX(47px);
+}
+/* 測試環境 / 測試項目:各自對齊下面那張小卡的左緣(欄寬與 .field-status-body 相同),
+   文字貼在小卡標題列上方 48 處。卡頭固定 342 高(519~861),下面的小卡才照舊從 885 起 */
+html.wall-mode .field-wall .field-card-head--meta {
+  height: 342px;
+}
+html.wall-mode .field-meta-row {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: 1728px 1824px 1824px 1632px;
+  grid-template-columns: 3648px 3552px;
   column-gap: var(--fw-gap);
-  align-items: center;
+  align-items: end;
+  padding-bottom: 24px;
 }
-/* 室內右卡從 x = 5808 起。欄寬改成對齊下面兩張小卡的右緣(前端要求):
-     標題        5808 → 7056   (1248)
-     測試環境    7152 → 8976   (1824)  右界 = AMR 測試路徑卡右緣 8976
-     測試項目    9072 → 11280  (2208)  右界 = IM xApp 卡右緣 11280,寬度也同卡寬
-   1248 + 96 + 1824 = 3168 = 路徑卡寬,所以兩欄合起來正好蓋住那張卡。 */
-html.wall-mode .field-wall--half .field-head-row {
-  grid-template-columns: 1248px 1824px 2208px;
+html.wall-mode .field-wall--half .field-meta-row {
+  grid-template-columns: 3168px 2208px;
 }
-/* 兩欄都靠右 —— 文字結尾各自貼齊下面那張卡的右緣 */
-html.wall-mode .field-wall--half .field-head-row > span:nth-of-type(1),
-html.wall-mode .field-wall--half .field-head-row > span:nth-of-type(2) {
-  justify-content: flex-end;
-}
-
 /* 左卡(室外):標題 / 影像 / 即時小卡。
    即時小卡的標題列要在 y = 2160 之上、內容從 y = 2208 起,所以高度由下往上算:
    卡身下半段 + 卡距 + 標題列 + 12px 餘裕 → 頂在 y ≈ 1905 */
@@ -2818,8 +2825,6 @@ html.wall-mode .field-sub-body {
 html.wall-mode .field-status-body {
   min-height: 0;
   display: grid;
-  /* 卡身頂在 724,小卡標題列要從 885 起(底 1080 貼第 1 排電視的下框線) */
-  padding-top: 161px;
   grid-template-columns: 3168px 2208px;
   column-gap: var(--fw-gap);
 }

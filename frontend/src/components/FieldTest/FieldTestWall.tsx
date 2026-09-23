@@ -181,7 +181,7 @@ function LiveResultsLayout({
 
       {/* ── 右:測試狀態總覽(路徑與進度不是「結果」,比較圖也要跑完才算結果,所以不叫測試結果)── */}
       <section className="dut-wall-band field-card">
-        <div className="field-card-head">
+        <div className="field-card-head field-card-head--meta">
           {/* 不放「啟用前 / 啟用後」圖例 —— 跟室內一致(依版面規劃圖) */}
           <HeadRow title="測試狀態總覽" mission={mission} />
         </div>
@@ -263,7 +263,7 @@ function CameraGridLayout({
 
       {/* ── 右:測試狀態總覽 ── */}
       <section className="dut-wall-band field-card">
-        <div className="field-card-head">
+        <div className="field-card-head field-card-head--meta">
           <HeadRow title="測試狀態總覽" mission={mission} />
         </div>
 
@@ -305,21 +305,25 @@ function CameraGridLayout({
  * 右卡標題列:標題 | 測試環境 | 測試項目 | right(可省),各占一台電視寬(間距跨拼接縫)。
  * 測試項目放在同一行,底下的小卡才能往上長。
  */
-function HeadRow({ title, mission, right }: { title: string; mission: FieldMission; right?: ReactNode }) {
+/**
+ * 大卡標題(置中)+ 下面一列測試資訊:測試環境對齊路徑小卡、測試項目對齊測試數據小卡,
+ * 兩者都靠左 —— 欄寬與下面的小卡一致(見 globals.css .field-meta-row)。
+ */
+function HeadRow({ title, mission }: { title: string; mission: FieldMission }) {
   return (
-    <div className="field-head-row">
+    <>
       <div className="dut-wall-band-title">{title}</div>
-      {/* 測試環境靠右 —— 這一欄的右界就是路徑小卡的右緣,貼齊才不會看起來飄在中間 */}
-      <span className="flex min-w-0 items-baseline justify-end gap-6">
-        <span className="flex-none text-sm text-white/55">測試環境</span>
-        <span className="min-w-0 truncate text-base">{mission.testcase.environment}</span>
-      </span>
-      <span className="flex min-w-0 items-baseline gap-6">
-        <span className="flex-none text-sm text-white/55">測試項目</span>
-        <span className="min-w-0 truncate text-base font-semibold">{mission.testcase.name}</span>
-      </span>
-      {right}
-    </div>
+      <div className="field-meta-row">
+        <span className="flex min-w-0 items-baseline gap-6">
+          <span className="flex-none text-sm text-white/55">測試環境</span>
+          <span className="min-w-0 truncate text-base">{mission.testcase.environment}</span>
+        </span>
+        <span className="flex min-w-0 items-baseline gap-6">
+          <span className="flex-none text-sm text-white/55">測試項目</span>
+          <span className="min-w-0 truncate text-base font-semibold">{mission.testcase.name}</span>
+        </span>
+      </div>
+    </>
   );
 }
 
