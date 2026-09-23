@@ -2628,33 +2628,34 @@ html.wall-mode .field-wall--half .field-head-row > span:nth-of-type(2) {
 /* 「即時狀態」卡往下延伸:影像要整個放進第 3 排電視(y 2208~3126),卡身底部得到 3126。
    只延伸這張卡,右邊「測試狀態總覽」不動(它的上下兩張圖是照 y = 2160 的縫排的)。
    卡片底緣到 3150,離畫面底部還有 90。 */
+/* 主牆內容區到 y = 3048 就裁掉(.war-room-main-content 的 overflow: hidden,
+   下面 192 是 main 的底內距)。即時狀態卡要往下多用掉那塊,得先把裁切關掉,
+   不然影像會被切一截 —— 只對場域測試牆放行,其他牆維持原本的裁切。 */
+html.wall-mode .war-room-main-content:has(> .field-wall) {
+  overflow: visible;
+}
 html.wall-mode .field-card--live {
-  /* 框底到 3216(離畫面底 24),讓下排影像下面不會顯得被切掉;卡身底 3192 */
+  /* 框底到 3216(離畫面底 24),讓下排影像可以完整顯示;卡身底 3192 */
   margin-bottom: -168px;
   padding-bottom: 24px;
 }
-/* 室內的下排影像底在 2997(每格多了一條標題列),框底跟著收到 3069 —— 影像下方留 48,
-   與右邊「測試狀態總覽」的框底(3048)幾乎齊平 */
-html.wall-mode .field-wall--half .field-card--live {
-  margin-bottom: -21px;
-}
 /* 室外:即時數值在上、影像在下。
-   列高由電視的分界反推:小卡標題列 837~1032(第 1 排電視內,離縫 48),數值從 1140 起
-   (第 2 排);影像 2208~3126(第 3 排,離縫 48)。中間空出來的是縫的位置。 */
+   列高由電視的分界反推:小卡 885~2112(標題列 885~1080 貼第 1 排電視的下框線、
+   數值 1128 起在第 2 排);影像卡 2208~3192 整張在第 3 排電視內(離縫 48)。 */
 html.wall-mode .field-card--video {
-  grid-template-rows: auto 1040px 1386px;
+  grid-template-rows: auto 1412px 1080px;
   row-gap: 0;
   /* 不能讓多餘的高度被分配給第一列(預設 stretch),不然整張卡會被往下推 */
   align-content: start;
 }
 /* 外距算在列內,所以列高要含它(卡身從 y = 700 起):
-   即時數值兩張卡 885~1740 —— 標題列 885~1080,下框線貼第 1 排電視的下框線,數值 1128 起在第 2 排;
-   影像 1965~3126 —— 標題列 1965~2160 貼第 2 排電視的下框線、畫面 2208~3126 在第 3 排。 */
+   即時數值兩張卡 885~2112 —— 標題列 885~1080,下框線貼第 1 排電視的下框線,數值 1128 起在第 2 排;
+   影像卡 2208~3192 —— 標題列 2208~2403 + 畫面 2403~3192,整張在第 3 排電視內。 */
 html.wall-mode .field-card--video > .field-live-row {
   margin-top: 185px;
 }
 html.wall-mode .field-card--video > .field-video-row {
-  margin-top: 225px;
+  margin-top: 96px;
 }
 /* 小卡標題列的下框線一律貼電視的下框線(上排 y = 1080、下排 y = 2160),
    內容從縫下方 48 起 —— 第一排文字(測試進度、平均下行、位置 x…)才不會壓在縫上。
@@ -2669,32 +2670,38 @@ html.wall-mode .field-live-row {
   grid-template-columns: 1632px 1728px;
   column-gap: var(--fw-gap);
 }
-/* 兩個影像各 1632×918(16:9),左卡內距起算 x = 240,中間間距包住 x = 1920 */
-/* 室外兩路影像:一台電視放一個(x 241~1873 / 2065~3697),1632 × 918,跟室內同大小。
-   每格是「標題列 + 畫面」:標題列 195 高在第 2 排電視下緣,畫面隔 108 之後從 2208 起 */
+/* 室外兩路影像:一台電視放一個(x 241~1645 / 2065~3469),欄距包住 x = 1920。
+   每格是一張完整的小卡「標題列 + 畫面」,整張放在同一台電視裡:
+   標題列 195 + 畫面 789(1404 × 789,16:9)= 984 = 第 3 排電視扣掉上下各 48。 */
 html.wall-mode .field-video-row {
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(2, 1632px);
-  justify-content: space-between;
+  grid-template-columns: repeat(2, 1404px);
+  column-gap: 420px;
+  justify-content: start;
   align-items: start;
 }
+/* 影像小卡:外框比照 .field-sub(圓角、底色、外框線),標題列直接接在畫面上方 */
 html.wall-mode .field-video-cell {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  border-radius: calc(21px * var(--wall));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
 }
-/* 攝影機的標題列:高度、底色、內距、圖示都比照小卡標題列(.field-sub-head)。
-   它是獨立的一條(畫面在下一排電視裡),所以四個角都收圓角。
-   下緣貼電視的下框線,畫面在縫下方 48 起 —— 標題列與畫面隔著一條拼接縫 */
+/* 畫面的圓角交給外框(overflow: hidden)處理,不然兩層圓角會露出縫隙 */
+html.wall-mode .field-video-cell > .field-video {
+  border-radius: 0;
+}
+/* 攝影機的標題列:高度、底色、內距、圖示都比照小卡標題列(.field-sub-head) */
 html.wall-mode .field-video-head {
   flex: none;
   height: var(--fw-sub-head);
-  margin-bottom: 48px;
   display: flex;
   align-items: center;
   gap: 1rem;
   padding: 0 calc(21px * var(--wall));
-  border-radius: calc(21px * var(--wall));
   background: rgba(255, 255, 255, 0.1);
 }
 /* 室內左卡身(y = 880~2952,左卡內距起算 x = 240):2×2 影像 3552 / 即時小卡 1728,欄距跨 x = 3840 */
@@ -2710,28 +2717,27 @@ html.wall-mode .field-live-grid {
    左欄影像本身跨 x = 1920,但名稱(左下)與 LIVE(右下,右緣 x = 1908)都在縫的左邊;
    沒串流的提示在畫面中間(y ≈ 1366 / 2466),都避開 y = 1080 / 2160 */
 /* 室內四路影像:一台電視放一個,不跨任何邊框(牆面每台電視 1920 × 1080)。
-   每格 = 標題列 + 畫面,跟室外一樣把標題列貼在上一排電視的下框線:
-   列 1:標題列 885~1080(第 1 排電視,與行駛狀態同高)、畫面 1128~1917(第 2 排);
-   列 2:標題列 1965~2160(第 2 排下緣,與 AMR 通訊品質同高)、畫面 2208~2997(第 3 排)。
-   畫面因此是 1404 × 789 —— 上排畫面底(1917)要留 48 給下一格的標題列。
+   每格是一張完整的小卡「標題列 + 畫面」,整張放在同一台電視裡(跟室外同一種):
+   列 1:1128~2112(第 2 排電視),列 2:2208~3192(第 3 排),上下各離縫 48。
+   高度 984 = 標題列 195 + 畫面 789,畫面 1404 × 789(16:9)。
    欄:x 241~1645 / 2065~3469,欄距包住 x = 1920。 */
 html.wall-mode .field-video-grid {
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(2, 1404px);
-  grid-template-rows: 1032px 1032px;
+  grid-template-rows: 984px 984px;
   column-gap: 420px;
-  row-gap: 48px;
+  row-gap: 96px;
   justify-content: start;
   align-content: start;
-  /* 卡身頂在 724,第一排標題列要從 885 起 */
-  padding-top: 161px;
+  /* 卡身頂在 724,第一排影像卡要從 1128 起(第 2 排電視內,離縫 48) */
+  padding-top: 404px;
 }
 /* 即時小卡上下兩張:下卡高度同室外 .field-live-row(標題列在 y = 2160 之上、數值從 y = 2208 起),
    上卡 y = 880~1833,標題列 880~1075 與右卡小卡對齊 */
 html.wall-mode .field-live-stack {
-  /* 卡身為了影像延伸到 3045,但這一欄照舊排到 2952(下卡的數值是照 y = 2160 的縫排的) */
-  margin-bottom: 93px;
+  /* 卡身為了影像延伸到 3192,但這一欄照舊排到 2952(下卡的數值是照 y = 2160 的縫排的) */
+  margin-bottom: 240px;
   /* 上卡標題列 885~1080 貼第 1 排電視的下框線(與影像格同高) */
   padding-top: 161px;
   min-height: 0;
