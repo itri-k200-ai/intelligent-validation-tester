@@ -19,7 +19,13 @@ export type FloorRect = { x1: number; y1: number; x2: number; y2: number };
  */
 export type FieldBackdrop = {
   src: string;
+  /** 圖檔對應的世界座標範圍(公尺) */
   extent: { xMin: number; xMax: number; yMin: number; yMax: number };
+  /**
+   * 固定視野:牆上永遠畫這一塊,不隨軌跡縮放(依前端回饋 —— 鏡頭一直變會看不出
+   * AMR 走到哪)。省略則退回「框住軌跡 + 目前位置」的動態視野。
+   */
+  view?: { xMin: number; xMax: number; yMin: number; yMax: number };
 };
 
 /**
@@ -29,6 +35,10 @@ export type FieldBackdrop = {
 export const ITRI_B51_5F_SLAM: FieldBackdrop = {
   src: "/images/floorplan/slam-b51-5f.png",
   extent: { xMin: -101.25, xMax: 6.3, yMin: -10.1, yMax: 18.05 },
+  // 整張圖是 101 × 28 m 的細長條,照整張畫在卡片裡只剩中間一條。固定框住測試
+  // 路線那一段:實測 5 趟的軌跡都落在 x −49.8~−30.5、y 0.7~9.4,四周留約 5 m,
+  // 長寬比 30:18 ≈ 1.67 跟卡片一致,填得滿。超出的部分由 SVG 裁掉。
+  view: { xMin: -55, xMax: -25, yMin: -4, yMax: 14 },
 };
 
 export type FloorPlan = {

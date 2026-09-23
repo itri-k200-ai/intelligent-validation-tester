@@ -318,9 +318,11 @@ function HeadRow({ title, mission }: { title: string; mission: FieldMission }) {
           <span className="flex-none text-sm text-white/55">測試環境</span>
           <span className="min-w-0 truncate text-base">{mission.testcase.environment}</span>
         </span>
-        <span className="flex min-w-0 items-baseline gap-6">
+        {/* 測試項目原本寫死在 config,看不出牆上現在是哪一次 —— 改成這次驗測的
+            時間與執行 ID(平台指定顯示歷史紀錄時特別需要) */}
+        <span className="field-meta-item flex min-w-0 items-baseline gap-6">
           <span className="flex-none text-sm text-white/55">測試項目</span>
-          <span className="min-w-0 truncate text-base font-semibold">{mission.testcase.name}</span>
+          <span className="min-w-0 truncate text-base font-semibold">{runLabel(mission)}</span>
         </span>
       </div>
     </>
@@ -371,6 +373,25 @@ function Sub({
       <div className="field-sub-body">{children}</div>
     </section>
   );
+}
+
+/**
+ * 牆上「測試項目」顯示的內容:這一次驗測的時間 + 執行 ID 前 8 碼
+ * (ID 全長 36 碼,牆上放不下也記不住)。
+ * 還沒有任何驗測紀錄時退回設定檔裡的項目名稱 —— 牆上不要出現一格「—」。
+ */
+function runLabel(mission: FieldMission): string {
+  const t = mission.createdAt
+    ? new Date(mission.createdAt * 1000).toLocaleString("zh-TW", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+    : null;
+  const id = mission.runId ? mission.runId.slice(0, 8) : null;
+  return [t, id].filter(Boolean).join(" · ") || mission.testcase.name;
 }
 
 type Reading = {
@@ -559,15 +580,19 @@ function RouteMap({
   let spanY: number;
   if (backdrop) {
     const ext = backdrop.extent;
+    // 設了 view 就固定看那一塊 —— 鏡頭一直跟著軌跡縮放的話,牆上看不出 AMR 走到哪。
+    // 沒設才退回「框住軌跡 + 目前位置」(留 6 m 邊,夾在底圖範圍內)。
     const margin = 6;
-    const x0 = focus.length ? Math.max(ext.xMin, Math.min(...focus.map((p) => p.x)) - margin) : ext.xMin;
-    const x1 = focus.length ? Math.min(ext.xMax, Math.max(...focus.map((p) => p.x)) + margin) : ext.xMax;
-    const y0 = focus.length ? Math.max(ext.yMin, Math.min(...focus.map((p) => p.y)) - margin) : ext.yMin;
-    const y1 = focus.length ? Math.min(ext.yMax, Math.max(...focus.map((p) => p.y)) + margin) : ext.yMax;
-    minX = x0;
-    minY = -y1;
-    spanX = Math.max(x1 - x0, 1);
-    spanY = Math.max(y1 - y0, 1);
+    const box = backdrop.view ?? {
+      xMin: focus.length ? Math.max(ext.xMin, Math.min(...focus.map((p) => p.x)) - margin) : ext.xMin,
+      xMax: focus.length ? Math.min(ext.xMax, Math.max(...focus.map((p) => p.x)) + margin) : ext.xMax,
+      yMin: focus.length ? Math.max(ext.yMin, Math.min(...focus.map((p) => p.y)) - margin) : ext.yMin,
+      yMax: focus.length ? Math.min(ext.yMax, Math.max(...focus.map((p) => p.y)) + margin) : ext.yMax,
+    };
+    minX = box.xMin;
+    minY = -box.yMax;
+    spanX = Math.max(box.xMax - box.xMin, 1);
+    spanY = Math.max(box.yMax - box.yMin, 1);
   } else if (realFrame) {
     // 沒有底圖的真實座標(室外 GPS、場景還沒拿到):框住「軌跡 + 目前位置」並留邊。
     // 範圍至少 40 m —— 只有一個點時才不會放大到什麼都看不出來
@@ -610,16 +635,81 @@ function RouteMap({
         role="img"
         aria-label="測試路徑與兩趟軌跡"
       >
+        <defs>
+          {/* SLAM 掃出來的牆是白的,直接疊在深底上又亮又雜。染成牆面的青色系、
+              壓低亮度,變成「藍圖」的感覺,軌跡與載具才跳得出來 */}
+          <filter id="slam-tint" colorInterpolationFilters="sRGB">
+            <feColorMatrix
+              type="matrix"
+              values="0 0 0 0 0.42  0 0 0 0 0.78  0 0 0 0 0.85  0 0 0 0.5 0"
+            />
+          </filter>
+          {/* 軌跡與載具的柔光:牆離得遠,純線條看起來會太細 */}
+          <filter id="track-glow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation={1.6 * u} result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <clipPath id="map-clip">
+            <rect
+              x={minX - pad}
+              y={minY - pad}
+              width={spanX + pad * 2}
+              height={spanY + pad * 2}
+              rx={pad}
+            />
+          </clipPath>
+          <pattern
+            id="map-grid"
+            x={0}
+            y={0}
+            width={5}
+            height={5}
+            patternUnits="userSpaceOnUse"
+          >
+            <path d="M5 0 L0 0 L0 5" fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth={0.6 * u} />
+          </pattern>
+        </defs>
         {backdrop && (
-          <image
-            href={backdrop.src}
-            x={backdrop.extent.xMin}
-            y={-backdrop.extent.yMax}
-            width={backdrop.extent.xMax - backdrop.extent.xMin}
-            height={backdrop.extent.yMax - backdrop.extent.yMin}
-            preserveAspectRatio="none"
-            opacity={0.85}
-          />
+          // 整塊裁成圓角面板 —— 底圖比視野大,不裁的話會溢出到 SVG 的留白區
+          <g clipPath="url(#map-clip)">
+            {/* 底板 + 5 m 格線:讓地圖看起來是一塊面板,也給得出距離感 */}
+            <rect
+              x={minX - pad}
+              y={minY - pad}
+              width={spanX + pad * 2}
+              height={spanY + pad * 2}
+              fill="rgba(10,23,47,0.55)"
+            />
+            <image
+              href={backdrop.src}
+              x={backdrop.extent.xMin}
+              y={-backdrop.extent.yMax}
+              width={backdrop.extent.xMax - backdrop.extent.xMin}
+              height={backdrop.extent.yMax - backdrop.extent.yMin}
+              preserveAspectRatio="none"
+              filter="url(#slam-tint)"
+            />
+            <rect
+              x={minX - pad}
+              y={minY - pad}
+              width={spanX + pad * 2}
+              height={spanY + pad * 2}
+              fill="url(#map-grid)"
+            />
+            <rect
+              x={minX - pad}
+              y={minY - pad}
+              width={spanX + pad * 2}
+              height={spanY + pad * 2}
+              rx={pad}
+              fill="none"
+              stroke="rgba(255,255,255,0.12)"
+              strokeWidth={0.8 * u}
+            />
+          </g>
         )}
         {!backdrop && floorPlan && <FloorPlanLayer plan={floorPlan} u={u} />}
         {planned && (
@@ -636,15 +726,31 @@ function RouteMap({
         {real
           ? tracks.map((t) =>
               t.points.length > 1 ? (
-                <polyline
-                  key={t.phase}
-                  points={pts(t.points)}
-                  fill="none"
-                  stroke={PHASE[t.phase].color}
-                  strokeWidth={4 * u}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                />
+                <g key={t.phase} filter="url(#track-glow)">
+                  <polyline
+                    points={pts(t.points)}
+                    fill="none"
+                    stroke={PHASE[t.phase].color}
+                    strokeWidth={4 * u}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+                  {/* 起點畫空心圈、終點畫實心點 —— 一眼看得出走的方向 */}
+                  <circle
+                    cx={t.points[0].x}
+                    cy={-t.points[0].y}
+                    r={4 * u}
+                    fill="none"
+                    stroke={PHASE[t.phase].color}
+                    strokeWidth={1.8 * u}
+                  />
+                  <circle
+                    cx={t.points[t.points.length - 1].x}
+                    cy={-t.points[t.points.length - 1].y}
+                    r={3.2 * u}
+                    fill={PHASE[t.phase].color}
+                  />
+                </g>
               ) : null,
             )
           : planned &&
@@ -673,8 +779,9 @@ function RouteMap({
           <circle cx={start.x} cy={-start.y} r={6 * u} fill="#4C8DFF" stroke="#0A172F" strokeWidth={1.5 * u} />
         )}
         {live && (
-          <g className="field-live-marker" transform={`translate(${live.x} ${-live.y})`}>
-            <circle r={16 * u} fill="#80FFE8" fillOpacity={0.2} />
+          <g className="field-live-marker" filter="url(#track-glow)" transform={`translate(${live.x} ${-live.y})`}>
+            <circle r={16 * u} fill="#80FFE8" fillOpacity={0.18} />
+            <circle r={11 * u} fill="none" stroke="#80FFE8" strokeOpacity={0.55} strokeWidth={0.8 * u} />
             {/* 箭頭圖形朝上、SVG rotate 順時針,headingDeg 後端已由 SLAM yaw 換算過(0 = 正北) */}
             <path
               d="M0,-10 L7.5,8 L0,4 L-7.5,8 Z"

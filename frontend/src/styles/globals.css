@@ -2442,6 +2442,40 @@ html.wall-mode .hud-octagon-label {
 
 /* 操作清單 */
 /* 操作清單不自己捲動,高度由內容決定,交給整頁捲 */
+.sim-records { gap: 0.5em; }
+/* 驗測紀錄清單:一列一筆,挑中的那筆亮起來(列表可能上百筆,限制高度自己捲) */
+.sim-record-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  max-height: 14em;
+  overflow: auto;
+}
+.sim-record {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  padding: 0.3em 0.6em;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.4em;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.8em;
+  text-align: left;
+}
+.sim-record:hover { background: rgba(255, 255, 255, 0.08); }
+.sim-record.is-active { border-color: var(--c-primary-green); color: var(--c-primary-green); }
+.sim-record-time { flex: none; font-variant-numeric: tabular-nums; }
+.sim-record-status { flex: none; color: rgba(255, 255, 255, 0.55); }
+.sim-record-phases { flex: 1; min-width: 0; color: rgba(255, 255, 255, 0.7); }
+.sim-record-tag {
+  flex: none;
+  padding: 0 0.4em;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85em;
+}
+.sim-record-tag.is-good { background: rgba(128, 255, 232, 0.14); color: var(--c-primary-green); }
 .sim-ops { display: flex; flex-direction: column; gap: 0.9em; }
 .sim-group { display: flex; flex-direction: column; gap: 0.35em; }
 .sim-group-name {
@@ -2625,6 +2659,7 @@ html.wall-mode .field-meta-row {
   flex: 1;
   min-height: 0;
   display: grid;
+  /* 測試環境 / 測試項目,欄寬同下面的兩張小卡(路徑 3648 / 數據 3552) */
   grid-template-columns: 3648px 3552px;
   column-gap: var(--fw-gap);
   align-items: end;
@@ -2632,6 +2667,17 @@ html.wall-mode .field-meta-row {
 }
 html.wall-mode .field-wall--half .field-meta-row {
   grid-template-columns: 3168px 2208px;
+}
+/* 測試項目那一格被 x = 9600 的縫穿過(室內 9073~11281、室外 7729~11281):
+   標籤留在縫的左邊,值推到縫右邊 9648 起 —— 跟效能卡內文同一種做法
+   (.field-compare-head--half)。 */
+html.wall-mode .field-meta-item {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: var(--fw-gap);
+}
+html.wall-mode .field-wall--half .field-meta-item {
+  grid-template-columns: 479px minmax(0, 1fr);
 }
 /* 左卡(室外):標題 / 影像 / 即時小卡。
    即時小卡的標題列要在 y = 2160 之上、內容從 y = 2208 起,所以高度由下往上算:

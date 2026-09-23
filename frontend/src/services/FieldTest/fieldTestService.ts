@@ -24,6 +24,8 @@ import { apiClient } from "../api/client";
 
 type MissionPayload = {
   runId?: string;
+  /** 這一次驗測的開始時間(epoch 秒) */
+  created?: number | null;
   process?: FieldProcess | null;
   status?: string;
   nextSeq?: number;
@@ -82,6 +84,7 @@ export const fieldTestService = {
 
     return {
       runId: data.runId,
+      createdAt: data.created ?? null,
       process: data.process ?? null,
       nextSeq: data.nextSeq,
       testcase: sc.testcase,
