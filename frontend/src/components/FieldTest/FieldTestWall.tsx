@@ -1,5 +1,5 @@
 "use client";
-import { Bot, Plane, Route, Signal, type LucideIcon } from "lucide-react";
+import { Bot, Plane, Route, Signal, Video, type LucideIcon } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import {
   CartesianGrid,
@@ -158,27 +158,24 @@ function LiveResultsLayout({
   return (
     <div className="field-wall">
       {/* ── 左:即時狀態 ── */}
-      <section className="dut-wall-band field-card field-card--video">
+      <section className="dut-wall-band field-card field-card--video field-card--live">
         <div className="dut-wall-band-title">即時狀態</div>
-        <div className="field-video-row">
-          {sc.cameras.map((label, i) => (
-            <VideoTile key={label} label={label} src={mission.cameras[i] ?? null} />
-          ))}
-        </div>
-        {/* 兩張即時小卡並排,間距跨 x = 1920 */}
+        {/* 即時數值在上、影像在下:小卡標題列落在第 1 排電視、數值在第 2 排,
+            影像整個放進第 3 排電視(見 globals.css .field-card--video) */}
         <div className="field-live-row">
           <VehicleSub
-            className="field-sub--lower"
             scenario={scenario}
             title={sc.live.vehicleTitle}
             vehicle={{ ...mission.vehicle, ...live?.vehicle }}
             position={live?.position ?? run?.position ?? null}
           />
-          <SignalSub
-            className="field-sub--lower"
-            title={sc.live.signalTitle}
-            link={live?.link ?? run?.link ?? null}
-          />
+          <SignalSub title={sc.live.signalTitle} link={live?.link ?? run?.link ?? null} />
+        </div>
+        {/* 每支攝影機各自有標題列(貼第 2 排電視的下框線),畫面在第 3 排 */}
+        <div className="field-video-row">
+          {sc.cameras.map((label, i) => (
+            <VideoTile key={label} label={label} src={mission.cameras[i] ?? null} />
+          ))}
         </div>
       </section>
 
@@ -237,7 +234,7 @@ function CameraGridLayout({
   return (
     <div className="field-wall field-wall--half">
       {/* ── 左:即時狀態(2×2 影像 + 即時數值)── */}
-      <section className="dut-wall-band field-card">
+      <section className="dut-wall-band field-card field-card--live">
         <div className="field-card-head">
           <div className="dut-wall-band-title">即時狀態</div>
         </div>
@@ -248,7 +245,7 @@ function CameraGridLayout({
               <VideoTile key={label} label={label} src={mission.cameras[i] ?? null} />
             ))}
           </div>
-          {/* 上卡標題列對齊右卡小卡;下卡標題列在 y = 2160 之上、數值從 y = 2208 起 */}
+          {/* 兩張小卡的標題列分別貼第 1、2 排電視的下框線,數值從縫下方 48 起 */}
           <div className="field-live-stack">
             <VehicleSub
               scenario={scenario}
@@ -257,7 +254,6 @@ function CameraGridLayout({
               position={live?.position ?? run?.position ?? null}
             />
             <SignalSub
-              className="field-sub--lower"
               title={sc.live.signalTitle}
               link={live?.link ?? run?.link ?? null}
             />
@@ -328,12 +324,20 @@ function HeadRow({ title, mission, right }: { title: string; mission: FieldMissi
 }
 
 
-/** 一格影像(16:9),名稱疊在左下 */
+/**
+ * 一路影像(16:9):名稱獨立成一條標題列放在畫面上方,樣式與小卡標題列(飛行狀態、
+ * 通訊品質)相同 —— 標題列落在上一排電視的下緣,畫面整個放在下一排電視裡。
+ */
 function VideoTile({ label, src }: { label: string; src: string | null }) {
   return (
-    <div className="field-video">
-      <LiveVideo src={src} />
-      <span className="field-video-label">{label}</span>
+    <div className="field-video-cell">
+      <div className="field-video-head">
+        <Video className="h-10 w-10 flex-none text-teal" strokeWidth={1.75} />
+        <span className="flex-none text-[2.5rem] font-semibold leading-tight">{label}</span>
+      </div>
+      <div className="field-video">
+        <LiveVideo src={src} />
+      </div>
     </div>
   );
 }
