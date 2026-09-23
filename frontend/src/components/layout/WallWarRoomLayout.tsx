@@ -14,7 +14,7 @@ import {
   RightWingMethod,
 } from "./RightWingStatic";
 import { useFieldScenarioStore } from "@/stores/fieldScenarioStore";
-import { useWallModeStore } from "@/stores/wallModeStore";
+import { BEZEL_GUIDES_ENABLED, useWallModeStore } from "@/stores/wallModeStore";
 
 import { Sidebar } from "./Sidebar";
 import { WallLeftSimulator } from "./WallLeftSimulator";
@@ -82,7 +82,7 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
             )}
           </div>
           <div className="war-room-main-topbar-actions">
-            {isWall && (
+            {isWall && BEZEL_GUIDES_ENABLED && (
               <Button
                 variant={showBezels ? "default" : "ghost"}
                 size="sm"

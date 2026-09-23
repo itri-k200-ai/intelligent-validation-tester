@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/Auth/useAuth";
 import { getPageMeta } from "@/lib/pageMeta";
 import { useUiStore } from "@/stores/uiStore";
-import { useWallModeStore } from "@/stores/wallModeStore";
+import { BEZEL_GUIDES_ENABLED, useWallModeStore } from "@/stores/wallModeStore";
 
 export function Header() {
   const { user, logout } = useAuth();
@@ -35,7 +35,7 @@ export function Header() {
         )}
       </div>
       <div className="flex items-center gap-3">
-        {isWall && (
+        {isWall && BEZEL_GUIDES_ENABLED && (
           <Button
             variant={showBezels ? "default" : "ghost"}
             size="sm"

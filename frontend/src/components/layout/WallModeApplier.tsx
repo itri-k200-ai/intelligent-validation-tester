@@ -3,7 +3,7 @@ import { useEffect } from "react";
 
 import { WALL_REGIONS } from "@/config/wallRegion";
 import { useWallRegion } from "@/hooks/Wall/useWallRegion";
-import { useIsWallMode, useWallModeStore } from "@/stores/wallModeStore";
+import { useIsWallMode, useShowBezels, useWallModeStore } from "@/stores/wallModeStore";
 
 /**
  * 掛 `wall-mode` class 到 <html>,並用 JS 算 fit-to-viewport 縮放。
@@ -16,7 +16,7 @@ export function WallModeApplier() {
   const region = useWallRegion();
   const isWall = useIsWallMode();
   const setWall = useWallModeStore((s) => s.setWall);
-  const showBezels = useWallModeStore((s) => s.showBezels);
+  const showBezels = useShowBezels();
   const isCrop = region === "center" || region === "right";
   const active = isWall || isCrop;
 

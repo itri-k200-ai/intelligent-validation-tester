@@ -25,6 +25,13 @@ type WallModeState = {
  *   可能是 false —— 若照舊 persist,rehydrate 會用那個舊值蓋掉這裡的 true,
  *   使用者就會卡在一般模式。只留 showBezels。
  */
+/**
+ * 電視框線(bezel 參考線)與 topbar 上的「框線」鈕的總開關。
+ * 排版時拿來對齊拼接縫用,正式展示不需要 —— 關掉之後連按鈕一起藏起來。
+ * 要再開出來把這裡改成 true 即可(狀態、CSS、按鈕都還在)。
+ */
+export const BEZEL_GUIDES_ENABLED = false;
+
 export const useWallModeStore = create<WallModeState>()(
   persist(
     (set) => ({
@@ -43,3 +50,6 @@ export const useWallModeStore = create<WallModeState>()(
 );
 
 export const useIsWallMode = () => useWallModeStore((s) => s.isWall);
+/** 框線關掉時一律不顯示 —— localStorage 裡可能還存著舊的 true */
+export const useShowBezels = () =>
+  useWallModeStore((s) => BEZEL_GUIDES_ENABLED && s.showBezels);
