@@ -2671,12 +2671,14 @@ html.wall-mode .field-card--video > .field-video-row {
 html.wall-mode .field-wall .field-sub > .field-sub-body {
   padding-top: 48px;
 }
-/* 左下兩張即時小卡並排(左卡內距起算 x = 240):1632 / 1728,間距跨 x = 1920 */
+/* 左上兩張即時小卡並排:欄寬與位置跟底下的影像卡完全一致(x 241~1873 / 2065~3697),
+   不然第二欄會差 96,上下看起來沒對齊。間距跨 x = 1920 */
 html.wall-mode .field-live-row {
   min-height: 0;
   display: grid;
-  grid-template-columns: 1632px 1728px;
-  column-gap: var(--fw-gap);
+  grid-template-columns: repeat(2, 1632px);
+  column-gap: 192px;
+  justify-content: start;
 }
 /* 室外兩路影像:一台電視放一個(x 241~1873 / 2065~3697),欄距包住 x = 1920。
    每格是一張完整的小卡「標題列 + 畫面」:標題列 195 貼第 2 排電視的下框線,
