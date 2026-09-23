@@ -2563,6 +2563,10 @@ html.wall-mode .field-wall {
   /* 小卡標題列高度(規範 Combination – Third Layer 65px)與內容上下內距 */
   --fw-sub-head: calc(65px * var(--wall));
   --fw-sub-pad: 36px;
+  /* 大卡往下借的高度:內容區本來只到 y = 3048(.war-room-main-content 的裁切,
+     已對這面牆放行),四張大卡一律往下長到 3150 —— 即時狀態卡要放得下影像,
+     測試狀態總覽跟著一樣高,兩張卡的框底才齊平。 */
+  --fw-drop: 102px;
   height: 100%;
   display: grid;
   grid-template-columns: calc(3840px - 3rem - var(--fw-gap) / 2) minmax(0, 1fr);
@@ -2634,14 +2638,13 @@ html.wall-mode .field-wall--half .field-head-row > span:nth-of-type(2) {
 html.wall-mode .war-room-main-content:has(> .field-wall) {
   overflow: visible;
 }
-/* 內容區本來只到 3048,即時狀態卡往下借一塊放影像:框底 = 最下排影像底 + 48。
-   室外影像到 3078 → 框底 3150;室內影像到 2997 → 框底 3045(見下面的 --half) */
-html.wall-mode .field-card--live {
-  margin-bottom: -102px;
-  padding-bottom: 24px;
+/* 兩張大卡一起往下長到 3150(室外影像底 3078 + 48) */
+html.wall-mode .field-wall > .field-card {
+  margin-bottom: calc(-1 * var(--fw-drop));
 }
-html.wall-mode .field-wall--half .field-card--live {
-  margin-bottom: 3px;
+/* 即時狀態卡的底內距收成 24:影像已經自己離框底 48(室外)/ 153(室內) */
+html.wall-mode .field-card--live {
+  padding-bottom: 24px;
 }
 /* 室外:即時數值在上、影像在下。
    列高由電視的分界反推:小卡 885~1917(標題列 885~1080 貼第 1 排電視的下框線、
@@ -2742,8 +2745,8 @@ html.wall-mode .field-video-grid {
 /* 即時小卡上下兩張:下卡高度同室外 .field-live-row(標題列在 y = 2160 之上、數值從 y = 2208 起),
    上卡 y = 880~1833,標題列 880~1075 與右卡小卡對齊 */
 html.wall-mode .field-live-stack {
-  /* 卡身為了影像延伸到 3021,但這一欄照舊排到 2952(下卡的數值是照 y = 2160 的縫排的) */
-  margin-bottom: 69px;
+  /* 卡身為了影像延伸到 3126,但這一欄照舊排到 2952(下卡的數值是照 y = 2160 的縫排的) */
+  margin-bottom: 174px;
   /* 上卡標題列 885~1080 貼第 1 排電視的下框線(與影像格同高) */
   padding-top: 161px;
   min-height: 0;
@@ -2858,12 +2861,13 @@ html.wall-mode .field-map-head {
   align-items: center;
   gap: 2rem;
 }
-/* 小卡內容分上下兩段,下段從 y = 2208 起:高度 = 卡身下半段 - 小卡內容底內距,段距跨 y = 2160 */
+/* 小卡內容分上下兩段,下段從 y = 2208 起:高度 = 卡身下半段 - 小卡內容底內距
+   + 大卡往下借的高度(卡身底從 2952 移到 3054),段距跨 y = 2160 */
 html.wall-mode .field-split {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) calc(var(--fw-lower) - var(--fw-sub-pad));
+  grid-template-rows: minmax(0, 1fr) calc(var(--fw-lower) - var(--fw-sub-pad) + var(--fw-drop));
   row-gap: var(--fw-gap);
 }
 
