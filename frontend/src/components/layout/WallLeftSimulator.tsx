@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { RIC_SOURCES, type RicSourceId } from "@/config/ricSources";
 import {
@@ -74,6 +74,32 @@ function catalogFrom(text: string): CatDut[] {
   }
 }
 
+/** 場域驗測紀錄(IVT 後端 GET /api/field-tests/records/)—— 挑「要顯示哪一次歷史」用 */
+type FieldRecord = {
+  runId: string;
+  status: string | null;
+  created: number | null;
+  phases: Record<string, number>;
+  bothPasses: boolean;
+  pinned: boolean;
+};
+
+type FieldScenario = "indoor" | "outdoor";
+const FIELD_SCENARIOS: { id: FieldScenario; label: string }[] = [
+  { id: "indoor", label: "室內 AMR" },
+  { id: "outdoor", label: "室外 UAV" },
+];
+
+const stamp = (epoch: number | null) =>
+  epoch
+    ? new Date(epoch * 1000).toLocaleString("zh-TW", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
+
 export function WallLeftSimulator({ embedded = false }: { embedded?: boolean }) {
   const [source, setSource] = useState<RicSourceId>(RIC_SOURCES[0].id);
   const [params, setParams] = useState<Record<string, string>>({});
@@ -86,6 +112,48 @@ export function WallLeftSimulator({ embedded = false }: { embedded?: boolean }) 
   const [viewing, setViewing] = useState<string | null>(null);
   /** 驅動過的 runningId,供下拉挑選 */
   const [runIds, setRunIds] = useState<string[]>([]);
+  /** 智慧網路(場域)的驗測紀錄:挑一筆當 runningId 送 notifyHisShow */
+  const [fieldScenario, setFieldScenario] = useState<FieldScenario>("indoor");
+  const [records, setRecords] = useState<FieldRecord[]>([]);
+  const [recordNote, setRecordNote] = useState("");
+
+  const loadRecords = useCallback(async () => {
+    setRecordNote("讀取中…");
+    try {
+      const res = await fetch(`/api/field-tests/records/?scenario=${fieldScenario}`);
+      const data = await res.json();
+      const rows: FieldRecord[] = data.runs ?? [];
+      setRecords(rows);
+      const now = Object.entries(data.pinned ?? {})
+        .map(([sc, rid]) => `${sc}=${String(rid).slice(0, 8)}`)
+        .join(" · ");
+      setRecordNote(`${rows.length} 筆${now ? ` · 顯示中 ${now}` : " · 目前顯示最新一次"}`);
+    } catch {
+      setRecords([]);
+      setRecordNote("讀不到驗測紀錄(IVT 後端沒回應)");
+    }
+  }, [fieldScenario]);
+
+  // 只有 IM 控制器那一套接場域驗測,其餘來源不用拉
+  useEffect(() => {
+    if (source === "im") void loadRecords();
+  }, [source, loadRecords]);
+
+  /**
+   * 取消指定,讓中牆回到即時 / 最新一次。
+   *
+   * 「顯示哪一筆」是平台經 adapter 通知的(#26),這裡不走捷徑;但平台的規格裡
+   * 沒有「取消顯示」這個動作,所以留一顆直接打 IVT 後端的牆面控制鍵。
+   */
+  const backToLive = async () => {
+    setRecordNote("取消中…");
+    try {
+      await fetch(`/api/field-tests/history/?scenario=${fieldScenario}`, { method: "DELETE" });
+    } catch {
+      /* 失敗的話下面重讀清單就會看得出來沒生效 */
+    }
+    await loadRecords();
+  };
 
   /**
    * 改參數。這裡純粹是 request 參數 —— 這個畫面等同 Postman,只負責把請求
@@ -278,6 +346,63 @@ export function WallLeftSimulator({ embedded = false }: { embedded?: boolean }) 
                 className={`sim-view-btn ${viewing === n ? "is-active" : ""}`}
               >
                 {n}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {source === "im" && (
+        <section className="sim-view sim-records">
+          <div className="sim-view-label">
+            智慧網路驗測紀錄 —— 挑一筆當「執行 ID」,再按 #26 通知顯示歷史結果
+          </div>
+          <div className="sim-view-list">
+            {FIELD_SCENARIOS.map((sc) => (
+              <button
+                key={sc.id}
+                type="button"
+                onClick={() => setFieldScenario(sc.id)}
+                className={`sim-view-btn ${fieldScenario === sc.id ? "is-active" : ""}`}
+              >
+                {sc.label}
+              </button>
+            ))}
+            <button type="button" onClick={() => void loadRecords()} className="sim-view-btn">
+              重新整理
+            </button>
+            <button
+              type="button"
+              onClick={() => void backToLive()}
+              className="sim-view-btn"
+              title="取消指定,中牆回到即時 / 最新一次"
+            >
+              回到即時
+            </button>
+          </div>
+          <div className="sim-param-hint">{recordNote}</div>
+          <div className="sim-record-list">
+            {records.map((r) => (
+              <button
+                key={r.runId}
+                type="button"
+                onClick={() => setParam("runningId", r.runId)}
+                className={`sim-record ${params.runningId === r.runId ? "is-active" : ""}`}
+                title={r.runId}
+              >
+                <span className="sim-record-time">{stamp(r.created)}</span>
+                <span className="sim-record-status">{r.status ?? "—"}</span>
+                <span className="sim-record-phases">
+                  {Object.entries(r.phases)
+                    .map(([name, n]) => `${name} ${n}`)
+                    .join(" / ") || "無樣本"}
+                </span>
+                {r.bothPasses ? (
+                  <span className="sim-record-tag is-good">兩趟完整</span>
+                ) : (
+                  <span className="sim-record-tag">資料不全</span>
+                )}
+                {r.pinned && <span className="sim-record-tag is-good">顯示中</span>}
               </button>
             ))}
           </div>

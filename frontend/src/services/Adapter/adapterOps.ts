@@ -151,6 +151,19 @@ export const ADAPTER_OPS: AdapterOp[] = [
     body: (p) => [p.runningId],
   },
   {
+    // 平台要 tester 顯示某幾次歷史結果(fire-and-forget:adapter 只回 200,
+    // 不解析回應)。adapter 收到後要把 runningId 轉給 IVT 後端
+    // POST /api/field-tests/history/,中牆才會切過去(見 apps/field_tests/history.py)。
+    no: 26,
+    group: "驅動與查詢",
+    label: "通知顯示歷史結果",
+    method: "POST",
+    path: "/autoTest/test/notifyHisShow",
+    errorCode: "0x112",
+    needs: ["runningId"],
+    body: (p) => [p.runningId],
+  },
+  {
     no: 25,
     group: "其他",
     label: "更新待測物名稱",
