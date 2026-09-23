@@ -11,7 +11,7 @@ from django.test import override_settings
 from rest_framework.test import APIClient
 
 from apps.field_tests import client as perf_client
-from apps.field_tests import transform, views
+from apps.field_tests import history, transform, views
 
 
 @pytest.fixture(autouse=True)
@@ -21,6 +21,47 @@ def _clear_caches():
     views._process_cache.clear()
     views._scene_cache.clear()
     yield
+
+
+class _FakeRedis:
+    """history.py 只用到 hash 與一個集合,測試環境沒有 Redis,拿 dict / set 頂替。"""
+
+    def __init__(self):
+        self.data: dict[str, str] = {}
+        self.seen: dict[str, str] | None = None
+
+    def hget(self, _key, field):
+        return self.data.get(field)
+
+    def hgetall(self, key):
+        return dict(self.seen or {}) if key.endswith("seen") else dict(self.data)
+
+    def hset(self, key, field=None, value=None, mapping=None):
+        target = "seen" if key.endswith("seen") else "data"
+        if target == "seen" and self.seen is None:
+            self.seen = {}
+        store = self.seen if target == "seen" else self.data
+        if mapping:
+            store.update(mapping)
+        else:
+            store[field] = value
+
+    def hdel(self, _key, field):
+        self.data.pop(field, None)
+
+    def delete(self, _key):
+        self.data.clear()
+
+    # 已處理過的 adapter 通知(runId → notified_at)
+    def exists(self, _key):
+        return self.seen is not None
+
+
+@pytest.fixture(autouse=True)
+def fake_redis(monkeypatch):
+    fake = _FakeRedis()
+    monkeypatch.setattr(history, "_redis", lambda: fake)
+    return fake
 
 
 TARGETS = {
@@ -707,3 +748,260 @@ def test_mission_process_falls_back_to_plan_and_phase(monkeypatch):
     body = APIClient().get("/api/field-tests/missions/indoor/").json()
     # 「優化後」標記是第 6 步(index 5)→ 已完成 6 步,現在在第 7 步
     assert (body["process"]["done"], body["process"]["label"]) == (6, "沿測試路線移動")
+
+
+# ── 平台指定要顯示的歷史驗測(notifyHisShow → /api/field-tests/history/)──────
+
+def _history_runs():
+    """室內(env-indoor)兩筆、室外(env-outdoor)一筆,都已結束。紀錄沒有 plan_id,
+    跟平台實測一樣要靠 meta.environment_id 分情境。"""
+    return {
+        "/ext/validations": {
+            "validations": [
+                {"run_id": "old", "meta": {"environment_id": "env-indoor"},
+                 "status": "done", "created": 100, "phases": {"優化前": 9, "優化後": 9}},
+                {"run_id": "new", "meta": {"environment_id": "env-indoor"},
+                 "status": "done", "created": 300, "phases": {"優化前": 9, "優化後": 9}},
+                {"run_id": "out1", "meta": {"environment_id": "env-outdoor"},
+                 "status": "done", "created": 200, "phases": {"部署前": 9, "部署後": 9}},
+            ]
+        },
+        "/ext/validations/old": {"status": "done", "phases": {"優化前": 9, "優化後": 9}},
+        "/ext/validations/old/samples": {"next_seq": 20, "samples": _samples(9, 9)},
+        "/ext/validations/new": {"status": "done", "phases": {"優化前": 9, "優化後": 9}},
+        "/ext/validations/new/samples": {"next_seq": 20, "samples": _samples(9, 9)},
+        "/ext/validations/out1": {"status": "done", "phases": {"部署前": 9, "部署後": 9}},
+        "/ext/validations/out1/samples": {"next_seq": 20, "samples": _samples(9, 9)},
+    }
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_history_notice_pins_each_scenario_and_the_wall_follows(monkeypatch):
+    """一次通知帶室內 + 室外兩筆:各自指定給自己那面牆,牆面就顯示那一次。"""
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(_history_runs()))
+    res = APIClient().post("/api/field-tests/history/", ["old", "out1"], format="json")
+    assert res.status_code == 200
+    assert res.json()["pinned"] == {"indoor": "old", "outdoor": "out1"}
+
+    # 室內沒有指定的話會挑最新的 new,現在要顯示被指定的 old
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "old"
+    assert APIClient().get("/api/field-tests/missions/outdoor/").json()["runId"] == "out1"
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_history_notice_takes_the_newest_when_one_scenario_gets_several(monkeypatch):
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(_history_runs()))
+    res = APIClient().post("/api/field-tests/history/", ["old", "new"], format="json")
+    assert res.json()["pinned"] == {"indoor": "new"}
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_history_notice_reports_ids_it_cannot_place(monkeypatch):
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(_history_runs()))
+    res = APIClient().post("/api/field-tests/history/", ["nope"], format="json")
+    assert res.status_code == 404
+    assert res.json()["unknown"] == ["nope"]
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_a_new_run_takes_the_wall_back_to_live(monkeypatch):
+    """指定了歷史紀錄之後,平台又開跑新的驗測 —— 牆要回到即時那一筆,指定也清掉。"""
+    extra = _history_runs()
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(extra))
+    APIClient().post("/api/field-tests/history/", ["old"], format="json")
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "old"
+
+    running = dict(extra)
+    running["/ext/validations"] = {
+        "validations": [
+            {"run_id": "live1", "meta": {"environment_id": "env-indoor"},
+             "status": "running", "created": 400},
+            *extra["/ext/validations"]["validations"],
+        ]
+    }
+    running["/ext/validations/live1"] = {"status": "running", "phase": "優化前", "phases": {"優化前": 2}}
+    running["/ext/validations/live1/samples"] = {"next_seq": 3, "samples": _samples(2, 0)}
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(running))
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "live1"
+    # 指定已經清掉 —— 那一輪跑完之後牆要跟著新的走,不要再跳回歷史
+    assert APIClient().get("/api/field-tests/history/").json()["pinned"] == {}
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_history_pin_is_dropped_when_the_run_disappears(monkeypatch):
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(_history_runs()))
+    APIClient().post("/api/field-tests/history/", ["old"], format="json")
+
+    gone = dict(_history_runs())
+    gone["/ext/validations"] = {
+        "validations": [r for r in _history_runs()["/ext/validations"]["validations"]
+                        if r["run_id"] != "old"]
+    }
+    gone["/ext/validations/new"] = {"status": "done", "phases": {"優化前": 9, "優化後": 9}}
+    gone["/ext/validations/new/samples"] = {"next_seq": 20, "samples": _samples(9, 9)}
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(gone))
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "new"
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS, FIELD_TEST_NOTIFY_TOKEN="s3cret")
+def test_history_notice_can_require_a_token(monkeypatch):
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(_history_runs()))
+    assert APIClient().post("/api/field-tests/history/", ["old"], format="json").status_code == 403
+    res = APIClient().post(
+        "/api/field-tests/history/", ["old"], format="json", HTTP_X_NOTIFY_TOKEN="s3cret"
+    )
+    assert res.status_code == 200
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_history_pin_can_be_cleared(monkeypatch):
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(_history_runs()))
+    APIClient().post("/api/field-tests/history/", ["old", "out1"], format="json")
+    res = APIClient().delete("/api/field-tests/history/?scenario=indoor")
+    assert res.json()["pinned"] == {"outdoor": "out1"}
+    assert APIClient().delete("/api/field-tests/history/").json()["pinned"] == {}
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_records_list_is_filtered_by_scenario_and_marks_the_pinned_one(monkeypatch):
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(_history_runs()))
+    APIClient().post("/api/field-tests/history/", ["old"], format="json")
+    body = APIClient().get("/api/field-tests/records/?scenario=indoor").json()
+    # 只留室內的,新的在前面
+    assert [r["runId"] for r in body["runs"]] == ["new", "old"]
+    assert [r["pinned"] for r in body["runs"]] == [False, True]
+    assert body["runs"][0]["bothPasses"] is True
+    assert body["pinned"] == {"indoor": "old"}
+    # 不給情境就全部(含室外那筆)
+    assert len(APIClient().get("/api/field-tests/records/").json()["runs"]) == 3
+
+
+# ── 由我們去問 adapter:誰被通知要顯示歷史 ─────────────────────────────
+
+class _FakeAdapter:
+    """GET {base}/autoTest/history/notified 的假回應。
+
+    notified 是 {runId: notified_at} —— 重複通知同一筆時 adapter 會更新 notified_at,
+    我們就是靠這個分辨「又通知了一次」。
+    """
+
+    def __init__(self, notified: dict[str, str] | None = None):
+        self.notified = notified or {}
+        self.calls = 0
+
+    #: adapter 自己的 runningId → 平台 run_id(平台送的是 runningId)
+    running_ids: dict[str, str] = {}
+
+    def __call__(self, url, timeout=None):
+        if url.endswith("/autoTest/history"):
+            return _FakeResponse(
+                {"runs": [{"runId": v, "runningId": k} for k, v in self.running_ids.items()]}
+            )
+        self.calls += 1
+        return _FakeResponse(
+            {"notified": [{"id": k, "notified_at": v, "count": 1} for k, v in self.notified.items()]}
+        )
+
+
+class _FakeResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self._payload
+
+
+@pytest.fixture(autouse=True)
+def _clear_adapter_cache():
+    views._adapter_history_cache.clear()
+    views._adapter_poll.clear()
+    yield
+
+
+@pytest.fixture
+def adapter(monkeypatch):
+    """每個測試自己決定 adapter 上誰被標成 notified;順便關掉輪詢的 5 秒節流。"""
+    fake = _FakeAdapter()
+    monkeypatch.setattr(views.httpx, "get", fake)
+    monkeypatch.setattr(views, "_adapter_poll", {})
+    return fake
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS, FIELD_TEST_ADAPTER_BASE="http://adapter")
+def test_wall_follows_a_notice_it_finds_on_the_adapter(monkeypatch, adapter):
+    """adapter 只把紀錄標成 notified、不會通知我們,所以牆面輪詢時順便去問。"""
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(_history_runs()))
+    # 第一次:先把現況記起來(後端重開不該讓牆跳到很久以前的通知)
+    adapter.notified = {"old": "100"}
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "new"
+
+    # 之後才出現的通知才算數
+    adapter.notified = {"old": "100", "out1": "200"}
+    views._adapter_poll.clear()
+    assert APIClient().get("/api/field-tests/missions/outdoor/").json()["runId"] == "out1"
+    # 同一筆不會一直重新指定:清掉之後不該又自己跳回去
+    APIClient().delete("/api/field-tests/history/?scenario=outdoor")
+    views._adapter_poll.clear()
+    assert APIClient().get("/api/field-tests/missions/outdoor/").json()["runId"] == "out1"  # 最新一筆剛好也是它
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS, FIELD_TEST_ADAPTER_BASE="http://adapter")
+def test_adapter_is_asked_at_most_once_every_few_seconds(monkeypatch, adapter):
+    """兩面牆各自 1~15 秒輪詢,不能每次都去敲 adapter。"""
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(_history_runs()))
+    for _ in range(4):
+        APIClient().get("/api/field-tests/missions/indoor/")
+    assert adapter.calls == 1
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS, FIELD_TEST_ADAPTER_BASE="http://adapter")
+def test_adapter_being_down_does_not_break_the_wall(monkeypatch, adapter):
+    import httpx
+
+    def boom(url, timeout=None):
+        raise httpx.ConnectError("no route")
+
+    monkeypatch.setattr(views.httpx, "get", boom)
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(_history_runs()))
+    assert APIClient().get("/api/field-tests/missions/indoor/").status_code == 200
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS, FIELD_TEST_ADAPTER_BASE="http://adapter")
+def test_the_same_record_notified_again_is_shown_again(monkeypatch, adapter):
+    """adapter 重複通知同一筆時會更新 notified_at —— 時間變了就要再切一次。"""
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(_history_runs()))
+    APIClient().get("/api/field-tests/missions/indoor/")          # 先建立基準(還沒有通知)
+    adapter.notified = {"old": "100"}
+    views._adapter_poll.clear()
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "old"
+
+    APIClient().delete("/api/field-tests/history/?scenario=indoor")
+    views._adapter_poll.clear()
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "new"
+
+    adapter.notified = {"old": "300"}                             # 平台又通知同一筆
+    views._adapter_poll.clear()
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "old"
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS, FIELD_TEST_ADAPTER_BASE="http://adapter")
+def test_a_notice_that_uses_the_adapter_running_id_still_works(monkeypatch, adapter):
+    """平台的規格傳的是 runningId(adapter 自己的 12 碼),不一定等於平台的 run_id ——
+    要靠 adapter 的歷史清單換算,不然對不到就不會切(實際踩過)。"""
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(_history_runs()))
+    adapter.running_ids = {"b967cd21d39b": "old"}
+
+    # 轉發進來的那支
+    res = APIClient().post("/api/field-tests/history/", ["b967cd21d39b"], format="json")
+    assert res.json()["pinned"] == {"indoor": "old"}
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "old"
+
+    # 備援輪詢那條也要換算
+    APIClient().delete("/api/field-tests/history/")
+    APIClient().get("/api/field-tests/missions/indoor/")      # 建立基準
+    adapter.notified = {"b967cd21d39b": "500"}
+    views._adapter_poll.clear()
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "old"

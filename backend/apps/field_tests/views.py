@@ -9,13 +9,14 @@ from __future__ import annotations
 import logging
 import time
 
+import httpx
 from django.conf import settings
 from django.http import StreamingHttpResponse
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import client, transform
+from . import client, history, transform
 from .targets import ctrl_path, target
 
 logger = logging.getLogger(__name__)
@@ -96,7 +97,7 @@ class MissionView(WallReadView):
         try:
             conf = target(scenario)
             if not run_id:
-                run_id = _latest_run_id(conf.get("plan_id"))
+                run_id = _run_id_for(scenario, conf.get("plan_id"))
             if not run_id:
                 return Response({"detail": "目前沒有可顯示的驗測紀錄"}, status=404)
 
@@ -126,6 +127,8 @@ class MissionView(WallReadView):
             {
                 "runId": run_id,
                 "status": status_payload.get("status"),
+                # 這一次驗測的開始時間(epoch 秒)—— 牆上要標出「現在看的是哪一筆」
+                "created": status_payload.get("created"),
                 "nextSeq": samples_payload.get("next_seq"),
                 "phases": status_payload.get("phases") or {},
                 "currentRun": current,
@@ -142,11 +145,11 @@ class MissionView(WallReadView):
         )
 
 
-def _latest_run_id(plan_id: str | None) -> str | None:
-    """沒指定 run_id:拿這個 plan 最新一次(執行中的優先)。
+def _validations() -> list[dict]:
+    """驗測紀錄清單(A6)。
 
-    A6(GET /ext/validations)的回應形狀文件沒寫明,所以同時容忍「直接一個
-    list」與幾種常見的包裝鍵;真的對接上之後可以把這裡收斂成實際那一種。
+    GET /ext/validations 的回應形狀文件沒寫明,所以同時容忍「直接一個 list」
+    與幾種常見的包裝鍵;真的對接上之後可以把這裡收斂成實際那一種。
     """
     payload = client.get("/ext/validations")
     if isinstance(payload, list):
@@ -159,14 +162,139 @@ def _latest_run_id(plan_id: str | None) -> str | None:
             or payload.get("results")
             or []
         )
-    runs = [r for r in runs if isinstance(r, dict)]
+    return [r for r in runs if isinstance(r, dict)]
+
+
+def _rid(run: dict) -> str | None:
+    return run.get("run_id") or run.get("id")
+
+
+_ADAPTER_POLL_S = 5.0
+_adapter_poll: dict[str, float] = {}
+
+
+def _adapter_notified() -> dict[str, str] | None:
+    """adapter 那邊被通知過的紀錄:runId → notified_at(拿不到就 None)。
+
+    正常情況平台打 adapter 的 POST /autoTest/test/notifyHisShow 之後,adapter 會直接
+    轉發到我們的 POST /api/field-tests/history/(它的 NOTIFY_FORWARD_URL),牆面馬上就跟上。
+    這裡是**備援**:轉發失敗、或我們這邊剛好在重開時漏接,下次牆面輪詢就會補上。
+
+    兩面牆各自輪詢,這裡再壓成最多每 5 秒問一次;問不到就當作沒有通知,不影響牆面。
+    重複通知同一筆時 adapter 會更新 notified_at,所以比對時間就分得出來。
+    """
+    base = (settings.FIELD_TEST_ADAPTER_BASE or "").rstrip("/")
+    if not base:
+        return None
+    now = time.monotonic()
+    if now - _adapter_poll.get("at", 0.0) < _ADAPTER_POLL_S:
+        return None
+    _adapter_poll["at"] = now
+    try:
+        res = httpx.get(f"{base}/autoTest/history/notified", timeout=2.0)
+        res.raise_for_status()
+        items = res.json().get("notified") or []
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.info("問不到 adapter 的通知清單(%s)", exc)
+        return None
+    out: dict[str, str] = {}
+    for n in items:
+        rid = isinstance(n, dict) and n.get("id")
+        if rid and n.get("notified_at"):
+            out[str(rid)] = str(n["notified_at"])
+    return out
+
+
+_ADAPTER_HISTORY_TTL_S = 30.0
+_adapter_history_cache: dict[str, tuple[float, list[dict]]] = {}
+
+
+def _adapter_history() -> list[dict]:
+    """adapter 的歷史清單(每筆同時有平台的 runId 與 adapter 自己的 runningId)。
+
+    平台的規格傳的是 runningId,而我們(跟 Performance_tester)認的是 run_id ——
+    兩者不一定相同,所以要靠這張表換算。清單很少變,快取 30 秒。
+    """
+    base = (settings.FIELD_TEST_ADAPTER_BASE or "").rstrip("/")
+    if not base:
+        return []
+    hit = _adapter_history_cache.get(base)
+    if hit and time.monotonic() - hit[0] < _ADAPTER_HISTORY_TTL_S:
+        return hit[1]
+    try:
+        res = httpx.get(f"{base}/autoTest/history", timeout=2.0)
+        res.raise_for_status()
+        rows = [r for r in (res.json().get("runs") or []) if isinstance(r, dict)]
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.info("問不到 adapter 的歷史清單(%s)", exc)
+        return []
+    _adapter_history_cache[base] = (time.monotonic(), rows)
+    return rows
+
+
+def _resolve_run_id(rid: str, known: dict[str, dict]) -> str | None:
+    """把平台給的 runningId 換成我們認得的 run_id(本來就是 run_id 就原樣回)。"""
+    if rid in known:
+        return rid
+    for row in _adapter_history():
+        if row.get("runningId") == rid and row.get("runId") in known:
+            logger.info("runningId %s → run_id %s", rid, row["runId"])
+            return row["runId"]
+    return None
+
+
+def _sync_adapter_notices(runs: list[dict]) -> None:
+    """把 adapter 上「新被通知」的紀錄變成牆面的指定。
+
+    第一次(Redis 還沒有那筆記錄)只記錄、不切畫面 —— 後端重開不該讓牆跳到
+    某一次很久以前的通知。
+    """
+    notified = _adapter_notified()
+    if notified is None:
+        return
+    seen = history.seen_notices()
+    history.remember_notices(notified)
+    if seen is None:
+        return
+    by_id = {_rid(r): r for r in runs if _rid(r)}
+    for rid, at in notified.items():
+        if seen.get(rid) == at:  # 同一次通知,處理過了
+            continue
+        run_id = _resolve_run_id(rid, by_id)
+        run = by_id.get(run_id) if run_id else None
+        scenario = _scenario_of(run) if run else None
+        if scenario and run_id:
+            history.pin(scenario, run_id)
+            logger.info("adapter 通知顯示歷史驗測:%s → %s", scenario, run_id)
+        else:
+            logger.info("adapter 通知的 %s 對不到室內 / 室外的方案,略過", rid)
+
+
+def _run_id_for(scenario: str, plan_id: str | None) -> str | None:
+    """沒指定 run_id 時,這面牆要顯示哪一次驗測。
+
+    順序:執行中的 > 平台指定的歷史紀錄(notifyHisShow,見 history.py)> 最新一次。
+    一有新的驗測開跑就把指定清掉 —— 牆要回到即時,而且那次跑完之後也該跟著新的走。
+    """
+    runs = _validations()
+    # 先看 adapter 有沒有新的「顯示這筆歷史」通知(全部情境一起看,清單只讀一次)
+    _sync_adapter_notices(runs)
     if plan_id:
         runs = _runs_of_plan(runs, plan_id)
     if not runs:
         return None
     running = [r for r in runs if r.get("status") in {"running", "ready"}]
     if running:
-        return running[0].get("run_id") or running[0].get("id")
+        history.clear(scenario)
+        return _rid(running[0])
+
+    chosen = history.pinned(scenario)
+    if chosen:
+        if any(_rid(r) == chosen for r in runs):
+            return chosen
+        # 指定的那筆不屬於這個情境(或已經被平台刪了)—— 清掉,照常挑最新一次
+        logger.info("歷史指定 %s 不在 %s 的紀錄裡,改用最新一次", chosen, scenario)
+        history.clear(scenario)
 
     # 沒有在跑的就挑最新一次(created 是 epoch 秒)。但平台上留著不少半途失敗的紀錄:
     # 有的一筆樣本都沒收到(status=error、phases={}),有的只跑完第一趟 —— 這張卡是
@@ -177,7 +305,7 @@ def _latest_run_id(plan_id: str | None) -> str | None:
     complete = [r for r in newest if _has_both_passes(r)]
     with_samples = [r for r in newest if r.get("n_samples") is None or r.get("n_samples")]
     pick = (complete or with_samples or newest)[0]
-    return pick.get("run_id") or pick.get("id")
+    return _rid(pick)
 
 
 _PLAN_ENV_TTL_S = 300.0
@@ -333,18 +461,170 @@ class RunAbortView(APIView):
             return _error(exc)
 
 
-class CameraStreamView(WallReadView):
-    """GET /api/field-tests/camera/<scenario>/stream —— 車載影像(B6,MJPEG)。
+class RecordListView(WallReadView):
+    """GET /api/field-tests/records/?scenario=indoor —— 驗測紀錄清單(挑歷史用)。
 
-    這是長連線:nginx 那段要 proxy_buffering off,否則畫面出不來。
-    上游同時最多 3 路,前端不看就要把 <img> 移除。
+    左螢幕(扮演共通性測試平台)要讓人挑「顯示哪一次」時,先打這支拿清單,
+    再把選到的 runId 當作 runningId 送出去(打 adapter 的 notifyHisShow,
+    或直接打下面的 POST /api/field-tests/history/)。
+
+    ?scenario= 只留該情境的紀錄(省略就全部);新的在前面。
     """
 
-    suffix = "/camera/stream"
+    def get(self, request):
+        scenario = request.query_params.get("scenario")
+        try:
+            runs = _validations()
+            if scenario:
+                plan_id = target(scenario).get("plan_id")
+                if plan_id:
+                    runs = _runs_of_plan(runs, plan_id)
+        except client.PerfTesterError as exc:
+            return _error(exc)
+
+        pinned = history.all_pinned()
+        rows = [
+            {
+                "runId": _rid(r),
+                "status": r.get("status"),
+                # created 是 epoch 秒(上游給什麼就給什麼,格式化交給畫面)
+                "created": r.get("created"),
+                # {階段名: 筆數} —— 兩趟都有數字才畫得出對照
+                "phases": r.get("phases") or {},
+                "bothPasses": _has_both_passes(r),
+                "environmentId": (r.get("meta") or {}).get("environment_id"),
+                "pinned": _rid(r) in pinned.values(),
+            }
+            for r in sorted(runs, key=lambda r: r.get("created") or 0, reverse=True)
+            if _rid(r)
+        ]
+        return Response({"runs": rows, "pinned": pinned})
+
+
+class HistoryShowView(APIView):
+    """POST /api/field-tests/history/ —— 平台指定牆上要顯示哪幾次歷史驗測。
+
+    共通性測試平台打 IM adapter 的 POST /autoTest/test/notifyHisShow(fire-and-forget,
+    body 是一串 runningId),adapter 原樣把 body 轉來這裡即可。
+
+    - body:["<runningId>", ...];也接受 {"runningIds": [...]} / {"running_id": "..."}
+    - 一次可以帶多筆:依紀錄所屬的環境分給室內 / 室外兩面牆,同一個情境有多筆就取最新的
+    - 指定之後牆面就顯示那一次,直到下一次通知,或平台又開跑新的驗測(那時自動回即時)
+    - GET 看目前指定了什麼、DELETE 清掉(?scenario= 只清一面牆)
+
+    對方只看 HTTP 狀態碼,不解析回應;這裡仍然回一小段 JSON 方便對帳與除錯。
+    """
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    def _denied(self, request) -> Response | None:
+        want = settings.FIELD_TEST_NOTIFY_TOKEN
+        if want and request.headers.get("X-Notify-Token") != want:
+            return Response({"detail": "X-Notify-Token 不對"}, status=403)
+        return None
+
+    def get(self, request):
+        return Response({"pinned": history.all_pinned()})
+
+    def delete(self, request):
+        denied = self._denied(request)
+        if denied:
+            return denied
+        history.clear(request.query_params.get("scenario"))
+        return Response({"pinned": history.all_pinned()})
+
+    def post(self, request):
+        denied = self._denied(request)
+        if denied:
+            return denied
+        ids = _running_ids(request.data)
+        if not ids:
+            return Response({"detail": "body 要是一串 runningId"}, status=422)
+        try:
+            runs = {_rid(r): r for r in _validations() if _rid(r)}
+        except client.PerfTesterError as exc:
+            return _error(exc)
+
+        # 同一個情境被指定好幾筆時取最新的(created 是 epoch 秒)
+        best: dict[str, dict] = {}
+        unknown: list[str] = []
+        for rid in ids:
+            # 平台送的是 runningId,不一定等於我們認的 run_id(見 _resolve_run_id)
+            run = runs.get(_resolve_run_id(rid, runs) or "")
+            scenario = _scenario_of(run) if run else None
+            if not scenario:
+                unknown.append(rid)
+                continue
+            cur = best.get(scenario)
+            if not cur or (run.get("created") or 0) >= (cur.get("created") or 0):
+                best[scenario] = run
+        for scenario, run in best.items():
+            history.pin(scenario, _rid(run))
+            logger.info("平台指定 %s 顯示歷史驗測 %s", scenario, _rid(run))
+        if unknown:
+            logger.info("歷史指定裡有認不得的 runningId:%s", unknown)
+        if not best:
+            return Response({"detail": "沒有一筆對得上室內 / 室外的方案", "unknown": unknown}, status=404)
+        return Response({"pinned": {k: _rid(v) for k, v in best.items()}, "unknown": unknown})
+
+
+def _running_ids(data) -> list[str]:
+    """平台的 body 是 ["<runningId>"];順手接受幾種包裝法,少一次來回。"""
+    if isinstance(data, str):
+        data = [data]
+    if isinstance(data, dict):
+        data = data.get("runningIds") or data.get("running_ids") or data.get("running_id") or []
+        if isinstance(data, str):
+            data = [data]
+    if not isinstance(data, list):
+        return []
+    return [str(x) for x in data if isinstance(x, str | int) and str(x).strip()]
+
+
+def _scenario_of(run: dict) -> str | None:
+    """這一筆驗測紀錄屬於哪個情境(用跟挑 run 時同一套比對:plan_id → 方案的 env_id)。"""
+    for scenario, conf in (settings.FIELD_TEST_TARGETS or {}).items():
+        plan_id = (conf or {}).get("plan_id")
+        if not plan_id:
+            continue
+        try:
+            if _runs_of_plan([run], plan_id):
+                return scenario
+        except client.PerfTesterError as exc:
+            logger.info("對不到 %s 的方案(%s)", scenario, exc.detail)
+    return None
+
+
+# 載具影像的上游路徑:AMR 與 UAV 是兩組端點。
+#   AMR(B6) /camera        先查再開 → /camera/stream(MJPEG)、/camera/snapshot(單張)
+#   UAV     /camera/info   能力查詢 → /camera/mjpeg(MJPEG);沒有 MJPEG 時上游才有
+#                          /camera/hls/{subpath},目前實測 mjpeg=true,HLS 先不接。
+_CAMERA_PATHS = {
+    "indoor": {"status": "/camera", "stream": "/camera/stream", "snapshot": "/camera/snapshot"},
+    "outdoor": {"status": "/camera/info", "stream": "/camera/mjpeg", "snapshot": None},
+}
+
+
+def _camera_path(scenario: str, kind: str) -> str | None:
+    return _CAMERA_PATHS.get(scenario, _CAMERA_PATHS["indoor"]).get(kind)
+
+
+class CameraStreamView(WallReadView):
+    """GET /api/field-tests/camera/<scenario>/stream —— 載具影像(MJPEG)。
+
+    這是長連線:nginx 那段要 proxy_buffering off,否則畫面出不來。
+    AMR 上游同時最多 3 路,前端不看就要把 <img> 移除。
+    """
+
+    kind = "stream"
 
     def get(self, request, scenario: str):
+        path = _camera_path(scenario, self.kind)
+        if not path:
+            return Response({"detail": f"{scenario} 沒有這種影像"}, status=404)
         try:
-            content_type, chunks = client.stream(ctrl_path(scenario, self.suffix))
+            content_type, chunks = client.stream(ctrl_path(scenario, path))
         except client.PerfTesterError as exc:
             return _error(exc)
         resp = StreamingHttpResponse(chunks, content_type=content_type)
@@ -355,24 +635,33 @@ class CameraStreamView(WallReadView):
 
 
 class CameraSnapshotView(CameraStreamView):
-    """GET /api/field-tests/camera/<scenario>/snapshot —— 單張 JPEG。"""
+    """GET /api/field-tests/camera/<scenario>/snapshot —— 單張 JPEG(只有 AMR 有)。"""
 
-    suffix = "/camera/snapshot"
+    kind = "snapshot"
 
 
 class CameraStatusView(WallReadView):
-    """GET /api/field-tests/camera/<scenario>/ —— 先查有沒有在推流再開(B6)。"""
+    """GET /api/field-tests/camera/<scenario>/ —— 先查再開。
+
+    AMR 回的是推流狀態(streaming / viewers / config),UAV 回的是能力
+    ({"state","mjpeg","hls"})。兩種都原樣透出,再補上我們自己的代理位址 ——
+    前端只看有沒有 stream_url、名額有沒有滿。
+    """
 
     def get(self, request, scenario: str):
         try:
-            payload = client.get(ctrl_path(scenario, "/camera"))
+            payload = client.get(ctrl_path(scenario, _camera_path(scenario, "status")))
         except client.PerfTesterError as exc:
             return _error(exc)
         # 前端要的是「能不能播」與播放位址,位址一律走我們自己的代理
         if not isinstance(payload, dict):
             payload = {"camera": payload}
-        payload["stream_url"] = f"/api/field-tests/camera/{scenario}/stream"
-        payload["snapshot_url"] = f"/api/field-tests/camera/{scenario}/snapshot"
+        # UAV 只有在上游說得出 MJPEG 時才給位址(沒有 MJPEG 只有 HLS 的話我們還沒接)
+        has_stream = "mjpeg" not in payload or bool(payload.get("mjpeg"))
+        if has_stream:
+            payload["stream_url"] = f"/api/field-tests/camera/{scenario}/stream"
+        if _camera_path(scenario, "snapshot"):
+            payload["snapshot_url"] = f"/api/field-tests/camera/{scenario}/snapshot"
         return Response(payload)
 
 

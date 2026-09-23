@@ -178,6 +178,14 @@ PERF_TESTER_PHASE_MAP = env.json(
     "PERF_TESTER_PHASE_MAP",
     default={"優化前": "before", "優化後": "after", "部署前": "before", "部署後": "after"},
 )
+# 共通性測試平台要牆面顯示某幾次歷史驗測時,IM adapter 會轉發
+# POST /api/field-tests/history/ 過來。設了這個就要求對方帶 X-Notify-Token
+# (內網服務對打,預設空 = 不驗)。
+FIELD_TEST_NOTIFY_TOKEN = env("FIELD_TEST_NOTIFY_TOKEN", default="")
+# IM adapter(共通性測試平台打進來的那一端)。平台通知「顯示某筆歷史」時 adapter
+# 只是把它標成 notified,不會轉發,所以牆面輪詢時順便去問它的 /autoTest/history。
+# 留空 = 不問(例如對方改成直接轉發給我們之後就可以關掉)。
+FIELD_TEST_ADAPTER_BASE = env("FIELD_TEST_ADAPTER_BASE", default="")
 # 情境 → 控制器(cid 來自 GET /api/ctrl-conns、ref 如 amr-01)與要跑的方案
 FIELD_TEST_TARGETS = env.json(
     "FIELD_TEST_TARGETS",

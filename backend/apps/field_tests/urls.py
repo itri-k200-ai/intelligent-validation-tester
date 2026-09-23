@@ -4,9 +4,11 @@ from .views import (
     CameraSnapshotView,
     CameraStatusView,
     CameraStreamView,
+    HistoryShowView,
     LiveView,
     MissionView,
     PlanListView,
+    RecordListView,
     RunAbortView,
     RunCreateView,
     SceneView,
@@ -17,6 +19,8 @@ from .views import (
 urlpatterns = [
     path("field-tests/targets/", TargetsView.as_view(), name="field-test-targets"),
     path("field-tests/plans/", PlanListView.as_view(), name="field-test-plans"),
+    # 驗測紀錄清單 —— 左螢幕挑「要顯示哪一次歷史」用
+    path("field-tests/records/", RecordListView.as_view(), name="field-test-records"),
     path("field-tests/runs/", RunCreateView.as_view(), name="field-test-run-create"),
     path(
         "field-tests/runs/<str:run_id>/abort/", RunAbortView.as_view(), name="field-test-run-abort"
@@ -24,6 +28,8 @@ urlpatterns = [
     path("field-tests/live/<str:scenario>/", LiveView.as_view(), name="field-test-live"),
     path("field-tests/scene/<str:scenario>/", SceneView.as_view(), name="field-test-scene"),
     path("field-tests/missions/<str:scenario>/", MissionView.as_view(), name="field-test-mission"),
+    # 平台(經 IM adapter 的 notifyHisShow)指定牆上要顯示哪一次歷史驗測
+    path("field-tests/history/", HistoryShowView.as_view(), name="field-test-history"),
     path(
         "field-tests/camera/<str:scenario>/", CameraStatusView.as_view(), name="field-test-camera"
     ),
