@@ -29,6 +29,9 @@ const config: NextConfig = {
       // non = NonRICTester(adapter 5110 / back_end 5010)
       { source: "/ric/non/autoTest/:path*", destination: "http://localhost:5110/autoTest/:path*" },
       { source: "/ric/non/api/back_end/:path*", destination: "http://localhost:5010/api/back_end/:path*" },
+      // im = imctrl(只有 adapter,而且在另一台主機)—— 交給 nginx 去解,
+      // 免得把場域的 IP 寫死在 repo 裡;沒有這條的話 dev 會掉進 Next 自己而回 404 頁面。
+      { source: "/ric/im/autoTest/:path*", destination: "http://localhost:8080/ric/im/autoTest/:path*" },
       { source: "/api/:path*", destination: "http://localhost:8080/api/:path*/" },
       { source: "/ws/:path*", destination: "http://localhost:8080/ws/:path*" },
       // 環境攝影機 HLS —— RICtester mediamtx(影像已整併過去,host :8890)
