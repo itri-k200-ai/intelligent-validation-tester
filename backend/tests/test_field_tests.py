@@ -889,14 +889,7 @@ class _FakeAdapter:
         self.notified = notified or {}
         self.calls = 0
 
-    #: adapter 自己的 runningId → 平台 run_id(平台送的是 runningId)
-    running_ids: dict[str, str] = {}
-
     def __call__(self, url, timeout=None):
-        if url.endswith("/autoTest/history"):
-            return _FakeResponse(
-                {"runs": [{"runId": v, "runningId": k} for k, v in self.running_ids.items()]}
-            )
         self.calls += 1
         return _FakeResponse(
             {"notified": [{"id": k, "notified_at": v, "count": 1} for k, v in self.notified.items()]}
@@ -916,7 +909,6 @@ class _FakeResponse:
 
 @pytest.fixture(autouse=True)
 def _clear_adapter_cache():
-    views._adapter_history_cache.clear()
     views._adapter_poll.clear()
     yield
 
@@ -983,25 +975,5 @@ def test_the_same_record_notified_again_is_shown_again(monkeypatch, adapter):
     assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "new"
 
     adapter.notified = {"old": "300"}                             # 平台又通知同一筆
-    views._adapter_poll.clear()
-    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "old"
-
-
-@override_settings(FIELD_TEST_TARGETS=TARGETS, FIELD_TEST_ADAPTER_BASE="http://adapter")
-def test_a_notice_that_uses_the_adapter_running_id_still_works(monkeypatch, adapter):
-    """平台的規格傳的是 runningId(adapter 自己的 12 碼),不一定等於平台的 run_id ——
-    要靠 adapter 的歷史清單換算,不然對不到就不會切(實際踩過)。"""
-    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(_history_runs()))
-    adapter.running_ids = {"b967cd21d39b": "old"}
-
-    # 轉發進來的那支
-    res = APIClient().post("/api/field-tests/history/", ["b967cd21d39b"], format="json")
-    assert res.json()["pinned"] == {"indoor": "old"}
-    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "old"
-
-    # 備援輪詢那條也要換算
-    APIClient().delete("/api/field-tests/history/")
-    APIClient().get("/api/field-tests/missions/indoor/")      # 建立基準
-    adapter.notified = {"b967cd21d39b": "500"}
     views._adapter_poll.clear()
     assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "old"

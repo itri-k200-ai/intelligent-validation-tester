@@ -236,44 +236,6 @@ def _adapter_notified() -> dict[str, str] | None:
     return out
 
 
-_ADAPTER_HISTORY_TTL_S = 30.0
-_adapter_history_cache: dict[str, tuple[float, list[dict]]] = {}
-
-
-def _adapter_history() -> list[dict]:
-    """adapter 的歷史清單(每筆同時有平台的 runId 與 adapter 自己的 runningId)。
-
-    平台的規格傳的是 runningId,而我們(跟 Performance_tester)認的是 run_id ——
-    兩者不一定相同,所以要靠這張表換算。清單很少變,快取 30 秒。
-    """
-    base = (settings.FIELD_TEST_ADAPTER_BASE or "").rstrip("/")
-    if not base:
-        return []
-    hit = _adapter_history_cache.get(base)
-    if hit and time.monotonic() - hit[0] < _ADAPTER_HISTORY_TTL_S:
-        return hit[1]
-    try:
-        res = httpx.get(f"{base}/autoTest/history", timeout=2.0)
-        res.raise_for_status()
-        rows = [r for r in (res.json().get("runs") or []) if isinstance(r, dict)]
-    except (httpx.HTTPError, ValueError) as exc:
-        logger.info("問不到 adapter 的歷史清單(%s)", exc)
-        return []
-    _adapter_history_cache[base] = (time.monotonic(), rows)
-    return rows
-
-
-def _resolve_run_id(rid: str, known: dict[str, dict]) -> str | None:
-    """把平台給的 runningId 換成我們認得的 run_id(本來就是 run_id 就原樣回)。"""
-    if rid in known:
-        return rid
-    for row in _adapter_history():
-        if row.get("runningId") == rid and row.get("runId") in known:
-            logger.info("runningId %s → run_id %s", rid, row["runId"])
-            return row["runId"]
-    return None
-
-
 def _sync_adapter_notices(runs: list[dict]) -> None:
     """把 adapter 上「新被通知」的紀錄變成牆面的指定。
 
@@ -291,14 +253,14 @@ def _sync_adapter_notices(runs: list[dict]) -> None:
     for rid, at in notified.items():
         if seen.get(rid) == at:  # 同一次通知,處理過了
             continue
-        run_id = _resolve_run_id(rid, by_id)
-        run = by_id.get(run_id) if run_id else None
+        run = by_id.get(rid)
         scenario = _scenario_of(run) if run else None
-        if scenario and run_id:
-            history.pin(scenario, run_id)
-            logger.info("adapter 通知顯示歷史驗測:%s → %s", scenario, run_id)
+        if scenario:
+            history.pin(scenario, rid)
+            logger.info("adapter 通知顯示歷史驗測:%s → %s", scenario, rid)
         else:
-            logger.info("adapter 通知的 %s 對不到室內 / 室外的方案,略過", rid)
+            # 平台的 runningId 要由 adapter 換算成 run_id 再送來(見 docs 的介接說明)
+            logger.info("adapter 通知的 %s 不是我們認得的 run_id,略過", rid)
 
 
 def _run_id_for(scenario: str, plan_id: str | None) -> str | None:
@@ -538,7 +500,9 @@ class HistoryShowView(APIView):
     共通性測試平台打 IM adapter 的 POST /autoTest/test/notifyHisShow(fire-and-forget,
     body 是一串 runningId),adapter 原樣把 body 轉來這裡即可。
 
-    - body:["<runningId>", ...];也接受 {"runningIds": [...]} / {"running_id": "..."}
+    - body:["<run_id>", ...];也接受 {"runningIds": [...]} / {"running_id": "..."}
+      (平台的 runningId 是 adapter 自己的 ID,要由 adapter 換成 Performance_tester
+       的 run_id 再送過來 —— 那張對照表在它那裡)
     - 一次可以帶多筆:依紀錄所屬的環境分給室內 / 室外兩面牆,同一個情境有多筆就取最新的
     - 指定之後牆面就顯示那一次,直到下一次通知,或平台又開跑新的驗測(那時自動回即時)
     - GET 看目前指定了什麼、DELETE 清掉(?scenario= 只清一面牆)
@@ -581,8 +545,7 @@ class HistoryShowView(APIView):
         best: dict[str, dict] = {}
         unknown: list[str] = []
         for rid in ids:
-            # 平台送的是 runningId,不一定等於我們認的 run_id(見 _resolve_run_id)
-            run = runs.get(_resolve_run_id(rid, runs) or "")
+            run = runs.get(rid)
             scenario = _scenario_of(run) if run else None
             if not scenario:
                 unknown.append(rid)
