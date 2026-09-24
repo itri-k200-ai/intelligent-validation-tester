@@ -9,6 +9,8 @@ from .views import (
     MissionView,
     PlanListView,
     RecordListView,
+    ReplayFrameView,
+    ReplayView,
     RunAbortView,
     RunCreateView,
     SceneView,
@@ -27,6 +29,13 @@ urlpatterns = [
     ),
     path("field-tests/live/<str:scenario>/", LiveView.as_view(), name="field-test-live"),
     path("field-tests/scene/<str:scenario>/", SceneView.as_view(), name="field-test-scene"),
+    # 歷史驗測的影像回放:索引 + 逐張畫面(前端連不到場域網段,都要經這裡代理)
+    path("field-tests/replay/<str:scenario>/", ReplayView.as_view(), name="field-test-replay"),
+    path(
+        "field-tests/replay/<str:scenario>/<str:cam>/<int:index>.jpg",
+        ReplayFrameView.as_view(),
+        name="field-test-replay-frame",
+    ),
     path("field-tests/missions/<str:scenario>/", MissionView.as_view(), name="field-test-mission"),
     # 平台(經 IM adapter 的 notifyHisShow)指定牆上要顯示哪一次歷史驗測
     path("field-tests/history/", HistoryShowView.as_view(), name="field-test-history"),

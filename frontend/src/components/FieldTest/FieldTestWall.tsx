@@ -13,6 +13,7 @@ import {
 } from "recharts";
 
 import { SceneMap3D } from "@/components/FieldTest/SceneMap3D";
+import { ReplayPlayer } from "@/components/FieldTest/ReplayPlayer";
 import { LiveVideo } from "@/components/Site/LiveVideo";
 import type { FieldBackdrop, FloorPlan, FloorRect } from "@/config/floorPlans";
 import {
@@ -24,6 +25,7 @@ import {
 import { useFieldTestCamera } from "@/hooks/FieldTest/useFieldTestCamera";
 import { useFieldTestLive, type FieldLive } from "@/hooks/FieldTest/useFieldTestLive";
 import { useFieldTestMission } from "@/hooks/FieldTest/useFieldTestMission";
+import { useFieldTestReplay, type ReplayCamera } from "@/hooks/FieldTest/useFieldTestReplay";
 import { useFieldTestScene } from "@/hooks/FieldTest/useFieldTestScene";
 import { cameraSources } from "@/lib/fieldCameras";
 import { formatRate, pickRateUnit } from "@/lib/formatRate";
@@ -71,6 +73,9 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
   // 只有值是「—」。牆是無人看顧的,空白畫面看起來像壞了。
   // 車載影像要先確認上游在推流、名額沒滿才掛上去(最後一格是載具車載)
   const { streamUrl } = useFieldTestCamera(scenario);
+  // 顯示歷史紀錄時車載那格改播回放 —— 即時串流對跑完的驗測沒有意義,
+  // 而且載具多半也不在線,那一格會整片空白。
+  const { replay } = useFieldTestReplay(scenario);
   // 骨架要固定同一個物件:平台斷線時(很常見)每次 render 都生新的,會讓 3D 地圖不停重畫
   const empty = useMemo(() => emptyMission(sc, scenario), [sc, scenario]);
   const base = mission ?? empty;
@@ -78,11 +83,14 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
     ...base,
     cameras: base.cameras.map((src, i) => (i === base.cameras.length - 1 ? (streamUrl ?? src) : src)),
   };
+  // 沒有任何一趟在跑 = 看的是歷史紀錄。此時車載那格若有回放就播回放。
+  const running = base.runs.some((r) => r.status === "running");
+  const replayCam = !running ? (replay?.cameras?.[0] ?? null) : null;
 
   return sc.layout === "live-results" ? (
-    <LiveResultsLayout scenario={scenario} sc={sc} mission={data} live={live} />
+    <LiveResultsLayout scenario={scenario} sc={sc} mission={data} live={live} replayCam={replayCam} replayPeriodS={replay?.periodS ?? null} />
   ) : (
-    <CameraGridLayout scenario={scenario} sc={sc} mission={data} live={live} />
+    <CameraGridLayout scenario={scenario} sc={sc} mission={data} live={live} replayCam={replayCam} replayPeriodS={replay?.periodS ?? null} />
   );
 }
 
@@ -114,11 +122,16 @@ function LiveResultsLayout({
   sc,
   mission,
   live,
+  replayCam,
+  replayPeriodS,
 }: {
   scenario: FieldScenarioId;
   sc: Extract<FieldScenario, { layout: "live-results" }>;
   mission: FieldMission;
   live: FieldLive | null;
+  /** 歷史模式才有:車載那格要播的回放鏡頭(沒有回放就是 null)。 */
+  replayCam: ReplayCamera | null;
+  replayPeriodS: number | null;
 }) {
   const run = mission.runs[mission.currentRun];
   const allRuns = mission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
@@ -174,7 +187,15 @@ function LiveResultsLayout({
         {/* 每支攝影機各自有標題列(貼第 2 排電視的下框線),畫面在第 3 排 */}
         <div className="field-video-row">
           {sc.cameras.map((label, i) => (
-            <VideoTile key={label} label={label} src={mission.cameras[i] ?? null} />
+            <VideoTile
+                key={label}
+                label={label}
+                src={mission.cameras[i] ?? null}
+                // 車載是最後一格;有回放就播回放(見 FieldTestWall 的 replayCam)
+                replay={i === sc.cameras.length - 1 ? replayCam : null}
+                replayPeriodS={replayPeriodS}
+                scenario={scenario}
+              />
           ))}
         </div>
       </section>
@@ -221,11 +242,16 @@ function CameraGridLayout({
   sc,
   mission,
   live,
+  replayCam,
+  replayPeriodS,
 }: {
   scenario: FieldScenarioId;
   sc: Extract<FieldScenario, { layout: "camera-grid" }>;
   mission: FieldMission;
   live: FieldLive | null;
+  /** 歷史模式才有:車載那格要播的回放鏡頭(沒有回放就是 null)。 */
+  replayCam: ReplayCamera | null;
+  replayPeriodS: number | null;
 }) {
   const run = mission.runs[mission.currentRun];
   const allRuns = mission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
@@ -242,7 +268,15 @@ function CameraGridLayout({
         <div className="field-live-grid">
           <div className="field-video-grid">
             {sc.cameras.map((label, i) => (
-              <VideoTile key={label} label={label} src={mission.cameras[i] ?? null} />
+              <VideoTile
+                key={label}
+                label={label}
+                src={mission.cameras[i] ?? null}
+                // 車載是最後一格;有回放就播回放(見 FieldTestWall 的 replayCam)
+                replay={i === sc.cameras.length - 1 ? replayCam : null}
+                replayPeriodS={replayPeriodS}
+                scenario={scenario}
+              />
             ))}
           </div>
           {/* 兩張小卡的標題列分別貼第 1、2 排電視的下框線,數值從縫下方 48 起 */}
@@ -334,7 +368,20 @@ function HeadRow({ title, mission }: { title: string; mission: FieldMission }) {
  * 一路影像(16:9):名稱獨立成一條標題列放在畫面上方,樣式與小卡標題列(飛行狀態、
  * 通訊品質)相同 —— 標題列落在上一排電視的下緣,畫面整個放在下一排電視裡。
  */
-function VideoTile({ label, src }: { label: string; src: string | null }) {
+function VideoTile({
+  label,
+  src,
+  replay,
+  replayPeriodS,
+  scenario,
+}: {
+  label: string;
+  src: string | null;
+  /** 有值就播歷史回放,沒有才走即時串流 */
+  replay?: ReplayCamera | null;
+  replayPeriodS?: number | null;
+  scenario: FieldScenarioId;
+}) {
   return (
     <div className="field-video-cell">
       <div className="field-video-head">
@@ -342,7 +389,11 @@ function VideoTile({ label, src }: { label: string; src: string | null }) {
         <span className="flex-none text-[2.5rem] font-semibold leading-tight">{label}</span>
       </div>
       <div className="field-video">
-        <LiveVideo src={src} />
+        {replay ? (
+          <ReplayPlayer scenario={scenario} camera={replay} periodS={replayPeriodS ?? null} />
+        ) : (
+          <LiveVideo src={src} />
+        )}
       </div>
     </div>
   );

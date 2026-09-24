@@ -2833,6 +2833,20 @@ html.wall-mode .field-video .video-live-badge {
   bottom: 1.25rem;
 }
 
+/* 歷史回放的標記 —— 牆上回放與即時影像長得一樣,不標會誤以為車子還在跑。
+   位置與 LIVE 標籤一致(右下),配色用 warning 區隔「這不是即時」。 */
+.field-replay-badge {
+  position: absolute;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  padding: 0.25rem 1.25rem;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--c-warning);
+  font-size: 2rem;
+  line-height: 1.4;
+}
+
 /* 小卡 —— 設計規範「Combination – Third Layer」:標題列 65px、內層圓角 21px */
 html.wall-mode .field-sub {
   min-width: 0;

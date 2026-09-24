@@ -641,6 +641,80 @@ def _camera_path(scenario: str, kind: str) -> str | None:
     return _CAMERA_PATHS.get(scenario, _CAMERA_PATHS["indoor"]).get(kind)
 
 
+class ReplayView(WallReadView):
+    """GET /api/field-tests/replay/<scenario>/ —— 這次驗測的影像回放索引。
+
+    顯示歷史紀錄時載具早就不在跑了,即時串流沒有意義(而且多半也連不上)。
+    平台在 validation run 期間有存逐格畫面,這裡把索引轉給前端:哪些鏡頭、
+    各有幾張、每張屬於哪一趟(優化前 / 優化後)、間隔幾秒。
+
+    ⚠ 目前上游只有車載鏡頭(onboard)真的有 frames,三支固定攝影機都是 0 張
+      (平台端的問題,不是這裡漏拿)。沒有 frames 的鏡頭一律不回,前端就不會
+      去要那幾格的圖。
+
+    run_id 的挑法與 /missions 一致(平台指定的 > 最新一次),兩邊看到的才是同一次。
+    """
+
+    def get(self, request, scenario: str):
+        run_id = request.query_params.get("run_id")
+        try:
+            conf = target(scenario)
+            if not run_id:
+                run_id = _run_id_for(scenario, conf.get("plan_id"))
+            if not run_id:
+                return Response({"detail": "目前沒有可顯示的驗測紀錄"}, status=404)
+            payload = client.get(f"/validation-runs/{run_id}/replay")
+        except client.PerfTesterError as exc:
+            return _error(exc)
+
+        frames = payload.get("frames") or {}
+        names = {c.get("key"): c.get("name") for c in (payload.get("cameras") or [])}
+        cameras = [
+            {
+                "key": key,
+                "name": names.get(key) or key,
+                # 只回索引與所屬趟次,圖片本身走下面那支逐張代理
+                "frames": [
+                    {"i": f.get("i"), "phase": f.get("phase")}
+                    for f in rows
+                    if f.get("i") is not None
+                ],
+            }
+            for key, rows in frames.items()
+            if rows
+        ]
+        return Response(
+            {"runId": run_id, "periodS": payload.get("period_s"), "cameras": cameras}
+        )
+
+
+class ReplayFrameView(WallReadView):
+    """GET /api/field-tests/replay/<scenario>/<cam>/<i>.jpg —— 回放的單張畫面。
+
+    前端連不到場域網段,所以圖片也要經這裡代理。單張 JPEG(實測約 120 KB),
+    不是長連線 —— 與 CameraStreamView 不同,這裡可以讓瀏覽器快取:同一次驗測
+    的同一張畫面不會變。
+    """
+
+    def get(self, request, scenario: str, cam: str, index: int):
+        run_id = request.query_params.get("run_id")
+        try:
+            conf = target(scenario)
+            if not run_id:
+                run_id = _run_id_for(scenario, conf.get("plan_id"))
+            if not run_id:
+                return Response({"detail": "目前沒有可顯示的驗測紀錄"}, status=404)
+            content_type, chunks = client.stream(
+                f"/validation-runs/{run_id}/replay/{cam}/{index}.jpg"
+            )
+        except client.PerfTesterError as exc:
+            return _error(exc)
+        resp = StreamingHttpResponse(chunks, content_type=content_type)
+        # 歷史畫面不會再變,讓瀏覽器留著,播放時不用每輪重抓
+        resp["Cache-Control"] = "public, max-age=86400"
+        return resp
+
+
 class CameraStreamView(WallReadView):
     """GET /api/field-tests/camera/<scenario>/stream —— 載具影像(MJPEG)。
 
