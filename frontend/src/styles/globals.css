@@ -809,8 +809,9 @@ html.wall-mode .dut-wall-band {
   border: 1px solid rgba(114, 182, 201, 0.28);
 }
 html.wall-mode .dut-wall-band-title {
-  font-size: 3rem;
-  font-weight: 700;
+  /* 卡片標題統一 56px / 600,與 topbar 主標題(.war-room-main-title-text)同級 */
+  font-size: calc(56px * var(--wall));
+  font-weight: 600;
   margin-bottom: 1.5rem;
   letter-spacing: 0.05em;
   text-align: center;
@@ -1799,7 +1800,9 @@ html.wall-mode .war-room-lab-info {
      --lab-top-h,最後兩列自動平分剩下的。
      注意:列的分界因此不再落在實體 bezel(y=1080 / 2160)上,是刻意的
      取捨 —— 下排內容會跨過接縫。 */
-  --lab-title-h: 200px;
+  /* 標題列高度 —— 上排卡片有 48 外距,所以卡片上緣 = 這個值 + 48。
+     設 459 → 卡片上緣 507(離螢幕頂 169px,與中牆一致)。 */
+  --lab-title-h: 459px;
   --lab-top-h: 760px;
   grid-template-rows:
     var(--lab-title-h)
@@ -1821,8 +1824,8 @@ html.wall-mode .war-room-lab-title {
 html.wall-mode .war-room-lab-title-text {
   /* 與中牆主標題(.war-room-main-title-text)採同一組排版,兩面牆的標題
      看起來是同一個系統 —— 參考圖的「通感融合實驗網」就是這個處理。 */
-  font-size: 3.5rem;                   /* 168px,與主牆標題同級 */
-  font-weight: 500;              /* 規範 01:Heading 一律 500,不用粗體 */
+  font-size: calc(56px * var(--wall));
+  font-weight: 600;
   line-height: 1.1;
   letter-spacing: 0.01em;
   color: white;
@@ -1876,14 +1879,18 @@ html.wall-mode .war-room-lab-intro-text {
   gap: 1rem;
 }
 html.wall-mode .war-room-lab-intro-title {
-  font-size: 3rem;
-  font-weight: 500;              /* 規範 01:Heading 500 */
+  /* 規範:56px / 600、左右內距 12px、文字高度置中(不靠基線對齊) */
+  font-size: calc(56px * var(--wall));
+  font-weight: 600;
   color: white;
   margin: 0;
+  padding: 0 calc(12px * var(--wall));
+  display: flex;
+  align-items: center;
   letter-spacing: 0.03em;
   line-height: 1.2;
-  /* 標題與內文之間的分隔線(與下排三格一致) */
-  padding-bottom: 0.75rem;
+  /* 標題與內文之間的分隔線(與下排三格一致);距離由外層的 gap 給,
+     padding 維持規範的 0 12px */
   border-bottom: 1px solid rgba(114, 182, 201, 0.35);   /* 規範:分隔線 #72B6C9 */
 }
 html.wall-mode .war-room-lab-intro-desc {
@@ -1923,11 +1930,14 @@ html.wall-mode .war-room-lab-icon-text {
   gap: 1rem;
 }
 html.wall-mode .war-room-lab-icon-title {
-  font-size: 3rem;
-  font-weight: 500;              /* 規範 01:Heading 500 */
+  /* 規範:56px / 600、左右內距 12px、文字高度置中(不靠基線對齊) */
+  font-size: calc(56px * var(--wall));
+  font-weight: 600;
   color: white;
   margin: 0;
-  padding-bottom: 0.75rem;
+  padding: 0 calc(12px * var(--wall));
+  display: flex;
+  align-items: center;
   border-bottom: 1px solid rgba(114, 182, 201, 0.35);   /* 規範:分隔線 #72B6C9 */
   letter-spacing: 0.03em;
   line-height: 1.2;
@@ -1971,18 +1981,18 @@ html.wall-mode .war-room-slot {
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 0.75rem;
   overflow: hidden;
   text-align: left;
 }
 /* 標題與內文之間的分隔線(參考圖的卡片:標題列 → 細線 → 內容) */
 html.wall-mode .war-room-slot-title {
-  font-size: 2.5rem;                 /* 120px */
-  font-weight: 500;              /* 規範 01:Heading 500 */
+  font-size: calc(56px * var(--wall));   /* 卡片標題統一 56px / 600 */
+  font-weight: 600;
   line-height: 1.15;
   letter-spacing: 0.02em;
   color: #fff;
-  padding-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
   border-bottom: 1px solid rgba(114, 182, 201, 0.35);   /* 規範:分隔線 #72B6C9 */
 }
 html.wall-mode .war-room-slot-lead {
@@ -2056,17 +2066,18 @@ html.wall-mode .war-room-cat-list--fill {
 }
 /* 4 項的格子(待測物、測試設備):間距放開、icon 一併放大 */
 html.wall-mode .war-room-cat-list--tight {
-  gap: 2.5rem;
+  gap: 1.25rem;
 }
 html.wall-mode .war-room-cat-list--tight .war-room-cat-icon {
-  width: calc(72px * var(--wall));
-  height: calc(72px * var(--wall));
+  /* 卡片上緣下移 + 標題放大成 56px 之後,4 項的格子高度不夠 —— icon 收一級 */
+  width: calc(60px * var(--wall));
+  height: calc(60px * var(--wall));
 }
 /* 一個項目:標題一行,底下 icon + 內容並排(仿參考圖) */
 html.wall-mode .war-room-cat {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 html.wall-mode .war-room-cat-row {
   display: flex;
@@ -2590,6 +2601,10 @@ html.wall-mode .hud-octagon-label {
    - 有文字的小卡內容分上下兩段,段距跨 y = 2160。
    改主牆內容區的 padding、卡距或卡片內距時,下面的數字要一起重算。 */
 html.wall-mode .field-wall {
+  /* 卡片上緣離螢幕頂 169px = 507:內容區從 459 起,這裡再往下 48。
+     卡片內的東西不能跟著移(小卡標題列要貼 y = 1080 的縫),所以
+     .field-card 的上內距同步從 60 收成 12,卡身仍從 519 起、小卡仍從 885 起。 */
+  padding-top: 48px;
   --fw-gap: 96px;
   --fw-pad: 96px;
   /* 卡身下半段(y = 2208 起)高度 = 內容區底(3240 - 4rem)- 段頂(2160 + 卡距/2)- 大卡底內距 */
@@ -2623,7 +2638,8 @@ html.wall-mode .field-card {
       129px 之後可用高度多了 216px,全被 row1 吃掉,標題與框框就被拉開。) */
   grid-template-rows: auto minmax(0, 1fr);
   row-gap: 24px;
-  padding: 60px var(--fw-pad) var(--fw-pad);
+  /* 上內距 12(不是 60):卡框往下移了 48,內容要留在原位 —— 見 .field-wall */
+  padding: 12px var(--fw-pad) var(--fw-pad);
 }
 html.wall-mode .field-card-head {
   min-height: 0;
@@ -2635,9 +2651,14 @@ html.wall-mode .field-card-head {
    只縮限在 .field-wall 之內 —— RIC 測試牆的 band 標題仍維持 700。 */
 html.wall-mode .field-wall .dut-wall-band-title {
   margin-bottom: 0;
-  line-height: 1.25;
+  /* 高度釘住 181:卡頭是 auto 列,標題字級一變就會把下面的小卡往下推,
+     小卡的標題列就不再貼 y = 1080 的縫(字會被邊框切)。行高配合縮到 1.08。 */
+  height: 181px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.08;
   text-align: center;
-  font-weight: 400;
 }
 /* 室外兩張卡的正中央都緊鄰拼接縫(左卡中心 1968 vs 縫 1920、右卡中心 7632 vs 縫 7680),
    置中之後縫會從字的中間穿過。各自平移一點點,讓縫剛好落在字與字之間:

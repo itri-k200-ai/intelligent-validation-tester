@@ -99,7 +99,7 @@ export function getPageMeta(pathname: string): PageMeta {
   }
 
   // 中牆的固定 URL —— 顯示什麼由 selection 決定,標題不隨內容變。
-  // (右副牆自己的標題是「智慧網路簡介」,見 war-room-lab-title。)
+  // (右副牆自己的標題是「簡介」,見 war-room-lab-title。)
   if (seg[0] === "wall") {
     return { title: "智慧網路" };
   }

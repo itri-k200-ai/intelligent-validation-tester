@@ -124,9 +124,9 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
       <section className="war-room-right">
         <div className="war-room-lab-info">
           {/* 右副牆頂端:跨三欄的置中標題。主牆掛「智慧網路」,
-              這面牆是它的簡介,所以標題是「智慧網路簡介」。 */}
+              這面牆是它的簡介,標題就寫「簡介」(依前端回饋,不重複主牆的名字)。 */}
           <div className="war-room-lab-title">
-            <div className="war-room-lab-title-text">智慧網路簡介</div>
+            <div className="war-room-lab-title-text">簡介</div>
           </div>
           {/* 上排:3 格,各占一個 TV 螢幕寬 */}
           <div className="war-room-lab-top war-room-lab-top--intro">
