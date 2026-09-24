@@ -65,7 +65,7 @@ const EQUIPMENT: DutItem[] = [
   {
     // TODO(PM):型號待提供
     name: "AMR",
-    items: "自主移動機器人 —— xApp 實地驗測載具",
+    items: "自主移動機器人 —— app 實地驗測載具",
     icon: "/images/dut/amr.png",
   },
   {
