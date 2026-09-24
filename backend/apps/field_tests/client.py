@@ -63,13 +63,22 @@ def _cooling(key: str) -> float:
     return left if left > 0 else 0.0
 
 
-def get(path: str, params: dict[str, Any] | None = None) -> dict:
+def get(
+    path: str,
+    params: dict[str, Any] | None = None,
+    timeout: float | None = None,
+) -> dict:
+    """timeout:這一次呼叫的上限,省略則用 settings.PERF_TESTER_TIMEOUT。
+
+    給「附帶的」呼叫用 —— 例如牆面撈驗測數據時順便抓即時遙測,載具不通時
+    不該讓整支 API 陪著等滿全域 timeout(實測會把 /missions 拖到 12 秒)。
+    """
     key = _breaker_key(path)
     left = _cooling(key)
     if left:
         raise PerfTesterError(f"這台載具剛連不上,{left:.0f} 秒後再試(避免拖慢其他畫面)", status=503)
     try:
-        payload = _request("GET", path, params=params)
+        payload = _request("GET", path, params=params, timeout=timeout)
     except PerfTesterError:
         _failed_at[key] = time.monotonic()
         raise
@@ -81,10 +90,10 @@ def post(path: str, json: dict[str, Any] | None = None) -> dict:
     return _request("POST", path, json=json)
 
 
-def _request(method: str, path: str, **kwargs) -> dict:
+def _request(method: str, path: str, timeout: float | None = None, **kwargs) -> dict:
     url = f"{_base()}/{path.lstrip('/')}"
     try:
-        with httpx.Client(timeout=_timeout(), headers=_headers()) as client:
+        with httpx.Client(timeout=timeout or _timeout(), headers=_headers()) as client:
             resp = client.request(method, url, **kwargs)
     except httpx.HTTPError as exc:
         logger.warning("Performance_tester %s %s failed: %s", method, path, exc)

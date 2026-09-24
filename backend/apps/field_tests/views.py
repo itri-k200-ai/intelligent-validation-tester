@@ -40,6 +40,25 @@ class WallReadView(APIView):
     permission_classes = [AllowAny]
 
 
+def _last_ue(raw_samples: list[dict]) -> dict:
+    """樣本裡最後一筆 ue(顯示歷史紀錄時拿它頂替 /live)。
+
+    上游一筆樣本長 {"seq","t","wall","phase","ue":{...}};由後往前找,取第一個
+    有 ue 的。拿不到就回空 dict,呼叫端的行為與「即時遙測拿不到」相同。
+    """
+    for raw in reversed(raw_samples):
+        ue = raw.get("ue")
+        if isinstance(ue, dict) and ue:
+            return ue
+    return {}
+
+
+# 「附帶的」遙測呼叫的上限。這些都要經 relay 打到車上,載具不通時會等滿全域的
+# PERF_TESTER_TIMEOUT —— 牆面的 /missions 會因此被拖到 12 秒(實測)。驗測數據本身
+# 不靠它們,所以給一個短上限,拿不到就讓那幾格空著。
+OPTIONAL_TELEMETRY_TIMEOUT_S = 2.0
+
+
 def _vehicle_extras(scenario: str) -> tuple[dict | None, dict | None]:
     """/live 以外的載具狀態:AMR 的速度 / 電量 / 定位品質在 /robot,UAV 的電量在 /targets。
 
@@ -48,9 +67,9 @@ def _vehicle_extras(scenario: str) -> tuple[dict | None, dict | None]:
     robot = targets = None
     try:
         if scenario == "indoor":
-            robot = client.get(ctrl_path(scenario, "/robot"))
+            robot = client.get(ctrl_path(scenario, "/robot"), timeout=OPTIONAL_TELEMETRY_TIMEOUT_S)
         else:
-            targets = client.get(ctrl_path(scenario, "/targets"))
+            targets = client.get(ctrl_path(scenario, "/targets"), timeout=OPTIONAL_TELEMETRY_TIMEOUT_S)
     except client.PerfTesterError as exc:
         logger.info("載具狀態(%s)拿不到(%s),只顯示 /live 的部分", scenario, exc.detail)
     return robot, targets
@@ -113,15 +132,27 @@ class MissionView(WallReadView):
         live: dict = {}
         robot = targets = None
         try:
-            live = (client.get(ctrl_path(scenario, "/live")) or {}).get("live") or {}
+            live = (
+                client.get(ctrl_path(scenario, "/live"), timeout=OPTIONAL_TELEMETRY_TIMEOUT_S) or {}
+            ).get("live") or {}
             robot, targets = _vehicle_extras(scenario)
         except client.PerfTesterError as exc:
             logger.info("即時遙測拿不到(%s),只回驗測數據", exc.detail)
 
+        # 顯示歷史紀錄時 /live 沒有意義(而且載具多半也不在線),上面那段會拿到空的。
+        # 改用這次驗測最後一筆樣本的 ue —— 訊號(SINR/RSRP/RSRQ/DL/UL)與位置、yaw
+        # 都在裡面,不補的話牆上那兩張小卡整片空白。
+        # 速度 / 電量 / 定位品質只存在於即時的 /robot,歷史樣本沒有,那幾格仍是「—」。
+        if not live:
+            live = _last_ue(samples_payload.get("samples") or [])
+
         runs = transform.build_runs(status_payload, samples_payload.get("samples") or [])
         current = 1 if runs[1]["status"] != "pending" else 0
-        if runs[current]["status"] == "running":
-            runs[current]["position"] = transform.position(scenario, live, None)
+        # 執行中 = 車子現在在哪;已結束 = 最後一筆樣本的位置(live 已經被上面
+        # 換成最後一筆樣本的 ue)。不設的話歷史紀錄的「位置 x / y」會是空的。
+        position = transform.position(scenario, live, None)
+        if position:
+            runs[current]["position"] = position
 
         return Response(
             {
