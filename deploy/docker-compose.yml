@@ -61,6 +61,10 @@ services:
       gunicorn config.wsgi --bind 0.0.0.0:8000
       --worker-class gthread --workers 3 --threads 8 --timeout 0
     env_file: ../backend/.env
+    # 場域測試要打同一台主機上的 IM adapter(FIELD_TEST_ADAPTER_BASE),
+    # 走 host-gateway 出去 —— 與 nginx 同一個做法,.env 就不必寫死主機 IP。
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_started }
