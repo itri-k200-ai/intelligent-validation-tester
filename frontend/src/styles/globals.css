@@ -1950,6 +1950,22 @@ html.wall-mode .war-room-lab-icon-desc {
   color: rgba(255, 255, 255, 0.78);
   margin: 0;
 }
+
+/* 上排三格的標題要齊平 ——————————————————————————————————————————————
+   三張卡的說明文字行數不一樣(智慧網路 2 行、測試目標 3 行、合作夥伴 2 行),
+   而文字欄原本是跟著卡片垂直置中,行數一多整欄就往上頂,三個標題與分隔線
+   因此落在不同高度。改成:圖(logo / icon)仍垂直置中,文字欄拉滿卡高並靠上,
+   標題高度釘死 —— 三張卡的標題與分隔線就都在同一條線上,說明文字再往下長。 */
+html.wall-mode .war-room-lab-intro-text,
+html.wall-mode .war-room-lab-icon-text {
+  align-self: stretch;
+  justify-content: flex-start;
+}
+html.wall-mode .war-room-lab-intro-title,
+html.wall-mode .war-room-lab-icon-title {
+  flex: none;                       /* 不被 stretch 拉長,高度說多少就多少 */
+  height: calc(48px * var(--wall)); /* > 文字本身的 37×1.2,留一點上下呼吸 */
+}
 /* 下排 3 格高長條(各跨 2 row = 2 TV cells):待測物 / 測試設備 / 測試方法
    共用漸層框 — 不再用 --dut/--equip/--method 分色 */
 html.wall-mode .war-room-lab-tall {
@@ -2140,9 +2156,11 @@ html.wall-mode .war-room-method-desc {
   line-height: 1.8;
   font-size: 1.25rem;                /* 60px */
   color: rgba(255, 255, 255, 0.9);   /* 比一般內文亮,對應參考圖的強調段 */
-  /* 吸收文字長度的差異,讓底下的翻頁箭頭與頁碼點位置固定 */
-  flex: 1;
-  min-height: 0;
+  /* 只佔文字本身的高度 —— 剩下的全給示意圖(見 .war-room-pager)。
+     原本這裡是 flex: 1,用來讓翻頁箭頭的位置在三頁之間固定,代價是文字短的
+     那頁(室外只有兩行)會在文字與圖之間空出一大塊。改成圖去吸收差異:
+     箭頭會隨頁面的文字長度上下移動,但圖變大、空白不見了。 */
+  flex: none;
   overflow: hidden;
 }
 html.wall-mode .war-room-method-todo {
@@ -2154,7 +2172,10 @@ html.wall-mode .war-room-method-todo {
    高度固定 + 上方說明用 flex:1 吸收長度差異 → 箭頭與頁碼點永遠在同一個
    位置,不會因為某頁文字比較多就整組往下移。 */
 html.wall-mode .war-room-pager {
-  flex: 0 0 38%;
+  /* 吃掉卡片剩下的高度 —— 示意圖是這格的主角,要盡量大。
+     室外那頁實際可用的圖框約 1368×1072(≒4:3),method-outdoor.svg 的
+     viewBox 就是照這個比例畫的,contain 之後幾乎不留邊。 */
+  flex: 1;
   min-height: 0;
   display: flex;
   align-items: center;

@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 420" font-family="'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif">
+  <defs>
+    <clipPath id="cellB"><ellipse cx="400" cy="170" rx="160" ry="145"/></clipPath>
+    <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#E8F6F7"/>
+    </marker>
+    <path id="route" d="M50 180 H550"/>
+  </defs>
+
+  <!-- 樓層平面 -->
+  <g fill="none" stroke="#3FD0C9" stroke-opacity=".3" stroke-width="1.5">
+    <rect x="20" y="16" width="560" height="310" rx="8"/>
+    <path d="M20 150 H580 M20 210 H580"/>
+    <path d="M120 16 V150 M240 16 V150 M360 16 V150 M480 16 V150"/>
+    <path d="M100 210 V326 M230 210 V326 M370 210 V326 M500 210 V326"/>
+  </g>
+  <rect x="20" y="150" width="560" height="60" fill="#3FD0C9" fill-opacity=".04"/>
+
+  <!-- 覆蓋範圍 -->
+  <ellipse cx="200" cy="170" rx="160" ry="145" fill="#3FD0C9" fill-opacity=".06" stroke="#3FD0C9" stroke-opacity=".7" stroke-width="2" stroke-dasharray="7 6"/>
+  <ellipse cx="400" cy="170" rx="160" ry="145" fill="#5AA9E6" fill-opacity=".06" stroke="#5AA9E6" stroke-opacity=".7" stroke-width="2" stroke-dasharray="7 6"/>
+
+  <!-- 干擾區：啟用前橘 → 啟用後青 -->
+  <ellipse cx="200" cy="170" rx="160" ry="145" fill="#F08A24" fill-opacity=".3" clip-path="url(#cellB)">
+    <animate attributeName="fill" values="#F08A24;#F08A24;#3FD0C9;#3FD0C9;#F08A24" keyTimes="0;.4;.5;.9;1" dur="10s" repeatCount="indefinite"/>
+    <animate attributeName="fill-opacity" values=".3;.3;.12;.12;.3" keyTimes="0;.4;.5;.9;1" dur="10s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- xApp 連線 -->
+  <g stroke="#3FD0C9" stroke-opacity=".45" stroke-width="1.3" stroke-dasharray="4 5">
+    <path d="M124 352 L200 106"/>
+    <path d="M136 352 L400 106"/>
+  </g>
+
+  <!-- 基站 A / B（天花板型） -->
+  <g transform="translate(200 90) scale(1.5)" fill="none" stroke="#3FD0C9" stroke-width="1.5" stroke-linecap="round">
+    <rect x="-8" y="-8" width="16" height="16" rx="4" fill="#16222E"/>
+    <circle r="2.5" fill="#3FD0C9"/>
+    <path d="M-12 -12 A17 17 0 0 1 12 -12" stroke-opacity=".6"/>
+  </g>
+  <text x="200" y="140" text-anchor="middle" font-size="22" fill="#BFD3DC">基站 A</text>
+  <g transform="translate(400 90) scale(1.5)" fill="none" stroke="#5AA9E6" stroke-width="1.5" stroke-linecap="round">
+    <rect x="-8" y="-8" width="16" height="16" rx="4" fill="#16222E"/>
+    <circle r="2.5" fill="#5AA9E6"/>
+    <path d="M-12 -12 A17 17 0 0 1 12 -12" stroke-opacity=".6"/>
+  </g>
+  <text x="400" y="140" text-anchor="middle" font-size="22" fill="#BFD3DC">基站 B</text>
+
+  <!-- AMR 路徑 -->
+  <use href="#route" fill="none" stroke="#E8F6F7" stroke-opacity=".75" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrow)"/>
+
+  <!-- AMR -->
+  <g>
+    <g transform="scale(1.5)">
+      <circle r="18" fill="#3FD0C9" fill-opacity=".12"/>
+      <g stroke="#E8F6F7" stroke-width="1.3">
+        <rect x="-9" y="-12" width="7" height="4" rx="1.5" fill="#E8F6F7"/>
+        <rect x="2" y="-12" width="7" height="4" rx="1.5" fill="#E8F6F7"/>
+        <rect x="-9" y="8" width="7" height="4" rx="1.5" fill="#E8F6F7"/>
+        <rect x="2" y="8" width="7" height="4" rx="1.5" fill="#E8F6F7"/>
+        <rect x="-12" y="-8" width="24" height="16" rx="4" fill="#16222E"/>
+        <circle cx="-2" r="3.5" fill="none"/>
+        <path d="M6 -3.5 L10 0 L6 3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </g>
+    <animateMotion dur="10s" repeatCount="indefinite"><mpath href="#route"/></animateMotion>
+  </g>
+
+  <!-- IM xApp + 狀態 -->
+  <g transform="translate(130 372) scale(1.3)" stroke="#3FD0C9" fill="none" stroke-width="1.5">
+    <rect x="-11" y="-11" width="22" height="22" rx="3" fill="#3FD0C9" fill-opacity=".1">
+      <animate attributeName="fill-opacity" values=".1;.1;.35;.35;.1" keyTimes="0;.4;.5;.9;1" dur="10s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="-5" y="-5" width="10" height="10" rx="1"/>
+    <path d="M-5 -15 V-11 M0 -15 V-11 M5 -15 V-11 M-5 11 V15 M0 11 V15 M5 11 V15" stroke-width="1.2"/>
+  </g>
+  <text x="158" y="380" font-size="22" fill="#BFD3DC">IM xApp</text>
+
+  <g font-size="20">
+    <g>
+      <rect x="258" y="356" width="186" height="32" rx="16" fill="#F08A24" fill-opacity=".15" stroke="#F08A24" stroke-opacity=".6" stroke-width="1.5"/>
+      <circle cx="277" cy="372" r="5" fill="#F08A24"/>
+      <text x="291" y="379" fill="#F5A55A">啟用前・干擾中</text>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.4;.5;.9;1" dur="10s" repeatCount="indefinite"/>
+    </g>
+    <g opacity="0">
+      <rect x="258" y="356" width="226" height="32" rx="16" fill="#3FD0C9" fill-opacity=".15" stroke="#3FD0C9" stroke-opacity=".6" stroke-width="1.5"/>
+      <circle cx="277" cy="372" r="5" fill="#3FD0C9"/>
+      <text x="291" y="379" fill="#7FE3DD">啟用後・干擾已抑制</text>
+      <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;.4;.5;.9;1" dur="10s" repeatCount="indefinite"/>
+    </g>
+  </g>
+</svg>

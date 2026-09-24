@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 380" font-family="'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif">
+  <!-- SMO -->
+  <rect x="20" y="16" width="560" height="134" rx="10" fill="#3FD0C9" fill-opacity=".03" stroke="#3FD0C9" stroke-opacity=".35" stroke-width="1.5"/>
+  <text x="40" y="50" font-size="22" font-weight="600" fill="#D5E6EC">SMO</text>
+  <rect x="150" y="78" width="200" height="58" rx="8" fill="#3FD0C9" fill-opacity=".07" stroke="#3FD0C9" stroke-opacity=".65" stroke-width="1.5"/>
+  <text x="250.0" y="114.0" text-anchor="middle" font-size="20" fill="#D5E6EC">Non-RT RIC</text>
+  <rect x="430" y="78" width="110" height="58" rx="8" fill="#3FD0C9" fill-opacity=".07" stroke="#3FD0C9" stroke-opacity=".65" stroke-width="1.5"/>
+  <text x="485.0" y="114.0" text-anchor="middle" font-size="20" fill="#D5E6EC">rApp</text>
+  <rect x="110" y="210" width="180" height="50" rx="8" fill="#3FD0C9" fill-opacity=".07" stroke="#3FD0C9" stroke-opacity=".65" stroke-width="1.5"/>
+  <text x="200.0" y="242.0" text-anchor="middle" font-size="20" fill="#D5E6EC">Near-RT RIC</text>
+  <rect x="110" y="316" width="180" height="50" rx="8" fill="#3FD0C9" fill-opacity=".07" stroke="#3FD0C9" stroke-opacity=".65" stroke-width="1.5"/>
+  <text x="200.0" y="348.0" text-anchor="middle" font-size="20" fill="#D5E6EC">E2 Node</text>
+  <rect x="440" y="290" width="130" height="50" rx="8" fill="#3FD0C9" fill-opacity=".07" stroke="#3FD0C9" stroke-opacity=".65" stroke-width="1.5"/>
+  <text x="505.0" y="322.0" text-anchor="middle" font-size="20" fill="#D5E6EC">O-Cloud</text>
+
+  <!-- 介面連線 -->
+  <g fill="none" stroke="#3FD0C9" stroke-opacity=".55" stroke-width="1.8">
+    <path d="M350 107 H430"/>
+    <path d="M200 136 V210"/>
+    <path d="M340 150 V340 H290 M340 235 H290"/>
+    <path d="M200 260 V316"/>
+    <path d="M505 150 V290"/>
+  </g>
+
+  <!-- 驗證脈衝：逐項跑過每個介面 -->
+  <circle r="5" fill="#E8F6F7" opacity="0">
+    <animateMotion dur="10s" repeatCount="indefinite" path="M350 107 H430" keyPoints="0;0;1;1" keyTimes="0;0;0.15;1" calcMode="linear"/>
+    <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.001;0.15;0.151;1" dur="10s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="5" fill="#E8F6F7" opacity="0">
+    <animateMotion dur="10s" repeatCount="indefinite" path="M200 136 V210" keyPoints="0;0;1;1" keyTimes="0;0.15;0.3;1" calcMode="linear"/>
+    <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.151;0.3;0.301;1" dur="10s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="5" fill="#E8F6F7" opacity="0">
+    <animateMotion dur="10s" repeatCount="indefinite" path="M340 150 V340 H290" keyPoints="0;0;1;1" keyTimes="0;0.3;0.45;1" calcMode="linear"/>
+    <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.301;0.45;0.451;1" dur="10s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="5" fill="#E8F6F7" opacity="0">
+    <animateMotion dur="10s" repeatCount="indefinite" path="M200 260 V316" keyPoints="0;0;1;1" keyTimes="0;0.45;0.6;1" calcMode="linear"/>
+    <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.451;0.6;0.601;1" dur="10s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="5" fill="#E8F6F7" opacity="0">
+    <animateMotion dur="10s" repeatCount="indefinite" path="M505 150 V290" keyPoints="0;0;1;1" keyTimes="0;0.6;0.75;1" calcMode="linear"/>
+    <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.601;0.75;0.751;1" dur="10s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- 介面標籤：驗證後亮起並打勾 -->
+  <g>
+    <rect x="360" y="66" width="60" height="28" rx="14" fill="#16222E" stroke="#4A6272" stroke-width="1.5"><animate attributeName="stroke" values="#4A6272;#3FD0C9;#3FD0C9;#4A6272" keyTimes="0;0.15;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/></rect>
+    <text x="381" y="86" text-anchor="middle" font-size="18" fill="#8FA9B5"><animate attributeName="fill" values="#8FA9B5;#7FE3DD;#7FE3DD;#8FA9B5" keyTimes="0;0.15;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/>R1</text>
+    <text x="405" y="86" text-anchor="middle" font-size="16" font-weight="700" fill="#3FD0C9" opacity="0"><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/>✓</text>
+  </g>
+  <g>
+    <rect x="210" y="162" width="60" height="28" rx="14" fill="#16222E" stroke="#4A6272" stroke-width="1.5"><animate attributeName="stroke" values="#4A6272;#3FD0C9;#3FD0C9;#4A6272" keyTimes="0;0.3;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/></rect>
+    <text x="231" y="182" text-anchor="middle" font-size="18" fill="#8FA9B5"><animate attributeName="fill" values="#8FA9B5;#7FE3DD;#7FE3DD;#8FA9B5" keyTimes="0;0.3;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/>A1</text>
+    <text x="255" y="182" text-anchor="middle" font-size="16" font-weight="700" fill="#3FD0C9" opacity="0"><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.3;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/>✓</text>
+  </g>
+  <g>
+    <rect x="350" y="182" width="60" height="28" rx="14" fill="#16222E" stroke="#4A6272" stroke-width="1.5"><animate attributeName="stroke" values="#4A6272;#3FD0C9;#3FD0C9;#4A6272" keyTimes="0;0.45;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/></rect>
+    <text x="371" y="202" text-anchor="middle" font-size="18" fill="#8FA9B5"><animate attributeName="fill" values="#8FA9B5;#7FE3DD;#7FE3DD;#8FA9B5" keyTimes="0;0.45;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/>O1</text>
+    <text x="395" y="202" text-anchor="middle" font-size="16" font-weight="700" fill="#3FD0C9" opacity="0"><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.45;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/>✓</text>
+  </g>
+  <g>
+    <rect x="210" y="274" width="60" height="28" rx="14" fill="#16222E" stroke="#4A6272" stroke-width="1.5"><animate attributeName="stroke" values="#4A6272;#3FD0C9;#3FD0C9;#4A6272" keyTimes="0;0.6;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/></rect>
+    <text x="231" y="294" text-anchor="middle" font-size="18" fill="#8FA9B5"><animate attributeName="fill" values="#8FA9B5;#7FE3DD;#7FE3DD;#8FA9B5" keyTimes="0;0.6;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/>E2</text>
+    <text x="255" y="294" text-anchor="middle" font-size="16" font-weight="700" fill="#3FD0C9" opacity="0"><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.6;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/>✓</text>
+  </g>
+  <g>
+    <rect x="515" y="206" width="60" height="28" rx="14" fill="#16222E" stroke="#4A6272" stroke-width="1.5"><animate attributeName="stroke" values="#4A6272;#3FD0C9;#3FD0C9;#4A6272" keyTimes="0;0.75;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/></rect>
+    <text x="536" y="226" text-anchor="middle" font-size="18" fill="#8FA9B5"><animate attributeName="fill" values="#8FA9B5;#7FE3DD;#7FE3DD;#8FA9B5" keyTimes="0;0.75;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/>O2</text>
+    <text x="560" y="226" text-anchor="middle" font-size="16" font-weight="700" fill="#3FD0C9" opacity="0"><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.75;.95;1" calcMode="discrete" dur="10s" repeatCount="indefinite"/>✓</text>
+  </g>
+</svg>

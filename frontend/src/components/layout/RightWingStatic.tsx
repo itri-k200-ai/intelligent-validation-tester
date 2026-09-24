@@ -94,9 +94,19 @@ const EQUIPMENT: DutItem[] = [
  * SMO / Near-RT RIC / Non-RT RIC 的測試方法相近,合併成「介面測試」一頁;
  * xApp / rApp 依場域拆成室內、室外兩頁。
  *
+ * 順序 = 牆上的翻頁順序,第一筆就是開機後先顯示的那頁(目前是室外測試)。
+ *
  * figure:示意圖檔放 public/images/dut/ 後填路徑,留空顯示虛線待補框。
  */
 const METHODS: { tab: string; lines: string[]; figure?: string }[] = [
+  {
+    tab: "室外測試",
+    lines: [
+      "於工研院 52 館外大草坪配置手機與無人機進行實測。" +
+        "透過無人機穿越干擾與非干擾區,驗證 QoE xApp 的改善效果。",
+    ],
+    figure: "/images/dut/method-outdoor.svg",
+  },
   {
     tab: "介面測試",
     lines: [
@@ -105,6 +115,7 @@ const METHODS: { tab: string; lines: string[]; figure?: string }[] = [
       "Near-RT RIC — E2 / A1 / O1",
       "Non-RT RIC — A1 Policy / EI、R1(SME / DME / AIML)",
     ],
+    figure: "/images/dut/method-interface.svg",
   },
   {
     tab: "室內測試",
@@ -112,13 +123,7 @@ const METHODS: { tab: string; lines: string[]; figure?: string }[] = [
       "於工研院 51 館 5 樓建立室內干擾情境,配置手機與 AMR 作為 5G UE。" +
         "比較 IM xApp 啟用前後的網路表現,驗證干擾抑制效果。",
     ],
-  },
-  {
-    tab: "室外測試",
-    lines: [
-      "於工研院 52 館外大草坪配置手機與無人機進行實測。" +
-        "透過無人機穿越干擾與非干擾區,驗證 QoE xApp 的改善效果。",
-    ],
+    figure: "/images/dut/method-indoor.svg",
   },
 ];
 

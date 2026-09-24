@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 450" font-family="'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif">
+  <!-- 室外測試示意圖 —— 4:3。牆上這格給圖的框約 1368×1072(≒1.28:1),
+       原本的 2:1 會在上下各留一大塊白,所以版面改成直向拉開。 -->
+  <defs>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="#3FD0C9" stroke-opacity=".08"/>
+    </pattern>
+    <clipPath id="cellB"><ellipse cx="395" cy="225" rx="150" ry="172"/></clipPath>
+    <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#E8F6F7"/>
+    </marker>
+    <path id="flight" d="M70 290 C170 290 215 225 300 225 S430 290 530 290"/>
+  </defs>
+
+  <!-- 草坪範圍 -->
+  <rect x="16" y="16" width="568" height="418" rx="14" fill="url(#grid)" stroke="#3FD0C9" stroke-opacity=".18"/>
+
+  <!-- 兩個基站覆蓋範圍 -->
+  <ellipse cx="205" cy="225" rx="150" ry="172" fill="#3FD0C9" fill-opacity=".06" stroke="#3FD0C9" stroke-opacity=".7" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <ellipse cx="395" cy="225" rx="150" ry="172" fill="#5AA9E6" fill-opacity=".06" stroke="#5AA9E6" stroke-opacity=".7" stroke-width="1.5" stroke-dasharray="6 5"/>
+
+  <!-- 重疊干擾區 -->
+  <ellipse cx="205" cy="225" rx="150" ry="172" fill="#F08A24" fill-opacity=".26" clip-path="url(#cellB)">
+    <animate attributeName="fill-opacity" values=".18;.34;.18" dur="3s" repeatCount="indefinite"/>
+  </ellipse>
+  <text x="300" y="115" text-anchor="middle" font-size="26" font-weight="600" fill="#F5A55A">干擾區</text>
+
+  <!-- xApp 連線 -->
+  <g stroke="#3FD0C9" stroke-opacity=".45" stroke-width="1" stroke-dasharray="3 4">
+    <path d="M292 395 L205 174"/>
+    <path d="M308 395 L395 174"/>
+  </g>
+
+  <!-- 基站 A -->
+  <g transform="translate(205 150)" stroke="#3FD0C9" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M0 -8 L-8 20 M0 -8 L8 20 M-4.5 8 H4.5"/>
+    <circle cx="0" cy="-11" r="2" fill="#3FD0C9"/>
+    <path d="M-7 -18 A9 9 0 0 0 -7 -4 M7 -18 A9 9 0 0 1 7 -4"/>
+    <path d="M-12 -22 A15 15 0 0 0 -12 0 M12 -22 A15 15 0 0 1 12 0" stroke-opacity=".6"/>
+  </g>
+  <text x="205" y="198" text-anchor="middle" font-size="24" fill="#BFD3DC">基站 A</text>
+
+  <!-- 基站 B -->
+  <g transform="translate(395 150)" stroke="#5AA9E6" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M0 -8 L-8 20 M0 -8 L8 20 M-4.5 8 H4.5"/>
+    <circle cx="0" cy="-11" r="2" fill="#5AA9E6"/>
+    <path d="M-7 -18 A9 9 0 0 0 -7 -4 M7 -18 A9 9 0 0 1 7 -4"/>
+    <path d="M-12 -22 A15 15 0 0 0 -12 0 M12 -22 A15 15 0 0 1 12 0" stroke-opacity=".6"/>
+  </g>
+  <text x="395" y="198" text-anchor="middle" font-size="24" fill="#BFD3DC">基站 B</text>
+
+  <!-- 飛行路徑 -->
+  <use href="#flight" fill="none" stroke="#E8F6F7" stroke-opacity=".75" stroke-width="1.5" stroke-dasharray="5 5" marker-end="url(#arrow)"/>
+  <circle cx="70" cy="290" r="3.5" fill="#E8F6F7"/>
+  <text x="70" y="318" text-anchor="middle" font-size="22" fill="#8FA9B5">起點</text>
+  <text x="530" y="318" text-anchor="middle" font-size="22" fill="#8FA9B5">終點</text>
+
+  <!-- 手機 -->
+  <g transform="translate(300 300)" stroke="#E8F6F7" fill="none" stroke-width="1.4">
+    <rect x="-6" y="-10" width="12" height="20" rx="2.5"/>
+    <path d="M-2 6.5 H2"/>
+  </g>
+  <text x="318" y="308" font-size="22" fill="#8FA9B5">手機</text>
+
+  <!-- 無人機(沿路徑移動) -->
+  <g>
+    <circle r="17" fill="#3FD0C9" fill-opacity=".12"/>
+    <g stroke="#E8F6F7" stroke-width="1.5" fill="none">
+      <path d="M-7 -7 L7 7 M7 -7 L-7 7"/>
+      <circle cx="-9" cy="-9" r="4.5"/>
+      <circle cx="9" cy="-9" r="4.5"/>
+      <circle cx="-9" cy="9" r="4.5"/>
+      <circle cx="9" cy="9" r="4.5"/>
+    </g>
+    <rect x="-3.5" y="-3.5" width="7" height="7" rx="1.5" fill="#E8F6F7"/>
+    <animateMotion dur="9s" repeatCount="indefinite">
+      <mpath href="#flight"/>
+    </animateMotion>
+  </g>
+
+  <!-- QoE xApp -->
+  <g transform="translate(300 405)" stroke="#3FD0C9" fill="none" stroke-width="1.5">
+    <rect x="-11" y="-11" width="22" height="22" rx="3" fill="#3FD0C9" fill-opacity=".1"/>
+    <rect x="-5" y="-5" width="10" height="10" rx="1"/>
+    <path d="M-5 -15 V-11 M0 -15 V-11 M5 -15 V-11 M-5 11 V15 M0 11 V15 M5 11 V15" stroke-width="1.2"/>
+  </g>
+  <text x="322" y="412" font-size="24" fill="#BFD3DC">QoE xApp</text>
+</svg>
