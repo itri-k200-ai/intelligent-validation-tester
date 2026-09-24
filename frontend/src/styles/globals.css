@@ -1440,11 +1440,12 @@ html.wall-mode .war-room-main {
 html.wall-mode .war-room-main-topbar {
   /* grid template 在 base rule(下方)定義,wall-mode 只蓋高度與 padding。
      不另外給背景色 / border,讓 topbar 融入主牆背景。 */
-  /* 前端規格(影像 (4).png):畫面頂部到卡片上緣 129px。
-     這段距離全部由 topbar 的高度負責 —— main-body 的 padding-top 已設為 0,
-     所以 topbar 高度 = 規格值,量出來就是 129(×--wall 換算到畫布 = 387)。
-     原本 169px,且下面還多一層 2rem padding,實際是 161。 */
-  height: calc(129px * var(--wall));
+  /* 規格:畫面頂部到卡片上緣 169px,與右副牆一致(見 --lab-title-h)。
+     main-body 的 padding-top 已設為 0,所以這段距離只由兩層負責:
+         topbar 153 + .field-wall 的上內距 16(畫布 48)= 169。
+     ⚠ 不要把這裡改回 129 —— 內容區起點會從 459 掉到 387,卡身、小卡
+     整組往上位移 72(畫布),小卡標題列就貼不到 y = 1080 的拼接縫。 */
+  height: calc(153px * var(--wall));
   padding: 0 calc(12px * var(--wall));
   align-items: center;
 }
