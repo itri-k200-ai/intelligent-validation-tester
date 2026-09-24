@@ -263,7 +263,7 @@ def _fake_ctrl_get(extra=None):
     }
     payloads.update(extra or {})
 
-    def fake_get(path, params=None):
+    def fake_get(path, params=None, timeout=None):
         for suffix, body in payloads.items():
             if path.endswith(suffix):
                 return body
@@ -293,7 +293,7 @@ def test_live_endpoint_is_open_to_the_wall(monkeypatch):
 def test_live_still_reports_signal_when_robot_is_slow(monkeypatch):
     """/robot 實測會慢到 5 秒 —— 它失敗時訊號與位置照樣要出來。"""
 
-    def flaky(path, params=None):
+    def flaky(path, params=None, timeout=None):
         if path.endswith("/robot"):
             raise perf_client.PerfTesterError("timed out", status=503)
         return _fake_ctrl_get()(path, params)
@@ -330,7 +330,7 @@ def test_outdoor_live_still_works_when_targets_fails(monkeypatch):
     """/targets 只提供電量 —— 它掛掉時訊號與姿態照樣要出來。"""
     live = {"live": {"sinr": 24, "alt_rel": 30.2}}
 
-    def flaky(path, params=None):
+    def flaky(path, params=None, timeout=None):
         if path.endswith("/targets"):
             raise perf_client.PerfTesterError("timed out", status=503)
         return _fake_ctrl_get({"/live": live})(path, params)
@@ -554,7 +554,7 @@ def test_unknown_scenario_is_404():
 
 @override_settings(FIELD_TEST_TARGETS=TARGETS)
 def test_upstream_failure_is_reported_not_swallowed(monkeypatch):
-    def boom(path, params=None):
+    def boom(path, params=None, timeout=None):
         raise perf_client.PerfTesterError("連不上場域測試平台", status=503)
 
     monkeypatch.setattr(perf_client, "get", boom)
