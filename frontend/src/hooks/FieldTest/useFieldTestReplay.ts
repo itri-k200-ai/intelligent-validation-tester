@@ -6,7 +6,7 @@ import type { FieldScenarioId } from "@/types/fieldTest";
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 
-export type ReplayFrame = { i: number; phase: string };
+export type ReplayFrame = { i: number; phase: string; wall?: number | null };
 export type ReplayCamera = { key: string; name: string; frames: ReplayFrame[] };
 export type ReplayIndex = {
   runId: string;

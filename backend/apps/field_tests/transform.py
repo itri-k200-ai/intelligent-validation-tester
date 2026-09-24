@@ -95,8 +95,17 @@ def sample(raw: dict, progress: float) -> dict:
     out: dict[str, Any] = {
         "progress": round(progress, 1),
         "sinrDb": _num(ue.get("sinr")),
+        # 歷史回放要能逐格重現當下的數值,所以訊號欄位要跟著每一筆帶走,
+        # 不能只靠 /live(那是「現在」,對跑完的驗測沒有意義)。
+        "rsrpDbm": _num(ue.get("rsrp")),
+        "rsrqDb": _num(ue.get("rsrq")),
         "dlKbps": rate_kbps(ue.get("thp_dl_kbps")),
         "ulKbps": rate_kbps(ue.get("thp_ul_kbps")),
+        # yaw 同理(行駛狀態那張卡要顯示);headingDeg 是地圖箭頭用的換算值
+        "yawDeg": yaw_deg(ue.get("yaw")),
+        "headingDeg": heading_from_yaw(ue.get("yaw")),
+        # 絕對時間 —— 回放影像的每一格也有 wall,兩邊靠它對齊
+        "wall": _num(raw.get("wall")),
         # 上游沒有路徑進度,留相對秒數給圖表之後改用時間軸
         "elapsedS": _num(raw.get("t")),
         # 每一筆都有位置 —— 兩趟的實際軌跡就是這些點連起來。

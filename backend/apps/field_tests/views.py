@@ -637,8 +637,10 @@ class ReplayView(WallReadView):
                 "key": key,
                 "name": names.get(key) or key,
                 # 只回索引與所屬趟次,圖片本身走下面那支逐張代理
+                # wall 是絕對時間:前端靠它找出「這一格對應哪一筆樣本」,
+                # 讓數值與地圖標記跟著影像一起重播(兩邊筆數不一樣,不能用序號對)
                 "frames": [
-                    {"i": f.get("i"), "phase": f.get("phase")}
+                    {"i": f.get("i"), "phase": f.get("phase"), "wall": f.get("wall")}
                     for f in rows
                     if f.get("i") is not None
                 ],

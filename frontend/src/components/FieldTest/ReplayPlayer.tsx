@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 
 import type { ReplayCamera } from "@/hooks/FieldTest/useFieldTestReplay";
 import type { FieldScenarioId } from "@/types/fieldTest";
@@ -13,36 +13,21 @@ import type { FieldScenarioId } from "@/types/fieldTest";
  *   - 圖片有 Cache-Control: public,循環播放時不會重抓
  * 張數不多(28 張),全部掛著的記憶體成本可以接受。
  *
- * 播到底就從頭再來 —— 牆是長時間掛著的,停在最後一格看起來像當掉。
+ * 播放游標由上層的 useReplayCursor 提供 —— 數值卡與地圖標記要跟影像同步,
+ * 三者必須吃同一個時間點,所以這裡不自己跑計時器。
  */
 export function ReplayPlayer({
   scenario,
   camera,
-  periodS,
+  at,
 }: {
   scenario: FieldScenarioId;
   camera: ReplayCamera;
-  periodS: number | null;
+  /** 目前播到第幾格(由 useReplayCursor 給,與數值卡、地圖共用) */
+  at: number;
 }) {
   const frames = camera.frames;
-  const [at, setAt] = useState(0);
-  // periodS 是上游錄影的間隔;沒給就用 0.7 秒(實測值)。太快會看不清,設下限。
-  const stepMs = Math.max(200, Math.round((periodS ?? 0.7) * 1000));
-
-  // 換一次驗測(張數變了)就從頭播
   const total = frames.length;
-  useEffect(() => {
-    setAt(0);
-  }, [total, camera.key]);
-
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    if (total <= 1) return;
-    timer.current = setInterval(() => setAt((i) => (i + 1) % total), stepMs);
-    return () => {
-      if (timer.current) clearInterval(timer.current);
-    };
-  }, [total, stepMs]);
 
   const urls = useMemo(
     () =>

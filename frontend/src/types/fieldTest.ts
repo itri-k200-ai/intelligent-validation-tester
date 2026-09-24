@@ -59,8 +59,16 @@ export type FieldSample = {
   /** 路徑進度 0–100 */
   progress: number;
   sinrDb?: number | null;
+  /** 訊號:歷史回放要逐格重現當下的數值,所以每一筆都帶(不能只靠 /live) */
+  rsrpDbm?: number | null;
+  rsrqDb?: number | null;
   dlKbps?: number | null;
   ulKbps?: number | null;
+  /** 車頭方向:yawDeg 給數值欄位、headingDeg 給地圖箭頭 */
+  yawDeg?: number | null;
+  headingDeg?: number | null;
+  /** 絕對時間(epoch 秒)—— 與回放影像每一格的 wall 對齊用 */
+  wall?: number | null;
   elapsedS?: number | null;
   /** 取樣當下的位置(AMR 為 SLAM 公尺座標)—— 兩趟的實際軌跡 */
   x?: number | null;

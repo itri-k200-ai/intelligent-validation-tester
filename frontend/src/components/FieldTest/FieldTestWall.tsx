@@ -26,6 +26,7 @@ import { useFieldTestCamera } from "@/hooks/FieldTest/useFieldTestCamera";
 import { useFieldTestLive, type FieldLive } from "@/hooks/FieldTest/useFieldTestLive";
 import { useFieldTestMission } from "@/hooks/FieldTest/useFieldTestMission";
 import { useFieldTestReplay, type ReplayCamera } from "@/hooks/FieldTest/useFieldTestReplay";
+import { useReplayCursor } from "@/hooks/FieldTest/useReplayCursor";
 import { useFieldTestScene } from "@/hooks/FieldTest/useFieldTestScene";
 import { cameraSources } from "@/lib/fieldCameras";
 import { formatRate, pickRateUnit } from "@/lib/formatRate";
@@ -88,7 +89,7 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
   const replayCam = !running ? (replay?.cameras?.[0] ?? null) : null;
 
   return sc.layout === "live-results" ? (
-    <LiveResultsLayout scenario={scenario} sc={sc} mission={data} live={live} replayCam={replayCam} replayPeriodS={replay?.periodS ?? null} />
+    <LiveResultsLayout scenario={scenario} sc={sc} mission={data} live={live} />
   ) : (
     <CameraGridLayout scenario={scenario} sc={sc} mission={data} live={live} replayCam={replayCam} replayPeriodS={replay?.periodS ?? null} />
   );
@@ -122,16 +123,11 @@ function LiveResultsLayout({
   sc,
   mission,
   live,
-  replayCam,
-  replayPeriodS,
 }: {
   scenario: FieldScenarioId;
   sc: Extract<FieldScenario, { layout: "live-results" }>;
   mission: FieldMission;
   live: FieldLive | null;
-  /** 歷史模式才有:車載那格要播的回放鏡頭(沒有回放就是 null)。 */
-  replayCam: ReplayCamera | null;
-  replayPeriodS: number | null;
 }) {
   const run = mission.runs[mission.currentRun];
   const allRuns = mission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
@@ -192,8 +188,6 @@ function LiveResultsLayout({
                 label={label}
                 src={mission.cameras[i] ?? null}
                 // 車載是最後一格;有回放就播回放(見 FieldTestWall 的 replayCam)
-                replay={i === sc.cameras.length - 1 ? replayCam : null}
-                replayPeriodS={replayPeriodS}
                 scenario={scenario}
               />
           ))}
@@ -254,8 +248,67 @@ function CameraGridLayout({
   replayPeriodS: number | null;
 }) {
   const run = mission.runs[mission.currentRun];
-  const allRuns = mission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
-  const upTo = sharedProgress(mission.runs);
+
+  // 歷史回放:影像、數值卡、地圖標記共用同一個時間點(見 useReplayCursor)。
+  // replayCam 為 null(有測試在跑、或這次沒有回放)時 cursor.sample 也是 null,
+  // 下面所有 ?? 就會退回原本的即時 / 最後一筆行為。
+  const cursor = useReplayCursor(replayCam?.frames ?? null, replayPeriodS, mission.runs);
+  const rs = cursor.sample;
+  // 回放當下那一筆的數值 —— 沒有回放時是 null,不影響即時模式
+  const replayVehicle = rs
+    ? { yawDeg: rs.yawDeg ?? undefined, headingDeg: rs.headingDeg ?? undefined }
+    : null;
+  const replayPosition = rs && rs.x != null && rs.y != null ? { x: rs.x, y: rs.y } : null;
+  // 會隨時間變的欄位用回放當下那一筆;頻段 / PCI / 細胞這些樣本裡沒有、
+  // 整趟也幾乎不變,沿用既有的 link(它已經是這次驗測最後一筆的值)。
+  const baseLink = live?.link ?? run?.link ?? null;
+  // 回放時把整份 mission 截到「目前播到的時間」—— 進度條、路徑軌跡、測試數據
+  // 三者都是吃 mission / upTo 算出來的,不裁的話它們會一直顯示整趟的最終結果,
+  // 只有影像與數值卡在動,看起來就像沒跟上。
+  //
+  // 截法:每一趟只留 wall <= 游標的樣本,progress / reachedWaypoints / position
+  // 跟著最後一筆重算。還沒開始的那一趟會變成空的(pending),所以「優化後」的
+  // 線會在播到後半段時才長出來。
+  const playMission = useMemo(() => {
+    const cut = rs?.wall;
+    if (cut == null) return mission;
+    const total = sc.route.length;
+    return {
+      ...mission,
+      runs: mission.runs.map((r) => {
+        const kept = (r.samples ?? []).filter((s) => (s.wall ?? 0) <= cut);
+        const last = kept.at(-1);
+        const progress = last?.progress ?? 0;
+        return {
+          ...r,
+          samples: kept,
+          progress,
+          reachedWaypoints: Math.round((progress / 100) * total),
+          position:
+            last && last.x != null && last.y != null ? { x: last.x, y: last.y } : null,
+          status: kept.length === 0 ? ("pending" as const) : r.status,
+        };
+      }),
+    };
+  }, [mission, rs?.wall, sc.route.length]);
+
+  const playRuns = useMemo(
+    () => playMission.runs.map((r) => ({ phase: r.phase, samples: r.samples })),
+    [playMission],
+  );
+  const playUpTo = sharedProgress(playMission.runs);
+
+  const replayLink =
+    rs && baseLink
+      ? {
+          ...baseLink,
+          sinrDb: rs.sinrDb ?? null,
+          rsrpDbm: rs.rsrpDbm ?? null,
+          rsrqDb: rs.rsrqDb ?? null,
+          dlKbps: rs.dlKbps ?? null,
+          ulKbps: rs.ulKbps ?? null,
+        }
+      : null;
 
   return (
     <div className="field-wall field-wall--half">
@@ -274,7 +327,7 @@ function CameraGridLayout({
                 src={mission.cameras[i] ?? null}
                 // 車載是最後一格;有回放就播回放(見 FieldTestWall 的 replayCam)
                 replay={i === sc.cameras.length - 1 ? replayCam : null}
-                replayPeriodS={replayPeriodS}
+                replayAt={cursor.at}
                 scenario={scenario}
               />
             ))}
@@ -284,12 +337,12 @@ function CameraGridLayout({
             <VehicleSub
               scenario={scenario}
               title={sc.live.vehicleTitle}
-              vehicle={{ ...mission.vehicle, ...live?.vehicle }}
-              position={live?.position ?? run?.position ?? null}
+              vehicle={{ ...mission.vehicle, ...live?.vehicle, ...(replayVehicle ?? {}) }}
+              position={replayPosition ?? live?.position ?? run?.position ?? null}
             />
             <SignalSub
               title={sc.live.signalTitle}
-              link={live?.link ?? run?.link ?? null}
+              link={replayLink ?? baseLink}
             />
           </div>
         </div>
@@ -309,12 +362,12 @@ function CameraGridLayout({
             title={sc.routeTitle}
             aside={sc.floorPlan && !sc.backdrop ? <RadioLegend /> : undefined}
           >
-            <MissionProgress mission={mission} single />
+            <MissionProgress mission={playMission} single />
             <RouteMap
-              mission={mission}
+              mission={playMission}
               floorPlan={sc.floorPlan}
               backdrop={sc.backdrop}
-              livePosition={live?.position ?? null}
+              livePosition={replayPosition ?? live?.position ?? null}
             />
           </Sub>
 
@@ -323,8 +376,8 @@ function CameraGridLayout({
               「平均」寫在每張圖自己的名稱上,標題列就不再重複一次 */}
           <Sub icon={Signal} title="測試數據" className="field-sub--head-past-seam">
             <div className="field-split">
-              <ThroughputCompare runs={mission.runs} spec={RATE_CHARTS[0]} series={allRuns} upTo={upTo} narrow />
-              <ThroughputCompare runs={mission.runs} spec={RATE_CHARTS[1]} series={allRuns} upTo={upTo} narrow />
+              <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[0]} series={playRuns} upTo={playUpTo} narrow />
+              <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[1]} series={playRuns} upTo={playUpTo} narrow />
             </div>
           </Sub>
         </div>
@@ -372,14 +425,15 @@ function VideoTile({
   label,
   src,
   replay,
-  replayPeriodS,
+  replayAt,
   scenario,
 }: {
   label: string;
   src: string | null;
   /** 有值就播歷史回放,沒有才走即時串流 */
   replay?: ReplayCamera | null;
-  replayPeriodS?: number | null;
+  /** 回放播到第幾格(與數值卡、地圖共用同一個游標) */
+  replayAt?: number;
   scenario: FieldScenarioId;
 }) {
   return (
@@ -390,7 +444,7 @@ function VideoTile({
       </div>
       <div className="field-video">
         {replay ? (
-          <ReplayPlayer scenario={scenario} camera={replay} periodS={replayPeriodS ?? null} />
+          <ReplayPlayer scenario={scenario} camera={replay} at={replayAt ?? 0} />
         ) : (
           <LiveVideo src={src} />
         )}
