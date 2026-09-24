@@ -440,7 +440,7 @@ function VideoTile({
     <div className="field-video-cell">
       <div className="field-video-head">
         <Video className="h-10 w-10 flex-none text-teal" strokeWidth={1.75} />
-        <span className="flex-none text-[2.5rem] font-semibold leading-tight">{label}</span>
+        <span className="field-sub-title flex-none font-semibold leading-tight">{label}</span>
       </div>
       <div className="field-video">
         {replay ? (
@@ -472,7 +472,7 @@ function Sub({
           會把高度撐成兩倍 */}
       <div className="field-sub-head">
         <Icon className="h-10 w-10 flex-none text-teal" strokeWidth={1.75} />
-        <span className="flex-none text-[2.5rem] font-semibold leading-tight">{title}</span>
+        <span className="field-sub-title flex-none font-semibold leading-tight">{title}</span>
         {aside && <span className="ml-auto min-w-0 truncate text-sm text-white/60">{aside}</span>}
       </div>
       <div className="field-sub-body">{children}</div>
@@ -516,9 +516,9 @@ type Reading = {
 function MetricGrid({ items }: { items: Reading[] }) {
   return (
     <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-x-3">
-      {items.map(({ label, unit, value, tone = "text-white", size = "text-[2.75rem]" }) => (
+      {items.map(({ label, unit, value, tone = "text-white", size = "field-metric-value" }) => (
         <div key={label} className="flex min-w-0 flex-col justify-center gap-2">
-          <span className="truncate whitespace-nowrap text-sm text-white/55">
+          <span className="field-metric-label truncate whitespace-nowrap text-white/55">
             {label}
             {unit && <span className="ml-2 text-white/35">{unit}</span>}
           </span>

@@ -152,8 +152,9 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
             <div className="war-room-lab-icon-text">
               <h3 className="war-room-lab-icon-title">測試目標</h3>
               <p className="war-room-lab-icon-desc">
-                依據 3GPP 標準驗測 SMO / RIC 介面與 xApp / rApp 效能,自動化產出
-                驗測報告,加速智慧網路技術落地。
+                {/* 整句寫成一個字串 —— JSX 的換行會被當成空白,
+                    「自動化產出 驗測報告」中間會多出一格 */}
+                {"依據 3GPP 標準驗測 SMO / RIC 介面與 xApp / rApp 效能,自動化產出驗測報告,加速智慧網路技術落地。"}
               </p>
             </div>
           </div>

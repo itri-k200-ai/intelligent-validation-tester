@@ -59,7 +59,7 @@ const DUT_LIST: DutItem[] = [
 const EQUIPMENT: DutItem[] = [
   {
     name: "無人機",
-    items: "xApp 實地驗測載具",
+    items: "app 實地驗測載具",
     icon: "/images/dut/uav.png",
   },
   {
