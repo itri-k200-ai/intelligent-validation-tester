@@ -254,10 +254,16 @@ function CameraGridLayout({
   // 下面所有 ?? 就會退回原本的即時 / 最後一筆行為。
   const cursor = useReplayCursor(replayCam?.frames ?? null, replayPeriodS, mission.runs);
   const rs = cursor.sample;
-  // 回放當下那一筆的數值 —— 沒有回放時是 null,不影響即時模式
-  const replayVehicle = rs
-    ? { yawDeg: rs.yawDeg ?? undefined, headingDeg: rs.headingDeg ?? undefined }
-    : null;
+  // 回放當下那一筆的載具狀態 —— 沒有回放時是 null,不影響即時模式。
+  // 只放「這一筆真的有值」的欄位:spread 一個 undefined 會把底下 mission.vehicle
+  // 原本的值蓋成 undefined,地圖箭頭就又沒方向了。
+  const replayVehicle = useMemo(() => {
+    if (!rs) return null;
+    const v: { yawDeg?: number; headingDeg?: number } = {};
+    if (rs.yawDeg != null) v.yawDeg = rs.yawDeg;
+    if (rs.headingDeg != null) v.headingDeg = rs.headingDeg;
+    return v;
+  }, [rs]);
   const replayPosition = rs && rs.x != null && rs.y != null ? { x: rs.x, y: rs.y } : null;
   // 會隨時間變的欄位用回放當下那一筆;頻段 / PCI / 細胞這些樣本裡沒有、
   // 整趟也幾乎不變,沿用既有的 link(它已經是這次驗測最後一筆的值)。
@@ -275,6 +281,9 @@ function CameraGridLayout({
     const total = sc.route.length;
     return {
       ...mission,
+      // 地圖箭頭吃的是 mission.vehicle(RouteMap 從 mission 解構),不換的話整段回放
+      // 都停在「最後一筆即時狀態」的方向 —— 室內是 98.9°,看起來就是一直指著右邊。
+      vehicle: { ...mission.vehicle, ...(replayVehicle ?? {}) },
       runs: mission.runs.map((r) => {
         const kept = (r.samples ?? []).filter((s) => (s.wall ?? 0) <= cut);
         const last = kept.at(-1);
@@ -290,7 +299,23 @@ function CameraGridLayout({
         };
       }),
     };
-  }, [mission, rs?.wall, sc.route.length]);
+  }, [mission, rs?.wall, replayVehicle, sc.route.length]);
+
+  // 回放時的「測試進度」—— single 模式的進度條原本讀 mission.process(驗測方案的
+  // 步驟進度),歷史紀錄一律是 12/12 = 100%,而且 playMission 沒有截它。回放要的是
+  // 「播到整段驗測的哪裡」,所以用游標的絕對時間在首尾樣本之間的比例算。
+  const replayPercent = useMemo(() => {
+    const cut = rs?.wall;
+    if (cut == null) return null;
+    const walls = mission.runs
+      .flatMap((r) => (r.samples ?? []).map((x) => x.wall))
+      .filter((w): w is number => w != null);
+    if (walls.length < 2) return null;
+    const a = Math.min(...walls);
+    const b = Math.max(...walls);
+    if (b <= a) return null;
+    return Math.round(Math.min(1, Math.max(0, (cut - a) / (b - a))) * 100);
+  }, [mission, rs?.wall]);
 
   const playRuns = useMemo(
     () => playMission.runs.map((r) => ({ phase: r.phase, samples: r.samples })),
@@ -362,7 +387,7 @@ function CameraGridLayout({
             title={sc.routeTitle}
             aside={sc.floorPlan && !sc.backdrop ? <RadioLegend /> : undefined}
           >
-            <MissionProgress mission={playMission} single />
+            <MissionProgress mission={playMission} single percent={replayPercent} />
             <RouteMap
               mission={playMission}
               floorPlan={sc.floorPlan}
@@ -967,15 +992,25 @@ function RadioLegend() {
  * - single(室內,依室內版面規劃圖):一整條,只填「目前這趟」的進度,百分比緊接在
  *   標籤後面;單一顏色,不對應趟次(室內的卡頭已經不放啟用前 / 啟用後圖例)。
  */
-function MissionProgress({ mission, single = false }: { mission: FieldMission; single?: boolean }) {
+function MissionProgress({
+  mission,
+  single = false,
+  percent: override = null,
+}: {
+  mission: FieldMission;
+  single?: boolean;
+  /** 回放時由外面指定進度(見 replayPercent);即時模式傳 null 就走原本的算法 */
+  percent?: number | null;
+}) {
   const run = mission.runs[mission.currentRun];
   if (!run) return null;
   const pct = (r: FieldRun) => Math.round(Math.min(Math.max(r.progress, 0), 100));
 
   if (single) {
-    // 整個驗測流程的進度(已完成的步驟 ÷ 方案總步數),不是行駛進度
+    // 整個驗測流程的進度(已完成的步驟 ÷ 方案總步數),不是行駛進度。
+    // 回放時這個值沒有意義(歷史紀錄一律是已完成 = 100%),改吃外面給的比例。
     const p = mission.process;
-    const percent = p && p.total ? Math.round((p.done / p.total) * 100) : null;
+    const percent = override ?? (p && p.total ? Math.round((p.done / p.total) * 100) : null);
     return (
       <div className="field-map-head">
         <span className="flex-none text-sm text-white/60">測試進度</span>
