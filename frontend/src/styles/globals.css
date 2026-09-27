@@ -2762,10 +2762,19 @@ html.wall-mode .field-wall--half .field-meta-row {
 html.wall-mode .field-meta-item {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
-  column-gap: var(--fw-gap);
+  /* 標籤與值的距離三處一致(測試環境的 gap-6、驗測時間的 gap 都是 1.5rem)。
+     原本用 --fw-gap(96)—— 那是小卡之間的距離,不是欄名與內容的距離。 */
+  column-gap: 1.5rem;
 }
+/* 室內:這一格被 x = 9600 的縫穿過(9073~11281),值要落在縫的右邊 9648 起,
+   所以標籤欄是寫死的寬度 —— 503 + 1.5rem(72) = 575,9073 + 575 = 9648。
+   標籤靠右對齊:欄寬 503 但「測試項目」只有 348,不靠右的話中間會空出 131,
+   看起來就比隔壁的測試環境鬆很多(實測 227 對 72)。 */
 html.wall-mode .field-wall--half .field-meta-item {
-  grid-template-columns: 479px minmax(0, 1fr);
+  grid-template-columns: 503px minmax(0, 1fr);
+}
+html.wall-mode .field-wall--half .field-meta-item > :first-child {
+  justify-self: end;
 }
 /* 左卡(室外):標題 / 影像 / 即時小卡。
    即時小卡的標題列要在 y = 2160 之上、內容從 y = 2208 起,所以高度由下往上算:
