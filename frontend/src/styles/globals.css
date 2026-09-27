@@ -2894,18 +2894,24 @@ html.wall-mode .field-video-grid {
   /* 卡身頂在 724,第一排影像卡的標題列要從 885 起 */
   padding-top: 161px;
 }
-/* 即時小卡上下兩張:下卡高度同室外 .field-live-row(標題列在 y = 2160 之上、數值從 y = 2208 起),
-   上卡 y = 880~1833,標題列 880~1075 與右卡小卡對齊 */
+/* 即時小卡上下兩張 —— 版面與左邊的影像格完全相同(.field-video-grid),
+   兩欄的框才會上下齊平:
+     列1 885~1917(標題列 885~1080 貼第 1 排電視的下框線)
+     列2 1965~2997(標題列 1965~2160 貼第 2 排的下框線、數值 2208 起)
+
+   舊寫法是上卡 minmax(0,1fr)、下卡用 --fw-lower 算高度並靠 margin-bottom 錨在
+   2952:頂邊剛好對得上,但底邊比影像格短了 24(上卡)與 45(下卡)—— 一邊靠上排、
+   一邊靠下錨,兩套算法對不起來。改成跟影像格同一組數字。 */
 html.wall-mode .field-live-stack {
-  /* 卡身為了影像延伸到 3126,但這一欄照舊排到 2952(下卡的數值是照 y = 2160 的縫排的) */
-  margin-bottom: 174px;
-  /* 上卡標題列 885~1080 貼第 1 排電視的下框線(與影像格同高) */
+  /* 卡身底 3126 − 129 = 2997,與第 2 排影像同底 */
+  margin-bottom: 129px;
   padding-top: 161px;
   min-height: 0;
   display: grid;
-  /* 下卡 1965~2952:標題列 1965~2160 貼第 2 排電視的下框線、數值 2208 起 */
-  grid-template-rows: minmax(0, 1fr) calc(var(--fw-lower) + var(--fw-sub-head) + 48px);
-  row-gap: 1.5rem;
+  grid-template-rows: 1032px 1032px;
+  row-gap: 48px;
+  /* 多出來的高度不要分給列高,不然又會跟影像格錯開 */
+  align-content: start;
 }
 html.wall-mode .field-video {
   position: relative;
