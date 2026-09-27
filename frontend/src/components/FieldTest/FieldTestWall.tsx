@@ -667,9 +667,10 @@ function vehicleReadings(
     { label: "地速", unit: "m/s", value: v.speedMps?.toFixed(1) ?? null },
     { label: "垂直", unit: "m/s", value: v.verticalSpeedMps?.toFixed(1) ?? null },
     battery,
+    // 「模式」拿掉了:後端從來沒填過 FieldVehicleStatus.mode,平台的樣本與 /live
+    // 也沒有對應的飛行模式,牆上永遠是「—」。之後上游真的有了再加回來。
+    // (衛星數同樣還沒有來源,先留著欄位。)
     { label: "衛星數", value: v.satellites ?? null },
-    // 模式字串較長,字級小一階才放得進欄寬
-    { label: "模式", value: v.mode ?? null, size: "text-[2rem]" },
   ];
 }
 
