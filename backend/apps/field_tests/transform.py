@@ -55,6 +55,12 @@ def heading_from_yaw(value: Any) -> float | None:
     return None if deg is None else round((90 - deg) % 360, 1)
 
 
+def _compass(value: Any) -> float | None:
+    """已經是羅盤方位的角度(度,0 = 正北,順時針)—— 只做範圍正規化。"""
+    n = _num(value)
+    return None if n is None else round(n % 360, 1)
+
+
 def phase_key(name: str | None, seen: list[str]) -> str:
     """上游的階段名稱(部署前 / 部署後 …)→ before / after。
 
@@ -101,9 +107,21 @@ def sample(raw: dict, progress: float) -> dict:
         "rsrqDb": _num(ue.get("rsrq")),
         "dlKbps": rate_kbps(ue.get("thp_dl_kbps")),
         "ulKbps": rate_kbps(ue.get("thp_ul_kbps")),
+        "rttMs": _num(ue.get("rtt_ms")),
         # yaw 同理(行駛狀態那張卡要顯示);headingDeg 是地圖箭頭用的換算值
         "yawDeg": yaw_deg(ue.get("yaw")),
-        "headingDeg": heading_from_yaw(ue.get("yaw")),
+        # AMR 給的是 SLAM yaw(弧度,0 = 朝 +x),要換算;UAV 的 yaw 是 null,
+        # 但它自己就給羅盤方位 heading(度,0 = 正北),跟箭頭的慣例一致,直接用。
+        "headingDeg": (
+            heading_from_yaw(ue.get("yaw"))
+            if ue.get("yaw") is not None
+            else _compass(ue.get("heading"))
+        ),
+        # UAV 的飛行狀態(AMR 沒有這幾欄)—— 歷史回放要能重現當下的數值,
+        # 不能只靠 /live(那是「現在」,對跑完的驗測沒有意義)。
+        "speedMps": _num(ue.get("gspeed")),
+        "verticalSpeedMps": _num(ue.get("vspeed")),
+        "altitudeM": _num(ue.get("alt_rel")),
         # 絕對時間 —— 回放影像的每一格也有 wall,兩邊靠它對齊
         "wall": _num(raw.get("wall")),
         # 上游沒有路徑進度,留相對秒數給圖表之後改用時間軸

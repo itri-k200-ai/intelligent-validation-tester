@@ -130,16 +130,87 @@ function LiveResultsLayout({
   live: FieldLive | null;
 }) {
   const run = mission.runs[mission.currentRun];
-  const allRuns = mission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
-  const upTo = sharedProgress(mission.runs);
+
+  // 歷史回放 —— 做法與室內相同(見 CameraGridLayout),差別只在時間軸的來源:
+  // 室內以逐格影像為準,室外平台一張都沒存,所以直接用樣本自己的 wall。
+  // 驗測正在跑時不回放(牆面本來就在即時更新)。
+  const running = mission.runs.some((r) => r.status === "running");
+  const cursor = useReplayCursor(null, null, mission.runs, !running);
+  const rs = cursor.sample;
+  // 只放這一筆真的有值的欄位:spread 一個 undefined 會把 mission.vehicle 原本的值蓋掉
+  const replayVehicle = useMemo(() => {
+    if (!rs) return null;
+    const v: FieldVehicleStatus = {};
+    if (rs.headingDeg != null) v.headingDeg = rs.headingDeg;
+    if (rs.speedMps != null) v.speedMps = rs.speedMps;
+    if (rs.verticalSpeedMps != null) v.verticalSpeedMps = rs.verticalSpeedMps;
+    if (rs.altitudeM != null) v.altitudeM = rs.altitudeM;
+    return v;
+  }, [rs]);
+  // 把整份 mission 截到「目前播到的時間」——進度條、軌跡、測試數據都是吃它算出來的
+  const playMission = useMemo(() => {
+    const cut = rs?.wall;
+    if (cut == null) return mission;
+    const total = sc.route.length;
+    return {
+      ...mission,
+      vehicle: { ...mission.vehicle, ...(replayVehicle ?? {}) },
+      runs: mission.runs.map((r) => {
+        const kept = (r.samples ?? []).filter((x) => (x.wall ?? 0) <= cut);
+        const last = kept.at(-1);
+        const progress = last?.progress ?? 0;
+        return {
+          ...r,
+          samples: kept,
+          progress,
+          reachedWaypoints: Math.round((progress / 100) * total),
+          position:
+            last && last.x != null && last.y != null ? { x: last.x, y: last.y } : null,
+          status: kept.length === 0 ? ("pending" as const) : r.status,
+        };
+      }),
+    };
+  }, [mission, rs?.wall, replayVehicle, sc.route.length]);
+  // 回放進度:游標的絕對時間落在所有樣本 wall 首尾之間的位置(理由見 MissionProgress)
+  const replayPercent = useMemo(() => {
+    const cut = rs?.wall;
+    if (cut == null) return null;
+    const walls = mission.runs
+      .flatMap((r) => (r.samples ?? []).map((x) => x.wall))
+      .filter((w): w is number => w != null);
+    if (walls.length < 2) return null;
+    const a = Math.min(...walls);
+    const b = Math.max(...walls);
+    if (b <= a) return null;
+    return Math.round(Math.min(1, Math.max(0, (cut - a) / (b - a))) * 100);
+  }, [mission, rs?.wall]);
+  const baseLink = live?.link ?? run?.link ?? null;
+  const replayLink =
+    rs && baseLink
+      ? {
+          ...baseLink,
+          sinrDb: rs.sinrDb ?? null,
+          rsrpDbm: rs.rsrpDbm ?? null,
+          rsrqDb: rs.rsrqDb ?? null,
+          dlKbps: rs.dlKbps ?? null,
+          ulKbps: rs.ulKbps ?? null,
+          rttMs: rs.rttMs ?? null,
+        }
+      : null;
+
+  const allRuns = playMission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
+  const upTo = sharedProgress(playMission.runs);
   // 底圖:平台場景的向量地圖(建築 / 道路 / 綠地,公尺座標)
   const { scene } = useFieldTestScene(scenario);
   // UAV 的位置是 GPS,要換成公尺座標才能畫。原點優先用場景的 center —— 跟底圖同一個
   // 原點,軌跡才疊得上;還沒拿到場景就用第一趟第一個 GPS 點(再沒有就用目前位置)
   const origin = scene?.center ?? firstGeo(mission) ?? live?.geo ?? null;
   const project = origin ? makeGeoProjector(origin) : null;
-  const mapMission = project ? projectMission(mission, project) : mission;
-  const livePos = project && live?.geo ? project(live.geo) : null;
+  const mapMission = project ? projectMission(playMission, project) : playMission;
+  // 回放時標記走在當下那一筆的 GPS 上(室外樣本只有 lat / lon,沒有 x / y)
+  const replayGeo = rs && rs.lat != null && rs.lon != null ? { lat: rs.lat, lon: rs.lon } : null;
+  const geoNow = replayGeo ?? live?.geo ?? null;
+  const livePos = project && geoNow ? project(geoNow) : null;
   // 3D 地圖的軌跡:只在驗測資料或原點變了才重算。react-query 在資料沒變時會沿用
   // 同一個物件,所以每秒的即時輪詢不會讓 3D 軌跡跟著重建
   const sceneTracks = useMemo(
@@ -151,10 +222,11 @@ function LiveResultsLayout({
           typeof s.x === "number" && typeof s.y === "number" ? [{ x: s.x, y: s.y }] : [],
         ),
       })),
-    // 依據只能是 runs 與原點:mission 本身每次 render 都是新物件(外層會補上攝影機位址),
-    // 拿它當依據等於每秒都重建 3D 軌跡、每秒重畫一次 —— 量過一個分頁會吃掉 2 顆核心
+    // 依據只能是「各趟的樣本筆數」與原點:mission 本身每次 render 都是新物件
+    // (外層會補上攝影機位址),拿它當依據等於每秒都重建 3D 軌跡 —— 量過一個分頁會吃掉
+    // 2 顆核心。回放時軌跡要跟著長,而截斷唯一會變的就是筆數,所以用它當指紋就夠。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mission.runs, origin?.lat, origin?.lon],
+    [mapMission.runs.map((r) => r.samples.length).join("/"), origin?.lat, origin?.lon],
   );
   const uavX = livePos?.x;
   const uavY = livePos?.y;
@@ -175,10 +247,10 @@ function LiveResultsLayout({
           <VehicleSub
             scenario={scenario}
             title={sc.live.vehicleTitle}
-            vehicle={{ ...mission.vehicle, ...live?.vehicle }}
-            position={live?.position ?? run?.position ?? null}
+            vehicle={{ ...mission.vehicle, ...live?.vehicle, ...(replayVehicle ?? {}) }}
+            position={livePos ?? live?.position ?? run?.position ?? null}
           />
-          <SignalSub title={sc.live.signalTitle} link={live?.link ?? run?.link ?? null} />
+          <SignalSub title={sc.live.signalTitle} link={replayLink ?? baseLink} />
         </div>
         {/* 每支攝影機各自有標題列(貼第 2 排電視的下框線),畫面在第 3 排 */}
         <div className="field-video-row">
@@ -203,7 +275,7 @@ function LiveResultsLayout({
 
         <div className="field-status-body field-status-body--results">
           <Sub icon={Route} title={sc.routeTitle}>
-            <MissionProgress mission={mission} single />
+            <MissionProgress mission={playMission} single percent={replayPercent} />
             {/* 有場景就畫 3D(建築依高度立起來、無人機放在實際高度);
                 拿不到場景時退回 2D,只畫 GPS 軌跡 */}
             {scene ? (
@@ -219,8 +291,8 @@ function LiveResultsLayout({
           {/* 跟室內同一組圖:上格平均上行、下格平均下行 */}
           <Sub icon={Signal} title="測試數據">
             <div className="field-split">
-              <ThroughputCompare runs={mission.runs} spec={RATE_CHARTS[0]} series={allRuns} upTo={upTo} />
-              <ThroughputCompare runs={mission.runs} spec={RATE_CHARTS[1]} series={allRuns} upTo={upTo} />
+              <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[0]} series={allRuns} upTo={upTo} />
+              <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[1]} series={allRuns} upTo={upTo} />
             </div>
           </Sub>
         </div>
@@ -332,6 +404,7 @@ function CameraGridLayout({
           rsrqDb: rs.rsrqDb ?? null,
           dlKbps: rs.dlKbps ?? null,
           ulKbps: rs.ulKbps ?? null,
+          rttMs: rs.rttMs ?? null,
         }
       : null;
 

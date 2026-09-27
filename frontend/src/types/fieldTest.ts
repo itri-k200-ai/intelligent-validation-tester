@@ -64,6 +64,11 @@ export type FieldSample = {
   rsrqDb?: number | null;
   dlKbps?: number | null;
   ulKbps?: number | null;
+  rttMs?: number | null;
+  /** 以下只有 UAV 有:上游每一筆樣本就帶著,歷史回放才重現得出來 */
+  speedMps?: number | null;
+  verticalSpeedMps?: number | null;
+  altitudeM?: number | null;
   /** 車頭方向:yawDeg 給數值欄位、headingDeg 給地圖箭頭 */
   yawDeg?: number | null;
   headingDeg?: number | null;
