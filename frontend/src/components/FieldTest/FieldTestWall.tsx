@@ -397,19 +397,27 @@ function CameraGridLayout({
  * 兩者都靠左 —— 欄寬與下面的小卡一致(見 globals.css .field-meta-row)。
  */
 function HeadRow({ title, mission }: { title: string; mission: FieldMission }) {
+  const at = runTime(mission);
   return (
     <>
       <div className="dut-wall-band-title">{title}</div>
+      {/* 驗測時間貼卡片右緣、與大卡標題同高(absolute,見 globals.css .field-head-time)——
+          牆上要看得出現在顯示的是哪一次,尤其平台指定顯示歷史紀錄時。
+          沒有時間就整段不顯示,不要在牆上留一格「—」。 */}
+      {at && (
+        <span className="field-head-time">
+          <span className="field-meta-key">驗測時間</span>
+          <span className="field-meta-val">{at}</span>
+        </span>
+      )}
       <div className="field-meta-row">
         <span className="flex min-w-0 items-baseline gap-6">
-          <span className="flex-none text-sm text-white/55">測試環境</span>
-          <span className="min-w-0 truncate text-base">{mission.testcase.environment}</span>
+          <span className="field-meta-key flex-none">測試環境</span>
+          <span className="field-meta-val min-w-0 truncate">{mission.testcase.environment}</span>
         </span>
-        {/* 測試項目原本寫死在 config,看不出牆上現在是哪一次 —— 改成這次驗測的
-            時間與執行 ID(平台指定顯示歷史紀錄時特別需要) */}
         <span className="field-meta-item flex min-w-0 items-baseline gap-6">
-          <span className="flex-none text-sm text-white/55">測試項目</span>
-          <span className="min-w-0 truncate text-base font-semibold">{runLabel(mission)}</span>
+          <span className="field-meta-key flex-none">測試項目</span>
+          <span className="field-meta-val min-w-0 truncate">{mission.testcase.name}</span>
         </span>
       </div>
     </>
@@ -481,22 +489,18 @@ function Sub({
 }
 
 /**
- * 牆上「測試項目」顯示的內容:這一次驗測的時間 + 執行 ID 前 8 碼
- * (ID 全長 36 碼,牆上放不下也記不住)。
- * 還沒有任何驗測紀錄時退回設定檔裡的項目名稱 —— 牆上不要出現一格「—」。
+ * 牆上「驗測時間」顯示的內容 —— 這一次驗測的開始時間。
+ * 沒有任何驗測紀錄時回 null,呼叫端整段不顯示。
  */
-function runLabel(mission: FieldMission): string {
-  const t = mission.createdAt
-    ? new Date(mission.createdAt * 1000).toLocaleString("zh-TW", {
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      })
-    : null;
-  const id = mission.runId ? mission.runId.slice(0, 8) : null;
-  return [t, id].filter(Boolean).join(" · ") || mission.testcase.name;
+function runTime(mission: FieldMission): string | null {
+  if (!mission.createdAt) return null;
+  return new Date(mission.createdAt * 1000).toLocaleString("zh-TW", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 type Reading = {

@@ -2719,7 +2719,30 @@ html.wall-mode .field-wall:not(.field-wall--half) > section:nth-of-type(2) .dut-
    文字貼在小卡標題列上方 48 處。卡頭固定 342 高(519~861),下面的小卡才照舊從 885 起 */
 html.wall-mode .field-wall .field-card-head--meta {
   height: 342px;
+  position: relative;   /* 驗測時間用 absolute 貼右緣 */
 }
+/* 驗測時間:與大卡標題(.dut-wall-band-title,高 181)同高、貼卡片右緣。
+   用 absolute 而不是把標題改成 flex 排 —— 標題是置中的,而且各自帶了
+   對縫用的 translateX,塞進同一列會把置中算歪。 */
+html.wall-mode .field-head-time {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 181px;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+/* 測試環境 / 測試項目 / 驗測時間:標題與內容同一個字級(前端指定 29px),
+   只靠亮度分層,不用字級也不用粗體。 */
+html.wall-mode .field-meta-key,
+html.wall-mode .field-meta-val {
+  font-size: calc(29px * var(--wall));
+  font-weight: 400;
+  line-height: 1.2;
+}
+html.wall-mode .field-meta-key { color: rgba(255, 255, 255, 0.55); }
+html.wall-mode .field-meta-val { color: #fff; }
 html.wall-mode .field-meta-row {
   flex: 1;
   min-height: 0;
