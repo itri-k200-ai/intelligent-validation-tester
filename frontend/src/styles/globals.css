@@ -2161,7 +2161,7 @@ html.wall-mode .war-room-cat-items {
    (RightWingMethod 裡加 setInterval),這裡的樣式不用動。 */
 html.wall-mode .war-room-method-name {
   font-size: calc(29px * var(--wall));               /* 90px,與待測物的項目標題同級 */
-  font-weight: 500;
+  font-weight: 400;   /* 標題一律不粗體;與內文的區隔靠字級(29 對 24)不靠字重 */
   line-height: 1.2;
   color: var(--c-text);
 }
@@ -2703,6 +2703,9 @@ html.wall-mode .field-wall .dut-wall-band-title {
   /* 前端指定:大卡標題(即時狀態 / 測試狀態總覽)37px。
      高度已釘在 181px,所以改字級不會把下面的小卡往下推、不影響 y=1080 的縫。 */
   font-size: calc(37px * var(--wall));
+  /* 不要粗體。上面 .dut-wall-band-title 是 600,不明寫就會繼承過來 ——
+     之前只有註解寫了 400、宣告漏掉,牆上就一直是粗的。 */
+  font-weight: 400;
 }
 /* 室外兩張卡的正中央都緊鄰拼接縫(左卡中心 1968 vs 縫 1920、右卡中心 7632 vs 縫 7680),
    置中之後縫會從字的中間穿過。各自平移一點點,讓縫剛好落在字與字之間:
@@ -2958,6 +2961,7 @@ html.wall-mode .field-video .video-live-badge {
    數值     37px
    都是規範值,牆面乘 --wall 換算到 3× 畫布。 */
 html.wall-mode .field-sub-title {
+  font-weight: 400;   /* 標題一律不粗體(與大卡標題同一條規則) */
   font-size: calc(29px * var(--wall));
   /* 標題一律不粗體(前端指定);JSX 上的 font-semibold 由這裡蓋掉 */
   font-weight: 400;
