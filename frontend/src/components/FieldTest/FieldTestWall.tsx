@@ -1034,6 +1034,8 @@ const RATE_CHARTS: [TrendSpec, TrendSpec] = [
 
 /** 圖表字級與筆畫都以牆面 3× 畫布計:2px 線 = 6、1px 格線 = 3 */
 const AXIS_TICK = { fontSize: 72, fill: "rgba(255,255,255,0.6)" };
+/** 橫軸刻度的間隔(秒)。固定值 —— 刻度上的數字永遠是它的整數倍,不由資料算出來 */
+const X_TICK_S = 30;
 const AXIS_STROKE = "rgba(255,255,255,0.2)";
 const GRID_STROKE = "rgba(255,255,255,0.08)";
 /** 圖表底色(小卡疊在大卡上的近似色),端點外圈用它隔開線條 */
@@ -1059,7 +1061,6 @@ function TrendChart({
   spec: { label, unit, metric, digits },
   series,
   bare = false,
-  xTicks = [0, 50, 100],
   scale = 1,
   unitOverride,
   digitsOverride,
@@ -1067,13 +1068,6 @@ function TrendChart({
   spec: TrendSpec;
   series: { phase: OptimizationPhase; samples: FieldSample[] }[];
   bare?: boolean;
-  /**
-   * 圖跨拼接縫時,避開會落在縫上的刻度。
-   * null = 不標橫軸刻度(只留基準線):「走到哪」由測試進度條交代,
-   * 圖上再寫一次百分比容易跟進度條混淆,而且第一趟還在跑時那個百分比並不準。
-   * 中牆的圖目前都用 null(室內、室外)。
-   */
-  xTicks?: number[] | null;
   /** 吞吐量:換成所屬小卡選定的單位,y 軸才跟標題一致 */
   scale?: number;
   unitOverride?: string;
@@ -1081,22 +1075,43 @@ function TrendChart({
 }) {
   const shownUnit = unitOverride ?? unit;
   const shownDigits = digitsOverride ?? digits;
-  // 依 progress 合併成一列一個 x。兩趟的取樣筆數通常不一樣(例:59 / 57),換算出來的
-  // 進度落在不同的 x 上,所以多數列只有其中一趟有值 —— 這種空格是「那一趟在這個進度
-  // 沒有取樣點」,不是資料中斷,要靠 connectNulls 跨過去,否則每個點都成為孤立線段
-  // (配上 strokeLinecap="round" 會被畫成一顆圓點,整張圖看起來沒有線)。
-  // 還沒跑到的進度根本不在 rows 裡,所以線仍然停在目前位置。
-  const byProgress = new Map<number, Record<string, number>>();
+  // 橫軸是「這一趟開始後第幾秒」。每一趟各自從 0 起算 —— elapsedS 是整次驗測的累計
+  // 秒數,第二趟接在第一趟後面(實測 before 14.8→121.9、after 151.9→259.5),
+  // 不歸零的話兩條線會一左一右,完全沒辦法對照。
+  const t0 = new Map<string, number>();
+  series.forEach((s) => {
+    const first = s.samples.find((pt) => sampleSecond(pt) !== null);
+    const sec = first ? sampleSecond(first) : null;
+    if (sec !== null) t0.set(s.phase, sec);
+  });
+  /** 某一筆取樣在自己那一趟的第幾秒 */
+  const secIn = (phase: string, pt: FieldSample | undefined): number | null => {
+    const sec = sampleSecond(pt);
+    return sec === null ? null : Math.round(sec - (t0.get(phase) ?? 0));
+  };
+  // 依秒數合併成一列一個 x。兩趟的取樣時間點通常對不齊,所以多數列只有其中一趟有值
+  // —— 這種空格是「那一趟在這一秒沒有取樣點」,不是資料中斷,要靠 connectNulls 跨過去,
+  // 否則每個點都成為孤立線段(配上 strokeLinecap="round" 會被畫成一顆圓點,
+  // 整張圖看起來沒有線)。還沒跑到的秒數不在 rows 裡,所以線停在目前位置。
+  const byT = new Map<number, Record<string, number>>();
   series.forEach((s) =>
     s.samples.forEach((pt) => {
       const val = sampleValue(pt, metric);
-      if (val === null) return;
-      const row = byProgress.get(pt.progress) ?? { progress: pt.progress };
+      const t = secIn(s.phase, pt);
+      if (val === null || t === null) return;
+      const row = byT.get(t) ?? { t };
       row[s.phase] = val / scale;
-      byProgress.set(pt.progress, row);
+      byT.set(t, row);
     }),
   );
-  const rows = [...byProgress.values()].sort((a, b) => a.progress - b.progress);
+  const rows = [...byT.values()].sort((a, b) => a.t - b.t);
+  // 刻度永遠是 X_TICK_S 的整數倍(0s / 30s / 60s …)—— 不從資料算,所以不會出現
+  // 21s、43s 這種跟著每次驗測長度跑的數字。軸長取剛好蓋過資料的那一格,下限 120 秒:
+  // 驗測還在跑時軸不會跟著縮放,線畫到哪就停在哪。
+  const maxT = rows.length ? rows[rows.length - 1].t : 0;
+  const axisMax = Math.max(120, Math.ceil(maxT / X_TICK_S) * X_TICK_S);
+  const xTicks: number[] = [];
+  for (let v = 0; v <= axisMax; v += X_TICK_S) xTicks.push(v);
   const latest = sampleValue(series[series.length - 1]?.samples.at(-1), metric);
 
   return (
@@ -1115,19 +1130,17 @@ function TrendChart({
           <LineChart data={rows} margin={{ top: 24, right: 130, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={GRID_STROKE} strokeWidth={3} vertical={false} />
             <XAxis
-              dataKey="progress"
+              dataKey="t"
               type="number"
-              domain={[0, 100]}
-              ticks={xTicks ?? []}
-              tickFormatter={(val: number) => `${val}%`}
-              tick={xTicks ? AXIS_TICK : false}
+              domain={[0, axisMax]}
+              ticks={xTicks}
+              tickFormatter={(val: number) => `${val}s`}
+              tick={AXIS_TICK}
               tickLine={false}
               tickMargin={44}
               stroke={AXIS_STROKE}
               strokeWidth={3}
-              // 不標刻度時只留基準線,省下的高度讓給圖。但不能收到底:y 軸最低的刻度
-              // (例:0)是對齊基準線置中的,字高 72 的一半要有地方放,否則會被吃掉
-              height={xTicks ? 130 : 48}
+              height={130}
             />
             <YAxis
               tick={AXIS_TICK}
@@ -1143,7 +1156,7 @@ function TrendChart({
               contentStyle={TOOLTIP_BOX}
               labelStyle={{ color: "rgba(255,255,255,0.7)" }}
               itemStyle={{ color: "#FFFFFF", padding: "4px 0" }}
-              labelFormatter={(val) => `測試進度 ${val}%`}
+              labelFormatter={(val) => `第 ${val} 秒`}
               formatter={(val, name) => [
                 `${Number(val).toFixed(shownDigits)} ${shownUnit}`,
                 PHASE[name as OptimizationPhase]?.short ?? String(name),
@@ -1168,10 +1181,11 @@ function TrendChart({
             {series.map((s) => {
               const end = s.samples.at(-1);
               const val = sampleValue(end, metric);
-              return end && val !== null ? (
+              const x = secIn(s.phase, end);
+              return end && val !== null && x !== null ? (
                 <ReferenceDot
                   key={`end-${s.phase}`}
-                  x={end.progress}
+                  x={x}
                   y={val / scale}
                   r={12}
                   fill={PHASE[s.phase].color}
@@ -1186,6 +1200,17 @@ function TrendChart({
       </div>
     </div>
   );
+}
+
+/**
+ * 一筆取樣的時間(秒)。上游給的是 elapsedS(整次驗測的累計秒數);
+ * 沒有就退回絕對時間 wall —— 兩者都是秒,歸零之後效果一樣。
+ */
+function sampleSecond(pt: FieldSample | undefined): number | null {
+  if (!pt) return null;
+  if (pt.elapsedS != null) return pt.elapsedS;
+  if (pt.wall != null) return pt.wall;
+  return null;
 }
 
 /**
@@ -1325,8 +1350,6 @@ function ThroughputCompare({
         spec={spec}
         series={series}
         bare
-        // 室內外都不標橫軸(理由見 TrendChart 的 xTicks)
-        xTicks={null}
         scale={chosen.scale}
         unitOverride={chosen.unit}
         digitsOverride={chosen.digits}
