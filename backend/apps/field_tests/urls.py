@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    CameraByNameSnapshotView,
+    CameraByNameStreamView,
     CameraSnapshotView,
     CameraStatusView,
     CameraStreamView,
@@ -39,6 +41,19 @@ urlpatterns = [
     path("field-tests/missions/<str:scenario>/", MissionView.as_view(), name="field-test-mission"),
     # 平台(經 IM adapter 的 notifyHisShow)指定牆上要顯示哪一次歷史驗測
     path("field-tests/history/", HistoryShowView.as_view(), name="field-test-history"),
+    # 具名攝影機要排在 <str:scenario> 之前 —— 不然 by-name 會被當成情境名稱
+    path(
+        "field-tests/camera/by-name/<str:name>/stream",
+        CameraByNameStreamView.as_view(),
+        name="field-test-camera-by-name-stream",
+    ),
+    path("field-tests/camera/by-name/<str:name>/stream/", CameraByNameStreamView.as_view()),
+    path(
+        "field-tests/camera/by-name/<str:name>/snapshot",
+        CameraByNameSnapshotView.as_view(),
+        name="field-test-camera-by-name-snapshot",
+    ),
+    path("field-tests/camera/by-name/<str:name>/snapshot/", CameraByNameSnapshotView.as_view()),
     path(
         "field-tests/camera/<str:scenario>/", CameraStatusView.as_view(), name="field-test-camera"
     ),

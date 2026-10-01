@@ -1005,3 +1005,33 @@ def test_a_notice_that_uses_the_adapter_running_id_still_works(monkeypatch, adap
     adapter.notified = {"b967cd21d39b": "500"}
     views._adapter_poll.clear()
     assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "old"
+
+def test_a_camera_name_the_platform_does_not_know_gives_404_not_500(monkeypatch):
+    """串流代理的錯誤分支:上游回 404 時 body 還沒讀,_detail 直接 resp.json()
+    會讓 httpx 丟 ResponseNotRead,整個變成 500(實際踩過)。"""
+    import httpx
+
+    class _Ctx:
+        def __enter__(self):
+            # 一定要是「還沒讀」的串流回應 —— 用 json= 建的 Response 內容已經就緒,
+            # 那樣不論有沒有 read() 都會過,測不到這個 bug。
+            return httpx.Response(
+                404, stream=httpx.ByteStream(b'{"detail": "camera not found"}')
+            )
+
+        def __exit__(self, *a):
+            return False
+
+    class _FakeHttpx:
+        def __init__(self, *a, **k):
+            pass
+
+        def stream(self, *a, **k):
+            return _Ctx()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(perf_client.httpx, "Client", _FakeHttpx)
+    res = APIClient().get("/api/field-tests/camera/by-name/nope/snapshot")
+    assert res.status_code == 404

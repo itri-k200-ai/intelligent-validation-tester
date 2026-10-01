@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+from urllib.parse import quote
 
 import httpx
 from django.conf import settings
@@ -743,6 +744,42 @@ class CameraStreamView(WallReadView):
 
 class CameraSnapshotView(CameraStreamView):
     """GET /api/field-tests/camera/<scenario>/snapshot —— 單張 JPEG(只有 AMR 有)。"""
+
+    kind = "snapshot"
+
+
+class CameraByNameStreamView(WallReadView):
+    """GET /api/field-tests/camera/by-name/<name>/stream —— 平台登記的具名攝影機(MJPEG)。
+
+    與載具影像不同:這些不綁情境,是平台 /cameras 裡註冊的固定攝影機,照名稱直接轉。
+    掛在 camera/ 底下是為了沿用 nginx 那段 proxy_buffering off —— MJPEG 是長連線,
+    被 buffer 住就整格空白。
+
+    名稱不存在時上游回 404,原樣帶回去,前端那一格就顯示佔位畫面(不要擋掉,
+    鏡頭是陸續接上來的,少一支不該讓整排影像壞掉)。
+    """
+
+    kind = "stream"
+
+    def get(self, request, name: str):
+        try:
+            content_type, chunks = client.stream(
+                f"/cameras/by-name/{quote(name, safe='')}/{self.kind}"
+            )
+        except client.PerfTesterError as exc:
+            return _error(exc)
+        resp = StreamingHttpResponse(chunks, content_type=content_type)
+        resp["Cache-Control"] = "no-store"
+        resp["X-Accel-Buffering"] = "no"
+        return resp
+
+
+class CameraByNameSnapshotView(CameraByNameStreamView):
+    """GET /api/field-tests/camera/by-name/<name>/snapshot —— 單張 JPEG。
+
+    平台建議外部用輪詢這支而不是長連線。目前牆面用 /stream(畫面連續、
+    前端不必自己計時);relay 扛不住時可以改成前端定時換這支的網址。
+    """
 
     kind = "snapshot"
 

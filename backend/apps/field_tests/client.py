@@ -133,6 +133,10 @@ def stream(path: str, chunk_size: int = 8192) -> tuple[str, Iterator[bytes]]:
         raise PerfTesterError(f"連不上場域測試平台:{exc}", status=503) from exc
 
     if resp.status_code >= 400:
+        # 串流回應的 body 還沒讀,_detail 會去 resp.json() —— 不先 read() 的話
+        # httpx 丟 ResponseNotRead,整個變成 500 而不是原本的 404(實際踩過:
+        # 打一支平台沒註冊的攝影機名稱)。錯誤內容很短,讀完無妨。
+        resp.read()
         detail = _detail(resp)
         ctx.__exit__(None, None, None)
         client.close()
