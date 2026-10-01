@@ -1338,6 +1338,26 @@ html.wall-mode .video-empty svg {
   width: 5rem !important;
   height: 5rem !important;
 }
+/* 沒有畫面時的轉圈 —— 取代原本的「尚無攝影機串流」。
+   粗細與直徑都乘 --wall,牆上縮回去才看得見(1px 在 3 倍畫布上只剩 1/3 px)。 */
+.video-spinner {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 6px solid rgba(255, 255, 255, 0.14);
+  border-top-color: rgba(255, 255, 255, 0.55);
+  animation: video-spin 1.1s linear infinite;
+}
+html.wall-mode .video-spinner {
+  width: calc(64px * var(--wall));
+  height: calc(64px * var(--wall));
+  border-width: calc(6px * var(--wall));
+}
+@keyframes video-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 html.wall-mode .video-live-badge {
   position: absolute;
   top: 1.25rem;
@@ -1801,10 +1821,15 @@ html.wall-mode .war-room-lab-info {
      --lab-top-h,最後兩列自動平分剩下的。
      注意:列的分界因此不再落在實體 bezel(y=1080 / 2160)上,是刻意的
      取捨 —— 下排內容會跨過接縫。 */
-  /* 標題列高度 —— 上排卡片有 48 外距,所以卡片上緣 = 這個值 + 48。
-     設 459 → 卡片上緣 507(離螢幕頂 169px,與中牆一致)。 */
-  --lab-title-h: 459px;
-  --lab-top-h: 760px;
+  /* 標題列高度 —— 上排卡片有 48 外距、卡片自己有 1.25rem(60)上內距,
+     所以「內容」上緣 = 這個值 + 48 + 60。
+     設 399 → 卡框 447(149px)、內容 507(離螢幕頂 169px,與中牆一致)。
+     規格的 169 是對到內容,不是對到卡框 —— 之前把內距拿掉讓卡框落在 169,
+     標題就貼著邊框了,改成把卡框往上移 60,由內距讓開。 */
+  --lab-title-h: 399px;
+  /* 上排三格要整個落在第一排電視裡:標題列 399 + 這個值 = 1080。
+     下面兩列因此各得 1080,下排三格(各跨 2 列)剛好佔滿第 2、3 排電視。 */
+  --lab-top-h: 681px;
   grid-template-rows:
     var(--lab-title-h)
     var(--lab-top-h)
@@ -1823,12 +1848,14 @@ html.wall-mode .war-room-lab-title {
   text-align: center;
 }
 html.wall-mode .war-room-lab-title-text {
-  /* 與中牆主標題(.war-room-main-title-text)採同一組排版,兩面牆的標題
-     看起來是同一個系統 —— 參考圖的「通感融合實驗網」就是這個處理。 */
-  font-size: calc(37px * var(--wall));
-  font-weight: 400;
-  line-height: 1.1;
-  letter-spacing: 0.01em;
+  /* 與中牆主標題(.war-room-main-title-text)完全同一組字:56px / 600 / 115%。
+     兩面牆最上面那行要看起來是同一個系統 —— 原本寫 37 / 400,比中牆小一階又細,
+     並排時「簡介」會比「智慧網路」弱一截。
+     這是「標題不粗體」的唯一例外:牆面最大的那一行跟著中牆走。
+     letter-spacing 也拿掉 —— 中牆沒設,留著就不是同一組字。 */
+  font-size: calc(56px * var(--wall));
+  font-weight: 600;
+  line-height: 1.15;
   color: white;
 }
 
@@ -1860,6 +1887,8 @@ html.wall-mode .war-room-lab-top--intro {
   align-items: center;
   justify-content: flex-start;
   gap: 2rem;
+  /* 上下內距為 0:螢幕頂到卡框是 169,內容要跟著貼齊那條線,
+     留 1.25rem 的話標題會被推到 189。左右維持原本的收放。 */
   padding: 1.25rem 2.5rem 1.25rem 0.5rem;
   text-align: left;
 }
@@ -1901,7 +1930,7 @@ html.wall-mode .war-room-lab-intro-title {
   border-bottom: calc(3px * var(--wall)) solid rgba(255, 255, 255, 0.7);
 }
 html.wall-mode .war-room-lab-intro-desc {
-  font-size: calc(24px * var(--wall));   /* 卡片內說明文字 —— 比欄位標題再小一階 */
+  font-size: calc(20px * var(--wall));   /* 卡片內說明文字 —— 比欄位標題(28)再小兩階 */
   font-weight: 400;
   line-height: 1.55;
   color: rgba(255, 255, 255, 0.78);
@@ -1956,7 +1985,7 @@ html.wall-mode .war-room-lab-icon-title {
   line-height: 1.2;
 }
 html.wall-mode .war-room-lab-icon-desc {
-  font-size: calc(24px * var(--wall));   /* 卡片內說明文字 —— 比欄位標題再小一階 */
+  font-size: calc(20px * var(--wall));   /* 卡片內說明文字 —— 比欄位標題(28)再小兩階 */
   font-weight: 400;
   line-height: 1.55;
   color: rgba(255, 255, 255, 0.78);
@@ -2709,8 +2738,12 @@ html.wall-mode .field-wall .dut-wall-band-title {
 }
 /* 室外兩張卡的正中央都緊鄰拼接縫(左卡中心 1968 vs 縫 1920、右卡中心 7632 vs 縫 7680),
    置中之後縫會從字的中間穿過。各自平移一點點,讓縫剛好落在字與字之間:
-     即時狀態     1667~2271(每字 151)→ 左移 49,縫 1920 落在「時|狀」之間
-     測試狀態總覽 7179~8087        → 右移 47,縫 7680 落在「狀|態」之間
+     環境與終端狀態 → 左移 49,縫 1920 落在字與字的交界
+     測試狀態總覽 → 右移 47,縫 7680 落在「狀|態」之間
+   左卡原本是四個字的「即時狀態」(縫落在「時|狀」)。改成六個字之後字串變寬
+   233、置中起點左移 116,剛好仍落在交界上,所以位移值沒有跟著動 —— 但斷字位置
+   變成「環境設|備狀態」,把「設備」切開了。要改成「環境|設備狀態」的話把 -49 改成
+   +69(= 一個字寬 116.5 的整數倍差)。這個要在真牆上看過再定,預覽看不出拼接縫。
    (平移不影響版面;字級或字體換了要重算) */
 html.wall-mode .field-wall:not(.field-wall--half) > section:nth-of-type(1) .dut-wall-band-title {
   transform: translateX(-49px);
@@ -2822,7 +2855,9 @@ html.wall-mode .field-card--video > .field-video-row {
    內容從縫下方 48 起 —— 第一排文字(測試進度、平均下行、位置 x…)才不會壓在縫上。
    標題列與內容之間的距離因此固定 48,不隨卡片位置變動。 */
 html.wall-mode .field-wall .field-sub > .field-sub-body {
-  padding-top: 48px;
+  /* 48 → 24:內容再往上靠近縫一點(依前端回饋)。不設 0 —— 文字貼著縫的話,
+     換成被上面那片邊框切到頂部。 */
+  padding-top: 24px;
 }
 /* 左上兩張即時小卡並排:欄寬與位置跟底下的影像卡完全一致(x 241~1873 / 2065~3697),
    不然第二欄會差 96,上下看起來沒對齊。間距跨 x = 1920 */
@@ -2862,10 +2897,19 @@ html.wall-mode .field-video-head {
   flex: none;
   height: var(--fw-sub-head);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 1rem;
+  /* 文字與底色帶都靠上,不置中。
+     標題列的外框仍占滿 195 —— 下面的畫面 / 數值才會從 y = 1080、2160 的縫
+     下方開始,整面牆的對縫規則不變。但文字若在 195 裡置中,底部離縫只剩
+     45 畫布px(15 實際px),會被電視邊框的實體厚度切掉。
+     改成靠上 + 底色帶只畫 120:文字 885~994,離縫 86 畫布px(29 實際px)。 */
   padding: 0 calc(21px * var(--wall));
-  background: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.1) calc(40px * var(--wall)),
+    transparent 0
+  );
 }
 /* 室內左卡身(y = 880~2952,左卡內距起算 x = 240):2×2 影像 3552 / 即時小卡 1728,欄距跨 x = 3840 */
 /* 影像 3552(2×1728)+ 即時數值 1632,欄距跨 x = 3840。
@@ -2875,6 +2919,18 @@ html.wall-mode .field-live-grid {
   display: grid;
   grid-template-columns: 3552px 1632px;
   column-gap: var(--fw-gap);
+}
+
+/* 室外的左卡(環境與終端狀態):左欄影像、右欄 UAV 與通訊狀態。
+   卡片內容 x = 240~3696(寬 3456)。欄寬這樣切:
+     影像欄 1488(= 16:9 畫面的寬,與室內同一組尺寸)x 240~1728
+     欄距   336                                    x 1728~2064 ← 包住拼接縫 1920
+     數值欄 1632                                   x 2064~3696
+   兩欄共用 .field-video-grid / .field-live-stack 的列高(1032 / 1032、列距 48),
+   所以四個框的上下緣與室內一樣都齊平,標題列也都貼在 y = 1080 / 2160 的縫上。 */
+html.wall-mode .field-live-grid--two {
+  grid-template-columns: 1488px 1632px;
+  column-gap: 336px;
 }
 /* 影像各 1728×972(16:9),上下貼齊卡身:第一列 y 880~1852、第二列 1980~2952。
    左欄影像本身跨 x = 1920,但名稱(左下)與 LIVE(右下,右緣 x = 1908)都在縫的左邊;
@@ -2897,6 +2953,14 @@ html.wall-mode .field-video-grid {
   /* 卡身頂在 724,第一排影像卡的標題列要從 885 起 */
   padding-top: 161px;
 }
+/* 室外只有兩路影像,上下排 —— 列高與列距沿用上面的 .field-video-grid。
+   ⚠ 一定要寫在 .field-video-grid 後面:兩者特異度相同,寫在前面會被它的
+   repeat(2, 1488px) 蓋掉,影像變成並排往右溢出、壓在右欄的飛行狀態上。 */
+html.wall-mode .field-video-grid--one {
+  grid-template-columns: 1488px;
+  column-gap: 0;
+}
+
 /* 即時小卡上下兩張 —— 版面與左邊的影像格完全相同(.field-video-grid),
    兩欄的框才會上下齊平:
      列1 885~1917(標題列 885~1080 貼第 1 排電視的下框線)
@@ -2988,11 +3052,20 @@ html.wall-mode .field-sub {
 html.wall-mode .field-sub-head {
   flex: none;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 1rem;
   height: var(--fw-sub-head);
+  /* 文字與底色帶都靠上,不置中。
+     標題列的外框仍占滿 195 —— 下面的畫面 / 數值才會從 y = 1080、2160 的縫
+     下方開始,整面牆的對縫規則不變。但文字若在 195 裡置中,底部離縫只剩
+     45 畫布px(15 實際px),會被電視邊框的實體厚度切掉。
+     改成靠上 + 底色帶只畫 120:文字 885~994,離縫 86 畫布px(29 實際px)。 */
   padding: 0 calc(21px * var(--wall));
-  background: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.1) calc(40px * var(--wall)),
+    transparent 0
+  );
 }
 html.wall-mode .field-sub-body {
   flex: 1;
@@ -3029,6 +3102,20 @@ html.wall-mode .field-sub--head-past-seam .field-sub-head {
 }
 
 /* 吞吐量對比標題列兩段(小卡內容 x = 7791~11217):左段到 9552、右段從 9648 起,間距跨 x = 9600 */
+/* 折線圖縱軸的單位 —— 貼在繪圖區左上角,與刻度數字同字級同亮度。
+   LineChart 的 margin-top 留了 110 給它,所以不會壓到最上面那個刻度。
+   用 absolute 而不是 Recharts 的 YAxis label:後者會被置中到軸寬上,
+   剛好疊在刻度數字的位置(實際踩過)。 */
+html.wall-mode .field-chart-unit {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 72px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+  z-index: 1;
+}
 html.wall-mode .field-compare-head {
   display: grid;
   /* 右段吃剩下的寬(≈1569);兩欄都寫死會因為卡寬的小數位多出 2px 溢出 */

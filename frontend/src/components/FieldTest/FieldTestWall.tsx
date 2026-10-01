@@ -48,14 +48,14 @@ import type {
 // 共用下面的小卡、路徑圖、折線圖。文字避開電視拼接縫,座標與推算見 globals.css .field-wall。
 //
 // live-results(室外):左即時、右結果
-//   ┌ 即時狀態 ───────────────────── ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 ────────────────────┐
+//   ┌ 環境與終端狀態 ─────────────────── ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 ────────────────────┐
 //   │ [固定攝影機 16:9][載具 16:9]   │ │ ┌測試路徑──────────┐ ┌測試數據────────────────────┐ │
 //   │ ┌飛行狀態──────┐ ┌UAV 通訊品質┐│ │ │ 測試進度 64% ──── │ │ 平均下行 ● 120 → ● 155 Mbps│ │
 //   │ │ 高度 地速 …   │ │ SNR RSSI …││ │ │ 路徑圖(兩趟)    │ │ 上行 ╱╲╱                  │ │
 //   └──────────────────────────────────┘ └──────────────────────────────────────────────────────┘
 //
 // camera-grid(室內):同樣左即時、右結果,但 4 路影像放不進 1/3 寬,所以左右各半
-//   ┌ 即時狀態 ─────────────────────────────────── ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 ┐
+//   ┌ 環境與終端狀態 ───────────────────────────────── ┐ ┌ 測試狀態總覽 │ 測試環境 │ 測試項目 ┐
 //   │ [攝影機 1][攝影機 2] ┌行駛狀態────┐        │ │ ┌AMR 測試路徑────────┐ ┌IM 啟用─┐ │
 //   │ [攝影機 3][AMR 車載] └AMR 通訊品質┘        │ │ └測試進度 / 路徑圖───┘ └SNR 下行┘ │
 //   └──────────────────────────────────────────────┘ └──────────────────────────────────────┘
@@ -85,8 +85,15 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
     cameras: base.cameras.map((src, i) => (i === base.cameras.length - 1 ? (streamUrl ?? src) : src)),
   };
   // 沒有任何一趟在跑 = 看的是歷史紀錄。此時車載那格若有回放就播回放。
+  //
+  // 回放索引 30 秒才重抓一次,所以驗測一開跑的頭幾十秒,replay 裡還是「上一筆」的
+  // 畫面。只靠 running 擋不住:牆面要等輪詢看到 status 變 running 才切,這中間
+  // 車載那格會繼續播舊紀錄的影像,看起來像現在就在跑。
+  // 加上 runId 比對 —— 後端一挑到新的那一筆,舊的回放索引立刻失效,那一格會退回
+  // 即時串流(還沒接到畫面就是轉圈)。
   const running = base.runs.some((r) => r.status === "running");
-  const replayCam = !running ? (replay?.cameras?.[0] ?? null) : null;
+  const freshReplay = !!replay && !!base.runId && replay.runId === base.runId;
+  const replayCam = !running && freshReplay ? (replay?.cameras?.[0] ?? null) : null;
 
   return sc.layout === "live-results" ? (
     <LiveResultsLayout scenario={scenario} sc={sc} mission={data} live={live} />
@@ -145,6 +152,8 @@ function LiveResultsLayout({
     if (rs.speedMps != null) v.speedMps = rs.speedMps;
     if (rs.verticalSpeedMps != null) v.verticalSpeedMps = rs.verticalSpeedMps;
     if (rs.altitudeM != null) v.altitudeM = rs.altitudeM;
+    if (rs.batteryPct != null) v.batteryPct = rs.batteryPct;
+    if (rs.satellites != null) v.satellites = rs.satellites;
     return v;
   }, [rs]);
   // 把整份 mission 截到「目前播到的時間」——進度條、軌跡、測試數據都是吃它算出來的
@@ -199,7 +208,6 @@ function LiveResultsLayout({
       : null;
 
   const allRuns = playMission.runs.map((r) => ({ phase: r.phase, samples: r.samples }));
-  const upTo = sharedProgress(playMission.runs);
   // 底圖:平台場景的向量地圖(建築 / 道路 / 綠地,公尺座標)
   const { scene } = useFieldTestScene(scenario);
   // UAV 的位置是 GPS,要換成公尺座標才能畫。原點優先用場景的 center —— 跟底圖同一個
@@ -238,31 +246,33 @@ function LiveResultsLayout({
 
   return (
     <div className="field-wall">
-      {/* ── 左:即時狀態 ── */}
-      <section className="dut-wall-band field-card field-card--video field-card--live">
-        <div className="dut-wall-band-title">即時狀態</div>
-        {/* 即時數值在上、影像在下:小卡標題列落在第 1 排電視、數值在第 2 排,
-            影像整個放進第 3 排電視(見 globals.css .field-card--video) */}
-        <div className="field-live-row">
-          <VehicleSub
-            scenario={scenario}
-            title={sc.live.vehicleTitle}
-            vehicle={{ ...mission.vehicle, ...live?.vehicle, ...(replayVehicle ?? {}) }}
-            position={livePos ?? live?.position ?? run?.position ?? null}
-          />
-          <SignalSub title={sc.live.signalTitle} link={replayLink ?? baseLink} />
+      {/* ── 左:環境與終端狀態 ── */}
+      <section className="dut-wall-band field-card field-card--live">
+        <div className="field-card-head">
+          <div className="dut-wall-band-title">環境與終端狀態</div>
         </div>
-        {/* 每支攝影機各自有標題列(貼第 2 排電視的下框線),畫面在第 3 排 */}
-        <div className="field-video-row">
-          {sc.cameras.map((label, i) => (
-            <VideoTile
+        {/* 左右兩欄:左邊影像、右邊 UAV 與通訊狀態(排法與室內相同)。
+            欄距包住 x = 1920 的拼接縫,兩欄的小卡標題列都貼電視的下框線。 */}
+        <div className="field-live-grid field-live-grid--two">
+          <div className="field-video-grid field-video-grid--one">
+            {sc.cameras.map((label, i) => (
+              <VideoTile
                 key={label}
                 label={label}
                 src={mission.cameras[i] ?? null}
-                // 車載是最後一格;有回放就播回放(見 FieldTestWall 的 replayCam)
                 scenario={scenario}
               />
-          ))}
+            ))}
+          </div>
+          <div className="field-live-stack">
+            <VehicleSub
+              scenario={scenario}
+              title={sc.live.vehicleTitle}
+              vehicle={{ ...mission.vehicle, ...live?.vehicle, ...(replayVehicle ?? {}) }}
+              position={livePos ?? live?.position ?? run?.position ?? null}
+            />
+            <SignalSub title={sc.live.signalTitle} link={replayLink ?? baseLink} />
+          </div>
         </div>
       </section>
 
@@ -291,8 +301,8 @@ function LiveResultsLayout({
           {/* 跟室內同一組圖:上格平均上行、下格平均下行 */}
           <Sub icon={Signal} title="測試數據">
             <div className="field-split">
-              <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[0]} series={allRuns} upTo={upTo} />
-              <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[1]} series={allRuns} upTo={upTo} />
+              <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[0]} series={allRuns} />
+              <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[1]} series={allRuns} />
             </div>
           </Sub>
         </div>
@@ -341,7 +351,7 @@ function CameraGridLayout({
   // 整趟也幾乎不變,沿用既有的 link(它已經是這次驗測最後一筆的值)。
   const baseLink = live?.link ?? run?.link ?? null;
   // 回放時把整份 mission 截到「目前播到的時間」—— 進度條、路徑軌跡、測試數據
-  // 三者都是吃 mission / upTo 算出來的,不裁的話它們會一直顯示整趟的最終結果,
+  // 三者都是吃 mission 算出來的,不裁的話它們會一直顯示整趟的最終結果,
   // 只有影像與數值卡在動,看起來就像沒跟上。
   //
   // 截法:每一趟只留 wall <= 游標的樣本,progress / reachedWaypoints / position
@@ -393,7 +403,6 @@ function CameraGridLayout({
     () => playMission.runs.map((r) => ({ phase: r.phase, samples: r.samples })),
     [playMission],
   );
-  const playUpTo = sharedProgress(playMission.runs);
 
   const replayLink =
     rs && baseLink
@@ -410,10 +419,10 @@ function CameraGridLayout({
 
   return (
     <div className="field-wall field-wall--half">
-      {/* ── 左:即時狀態(2×2 影像 + 即時數值)── */}
+      {/* ── 左:環境與終端狀態(2×2 影像 + 即時數值)── */}
       <section className="dut-wall-band field-card field-card--live">
         <div className="field-card-head">
-          <div className="dut-wall-band-title">即時狀態</div>
+          <div className="dut-wall-band-title">環境與終端狀態</div>
         </div>
         {/* 影像與即時小卡的欄距跨 x = 3840 */}
         <div className="field-live-grid">
@@ -474,8 +483,8 @@ function CameraGridLayout({
               「平均」寫在每張圖自己的名稱上,標題列就不再重複一次 */}
           <Sub icon={Signal} title="測試數據" className="field-sub--head-past-seam">
             <div className="field-split">
-              <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[0]} series={playRuns} upTo={playUpTo} narrow />
-              <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[1]} series={playRuns} upTo={playUpTo} narrow />
+              <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[0]} series={playRuns} narrow />
+              <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[1]} series={playRuns} narrow />
             </div>
           </Sub>
         </div>
@@ -499,12 +508,12 @@ function HeadRow({ title, mission }: { title: string; mission: FieldMission }) {
   return (
     <>
       <div className="dut-wall-band-title">{title}</div>
-      {/* 驗測時間貼卡片右緣、與大卡標題同高(absolute,見 globals.css .field-head-time)——
+      {/* 驗測開始時間貼卡片右緣、與大卡標題同高(absolute,見 globals.css .field-head-time)——
           牆上要看得出現在顯示的是哪一次,尤其平台指定顯示歷史紀錄時。
           沒有時間就整段不顯示,不要在牆上留一格「—」。 */}
       {at && (
         <span className="field-head-time">
-          <span className="field-meta-key">驗測時間</span>
+          <span className="field-meta-key">驗測開始時間</span>
           <span className="field-meta-val">{at}</span>
         </span>
       )}
@@ -587,7 +596,7 @@ function Sub({
 }
 
 /**
- * 牆上「驗測時間」顯示的內容 —— 這一次驗測的開始時間。
+ * 牆上「驗測開始時間」顯示的內容 —— 這一次驗測開始的時間。
  * 沒有任何驗測紀錄時回 null,呼叫端整段不顯示。
  */
 function runTime(mission: FieldMission): string | null {
@@ -654,8 +663,9 @@ function vehicleReadings(
     return [
       { label: "位置 x", unit: "m", value: position?.x.toFixed(1) ?? null },
       { label: "位置 y", unit: "m", value: position?.y.toFixed(1) ?? null },
-      // 顯示上游的 yaw(-180~180);地圖箭頭另外用 headingDeg 換算過
-      { label: "yaw", unit: "°", value: (v.yawDeg ?? v.headingDeg)?.toFixed(0) ?? null },
+      // 顯示上游的 yaw(-180~180,0 = 朝 +x);地圖箭頭另外用 headingDeg 換算過。
+      // 標籤不用「航向」—— 那是羅盤方位(0 = 正北),跟這個值的基準不同,會誤導。
+      { label: "車頭方向", unit: "°", value: (v.yawDeg ?? v.headingDeg)?.toFixed(0) ?? null },
       { label: "定位品質", value: v.localizationPct ?? null },
       { label: "速度", unit: "m/s", value: v.speedMps?.toFixed(2) ?? null },
       battery,
@@ -670,7 +680,12 @@ function vehicleReadings(
     // 「模式」拿掉了:後端從來沒填過 FieldVehicleStatus.mode,平台的樣本與 /live
     // 也沒有對應的飛行模式,牆上永遠是「—」。之後上游真的有了再加回來。
     // (衛星數同樣還沒有來源,先留著欄位。)
-    { label: "衛星數", value: v.satellites ?? null },
+    {
+      label: "衛星數",
+      value: v.satellites ?? null,
+      // 低於 14 顆代表定位不穩,牆上要一眼看得出來(與電量低於 30% 同一種處理)
+      tone: v.satellites !== undefined && v.satellites < 14 ? "text-danger" : undefined,
+    },
   ];
 }
 
@@ -939,7 +954,7 @@ function RouteMap({
                     points={pts(t.points)}
                     fill="none"
                     stroke={PHASE[t.phase].color}
-                    strokeWidth={4 * u}
+                    strokeWidth={2.5 * u}
                     strokeLinejoin="round"
                     strokeLinecap="round"
                   />
@@ -969,7 +984,7 @@ function RouteMap({
                   points={pts([...route.slice(0, r.reachedWaypoints), ...(r.position ? [r.position] : [])])}
                   fill="none"
                   stroke={PHASE[r.phase].color}
-                  strokeWidth={4 * u}
+                  strokeWidth={2.5 * u}
                   strokeLinejoin="round"
                   strokeLinecap="round"
                 />
@@ -988,12 +1003,14 @@ function RouteMap({
         )}
         {live && (
           <g className="field-live-marker" filter="url(#track-glow)" transform={`translate(${live.x} ${-live.y})`}>
-            <circle r={16 * u} fill="#80FFE8" fillOpacity={0.18} />
-            <circle r={11 * u} fill="none" stroke="#80FFE8" strokeOpacity={0.55} strokeWidth={0.8 * u} />
+            {/* 標記整體縮約三成(光暈 16→11、外圈 11→7.5、箭頭 1.2→0.85):
+                軌跡線收細之後,原本的尺寸會把一小段路徑整個蓋住 */}
+            <circle r={11 * u} fill="#80FFE8" fillOpacity={0.18} />
+            <circle r={7.5 * u} fill="none" stroke="#80FFE8" strokeOpacity={0.55} strokeWidth={0.8 * u} />
             {/* 箭頭圖形朝上、SVG rotate 順時針,headingDeg 後端已由 SLAM yaw 換算過(0 = 正北) */}
             <path
               d="M0,-10 L7.5,8 L0,4 L-7.5,8 Z"
-              transform={`rotate(${vehicle.headingDeg ?? 0}) scale(${1.2 * u})`}
+              transform={`rotate(${vehicle.headingDeg ?? 0}) scale(${0.85 * u})`}
               fill="#80FFE8"
               stroke="#0A172F"
               strokeWidth={1.2}
@@ -1235,8 +1252,15 @@ function TrendChart({
         </div>
       )}
       <div className="relative min-h-0 flex-1">
+        {/* 縱軸單位:只標一次,放在軸的正上方(繪圖區之外)。
+            吞吐量的單位是依兩趟平均動態選的(kbps / Mbps / Gbps),所以吃 shownUnit。
+            用 absolute 而不是 Recharts 的 YAxis label —— 後者會被置中到軸寬上,
+            剛好疊在最上面那個刻度數字的位置。 */}
+        <span className="field-chart-unit">{shownUnit}</span>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={rows} margin={{ top: 24, right: 130, bottom: 0, left: 0 }}>
+          {/* 上緣留 110 給縱軸的單位標籤 —— 最上面那個刻度的字是以繪圖區頂端為中心
+              畫的,留太少單位就會壓在它上面(原本用 Recharts 的 label 就是這樣重疊的) */}
+          <LineChart data={rows} margin={{ top: 110, right: 130, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={GRID_STROKE} strokeWidth={3} vertical={false} />
             <XAxis
               dataKey="t"
@@ -1322,16 +1346,6 @@ function sampleSecond(pt: FieldSample | undefined): number | null {
   return null;
 }
 
-/**
- * 兩趟都跑過的路徑進度。後面那趟還在跑就以它為準,不然是拿半趟跟整趟比;
- * 只有一趟有資料(第一趟還在跑)就用那一趟自己的進度。
- */
-function sharedProgress(runs: FieldRun[]) {
-  const ends = runs
-    .map((r) => r.samples.at(-1)?.progress)
-    .filter((p): p is number => p !== undefined);
-  return ends.length ? Math.min(...ends) : 0;
-}
 
 /**
  * QoE xApp 啟用前後:標題列放兩趟的平均與平均差值,底下是兩趟的折線圖。
@@ -1342,20 +1356,21 @@ function ThroughputCompare({
   runs,
   spec,
   series,
-  upTo,
   narrow = false,
 }: {
   runs: FieldRun[];
   spec: TrendSpec;
   series: { phase: OptimizationPhase; samples: FieldSample[] }[];
-  /** 平均只算到這個路徑進度(見 sharedProgress) */
-  upTo: number;
   /** 窄卡(室內效能卡):標題列排成一行,x 刻度回到 50% 一格 */
   narrow?: boolean;
 }) {
+  // 每一趟算自己的平均,不互相牽制。
+  // 舊做法是兩趟都只算到「兩趟都跑過的進度」(sharedProgress):比較是公平了,
+  // 但第一趟明明跑完、數字卻會跟著第二趟的進度一直變,第二趟剛開跑那一刻更會從
+  // 整趟平均掉成「前 2% 的平均」,大跳一下。改成各算各的:第一趟跑完就固定,
+  // 第二趟邊跑邊累積。需要公平比較的差值則等兩趟都跑完才給(見 delta)。
   const mean = (phase: OptimizationPhase) => {
     const values = (runs.find((r) => r.phase === phase)?.samples ?? [])
-      .filter((pt) => pt.progress <= upTo)
       .map((pt) => sampleValue(pt, spec.metric))
       .filter((val): val is number => val !== null);
     return values.length ? values.reduce((sum, val) => sum + val, 0) / values.length : null;
@@ -1392,10 +1407,16 @@ function ThroughputCompare({
       </>
     );
 
+  // 第一趟還在跑時不標數值:那時「啟用後」沒有資料,標出來是「12.4 → —」,
+  // 既看不出比較、又像是壞掉。等第二趟有資料再整段出現。
+  const compared = after !== null;
+
   return (
     /* min-w-0:grid 項目預設最小寬度是內容寬度,標題列一長就會把整欄撐出小卡 */
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {narrow ? (
+      {!compared ? (
+        <div className="field-compare-head mb-4 flex-none">{labelBlock}</div>
+      ) : narrow ? (
         /* 室內那張卡(內容 x = 9232~11218)被 x = 9600 的縫穿過:縫左邊只剩 320,
            只放得下圖的名稱;數值、單位與平均差值都在縫右邊那 1570。
            「平均」由小卡標題列說明一次,差值貼右緣並小一階字級才放得下 */

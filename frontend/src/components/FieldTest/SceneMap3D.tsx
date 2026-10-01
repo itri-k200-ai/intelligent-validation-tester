@@ -138,7 +138,7 @@ export function SceneMap3D({
 
     tracks.forEach((t, i) => {
       if (t.points.length < 2) return;
-      const mesh = new THREE.Mesh(ribbon(t.points, 3.5), new THREE.MeshBasicMaterial({ color: t.color }));
+      const mesh = new THREE.Mesh(ribbon(t.points, 2), new THREE.MeshBasicMaterial({ color: t.color }));
       // 兩趟走同一條路,放在同一個高度會互相閃爍 —— 後面那趟墊高一點,重疊處以它為準
       mesh.position.y = 1.2 + i * 0.6;
       mesh.renderOrder = i + 1;
