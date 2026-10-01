@@ -626,9 +626,13 @@ type Reading = {
  */
 function MetricGrid({ items }: { items: Reading[] }) {
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-x-3">
+    /* 列高改成跟著內容(原本是 grid-rows-2,兩列各吃一半高度),並靠上排。
+       卡片比內容高不少,舊寫法會把多出來的高度平均分到每一格的上下,每格的
+       標籤與數值上下各空出約 45 實際px,看起來鬆散。現在多出來的高度統一留在
+       卡片下緣,兩列之間只隔 gap-y-8。標題列不受影響。 */
+    <div className="grid min-h-0 flex-1 grid-cols-3 content-start gap-x-3 gap-y-8">
       {items.map(({ label, unit, value, tone = "text-white", size = "field-metric-value" }) => (
-        <div key={label} className="flex min-w-0 flex-col justify-center gap-2">
+        <div key={label} className="flex min-w-0 flex-col gap-2">
           <span className="field-metric-label truncate whitespace-nowrap text-white/55">
             {label}
             {unit && <span className="ml-2 text-white/35">{unit}</span>}

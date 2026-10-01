@@ -1299,6 +1299,16 @@ html.wall-mode .field-video > .relative {
   border-radius: 1rem;
   overflow: hidden;
 }
+/* 場域測試牆的影像一律直角 —— 上面那條的 1rem 只套到「有畫面」的那幾格
+   (MJPEG 的 <img> 外層、回放播放器的外層都是 .relative),所以會變成
+   轉圈的格子是直角、有畫面的還是圓角。RIC 牆的環境影像維持圓角,不動。 */
+html.wall-mode .field-video > .relative {
+  border-radius: 0;
+}
+/* HlsPlayer 自己帶 Tailwind 的 rounded-item,在影像格裡一併壓掉 */
+html.wall-mode .field-video .rounded-item {
+  border-radius: 0;
+}
 html.wall-mode .dut-wall-band--env .dut-wall-band-body > .relative video,
 html.wall-mode .field-video > .relative video {
   width: 100%;
@@ -1312,7 +1322,7 @@ html.wall-mode .video-placeholder {
   width: 100%;
   height: 100%;
   background: #000;
-  border-radius: 1rem;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2900,9 +2910,11 @@ html.wall-mode .field-video-cell {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: calc(21px * var(--wall));
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.05);
+  /* 不給外框、底色、圓角:標題列 120 + 畫面 837 比列高 1032 少 75,留著外框的話
+     畫面底下會多出一條空的卡片框。影像本身就是內容,直角也比圓角俐落。 */
+  border-radius: 0;
+  /* 只佔內容的高度,不要被列高拉長(拉長就會在畫面下方補出一塊空的框) */
+  align-self: start;
 }
 /* 畫面的圓角交給外框(overflow: hidden)處理,不然兩層圓角會露出縫隙 */
 html.wall-mode .field-video-cell > .field-video {
@@ -2917,6 +2929,10 @@ html.wall-mode .field-video-head {
      ⚠ 代價:畫面上緣不再貼在 y = 1080 / 2160 的縫上,會跨過去,
      每格影像的上緣有一條約 25 實際px 的帶子被電視邊框遮住。 */
   height: calc(40px * var(--wall));
+  /* 標題列維持圓角(直角只要畫面本身)。下緣接著畫面,所以只圓上面兩角,
+     不然會在交界處露出缺口。 */
+  border-radius: calc(21px * var(--wall)) calc(21px * var(--wall)) 0 0;
+  overflow: hidden;
   display: flex;
   align-items: flex-start;
   gap: 1rem;
@@ -3005,7 +3021,7 @@ html.wall-mode .field-video {
   position: relative;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border-radius: 1rem;
+  border-radius: 0;   /* 直角(依前端回饋) */
 }
 html.wall-mode .field-video > .video-placeholder,
 html.wall-mode .field-video > .relative {
@@ -3070,12 +3086,22 @@ html.wall-mode .field-sub {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.05);
 }
+/* 即時數值的兩張小卡只佔內容的高度,不要被 1032 的列高拉長 ——
+   數值的上下留白收掉之後,卡片底下會空出一大塊。
+   卡片的「頂」仍由列高決定(885 / 1965),所以與左邊影像的上緣照舊對齊;
+   多出來的高度留在列的下緣。 */
+html.wall-mode .field-live-stack > .field-sub {
+  align-self: start;
+}
 html.wall-mode .field-sub-head {
   flex: none;
   display: flex;
   align-items: flex-start;
   gap: 1rem;
-  height: var(--fw-sub-head);
+  /* 只佔底色帶的高度(120),不是 195 —— 文字靠上之後,195 的外框會在帶子與
+     內容之間留 75 畫布px(25 實際px)的死空間。標題位置不變,是內容往上補。
+     與影像格的標題列同一組數字(.field-video-head)。 */
+  height: calc(40px * var(--wall));
   /* 文字與底色帶都靠上,不置中。
      標題列的外框仍占滿 195 —— 下面的畫面 / 數值才會從 y = 1080、2160 的縫
      下方開始,整面牆的對縫規則不變。但文字若在 195 裡置中,底部離縫只剩
