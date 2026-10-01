@@ -35,6 +35,7 @@ import type {
   FieldMission,
   FieldRun,
   LinkQuality,
+  FieldProcess,
   FieldSample,
   FieldScenarioId,
   FieldVehicleStatus,
@@ -84,16 +85,15 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
     ...base,
     cameras: base.cameras.map((src, i) => (i === base.cameras.length - 1 ? (streamUrl ?? src) : src)),
   };
-  // 沒有任何一趟在跑 = 看的是歷史紀錄。此時車載那格若有回放就播回放。
+  // 只有「平台指定要看這一筆歷史」時才回放(mission.pinned)。
+  // 驗測跑完不會自己開始重播 —— 條子停在 100%、數值停在最後一筆,等被切換才進回放。
   //
-  // 回放索引 30 秒才重抓一次,所以驗測一開跑的頭幾十秒,replay 裡還是「上一筆」的
-  // 畫面。只靠 running 擋不住:牆面要等輪詢看到 status 變 running 才切,這中間
-  // 車載那格會繼續播舊紀錄的影像,看起來像現在就在跑。
-  // 加上 runId 比對 —— 後端一挑到新的那一筆,舊的回放索引立刻失效,那一格會退回
-  // 即時串流(還沒接到畫面就是轉圈)。
+  // 另外要比對 runId:回放索引 30 秒才重抓一次,切換歷史紀錄的頭幾十秒 replay 裡
+  // 還是上一筆的畫面,不擋的話那一格會播錯的影像。
   const running = base.runs.some((r) => r.status === "running");
   const freshReplay = !!replay && !!base.runId && replay.runId === base.runId;
-  const replayCam = !running && freshReplay ? (replay?.cameras?.[0] ?? null) : null;
+  const replaying = !!base.pinned && !running;
+  const replayCam = replaying && freshReplay ? (replay?.cameras?.[0] ?? null) : null;
 
   return sc.layout === "live-results" ? (
     <LiveResultsLayout scenario={scenario} sc={sc} mission={data} live={live} />
@@ -142,7 +142,8 @@ function LiveResultsLayout({
   // 室內以逐格影像為準,室外平台一張都沒存,所以直接用樣本自己的 wall。
   // 驗測正在跑時不回放(牆面本來就在即時更新)。
   const running = mission.runs.some((r) => r.status === "running");
-  const cursor = useReplayCursor(null, null, mission.runs, !running);
+  // 同室內:只有被指定看歷史時才回放,跑完是停在最後的狀態
+  const cursor = useReplayCursor(null, null, mission.runs, !!mission.pinned && !running);
   const rs = cursor.sample;
   // 只放這一筆真的有值的欄位:spread 一個 undefined 會把 mission.vehicle 原本的值蓋掉
   const replayVehicle = useMemo(() => {
@@ -284,7 +285,9 @@ function LiveResultsLayout({
         </div>
 
         <div className="field-status-body field-status-body--results">
-          <Sub icon={Route} title={sc.routeTitle}>
+          {/* 標題列右側標「現在在做哪一步」—— 進度條只給百分比,看不出是在跑、在裝 xApp
+              還是在等(那幾步載具不動,不標會以為卡住了)。文字由平台的方案步驟來。 */}
+          <Sub icon={Route} title={sc.routeTitle} aside={currentStage(mission.process, replayPercent)}>
             <MissionProgress mission={playMission} single percent={replayPercent} />
             {/* 有場景就畫 3D(建築依高度立起來、無人機放在實際高度);
                 拿不到場景時退回 2D,只畫 GPS 軌跡 */}
@@ -467,7 +470,10 @@ function CameraGridLayout({
           <Sub
             icon={Route}
             title={sc.routeTitle}
-            aside={sc.floorPlan && !sc.backdrop ? <RadioLegend /> : undefined}
+            // 有 SLAM 底圖時不畫 RU 圖例,那個位置改標「現在在做哪一步」(理由同室外)
+            aside={
+              sc.floorPlan && !sc.backdrop ? <RadioLegend /> : currentStage(mission.process, replayPercent)
+            }
           >
             <MissionProgress mission={playMission} single percent={replayPercent} />
             <RouteMap
@@ -588,7 +594,9 @@ function Sub({
       <div className="field-sub-head">
         <Icon className="h-10 w-10 flex-none text-teal" strokeWidth={1.75} />
         <span className="field-sub-title flex-none leading-tight">{title}</span>
-        {aside && <span className="ml-auto min-w-0 truncate text-sm text-white/60">{aside}</span>}
+        {aside && (
+          <span className="field-metric-label ml-auto min-w-0 truncate text-white/60">{aside}</span>
+        )}
       </div>
       <div className="field-sub-body">{children}</div>
     </section>
@@ -1106,6 +1114,13 @@ function MissionProgress({
     // 回放時這個值沒有意義(歷史紀錄一律是已完成 = 100%),改吃外面給的比例。
     const p = mission.process;
     const percent = override ?? (p && p.total ? Math.round((p.done / p.total) * 100) : null);
+    // 條子分三段:第一趟 / xApp 安裝部署 / 第二趟。切點由後端從方案的步驟推出來
+    // (見 transform.stages),所以室內 12 步、室外 10 步各自切在對的地方。
+    // 段寬按步數比例分,每一段各自依 done 填;中間那段用不同顏色標出來。
+    // 回放時沒有 done,用 percent 反推一個等效的步數。
+    const total = p?.total ?? 0;
+    const doneSteps = override !== null && total ? (override / 100) * total : (p?.done ?? 0);
+    const segs = p?.stages?.length ? p.stages : null;
     return (
       <div className="field-map-head">
         <span className="flex-none text-sm text-white/60">測試進度</span>
@@ -1115,9 +1130,29 @@ function MissionProgress({
         </span>
         <div className="field-progress-track field-progress-track--single">
           {/* 規範 09:軌道 rgba(255,255,255,0.15) */}
-          <div className="field-progress-seg">
-            <div className="field-progress-fill" style={{ width: `${percent ?? 0}%`, background: PROGRESS_COLOR }} />
-          </div>
+          {segs ? (
+            segs.map((seg) => {
+              const span = Math.max(1, seg.to - seg.from);
+              const filled = Math.min(1, Math.max(0, (doneSteps - seg.from) / span)) * 100;
+              return (
+                <div
+                  key={seg.kind + seg.from}
+                  className="field-progress-seg"
+                  style={{ flexGrow: span }}
+                  title={STAGE_LABEL[seg.kind]}
+                >
+                  <div
+                    className="field-progress-fill"
+                    style={{ width: `${filled}%`, background: STAGE_COLOR[seg.kind] }}
+                  />
+                </div>
+              );
+            })
+          ) : (
+            <div className="field-progress-seg">
+              <div className="field-progress-fill" style={{ width: `${percent ?? 0}%`, background: PROGRESS_COLOR }} />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1164,6 +1199,34 @@ const RATE_CHARTS: [TrendSpec, TrendSpec] = [
 
 /** 圖表字級與筆畫都以牆面 3× 畫布計:2px 線 = 6、1px 格線 = 3 */
 const AXIS_TICK = { fontSize: 72, fill: "rgba(255,255,255,0.6)" };
+/**
+ * 縱軸刻度:最上面那個不畫(它會頂到軸頂的單位)。
+ * index 0 是最低的刻度,visibleTicksCount − 1 就是最上面那個。
+ */
+function YAxisTick(props: {
+  x?: number;
+  y?: number;
+  index?: number;
+  visibleTicksCount?: number;
+  payload?: { value?: number | string };
+}) {
+  const { x = 0, y = 0, index = 0, visibleTicksCount = 0, payload } = props;
+  // 回空的 <g> 而不是 null —— Recharts 的 tick 型別要求一定要回傳元素
+  if (index >= visibleTicksCount - 1) return <g />;
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor="end"
+      dominantBaseline="middle"
+      fill={AXIS_TICK.fill}
+      fontSize={AXIS_TICK.fontSize}
+    >
+      {payload?.value}
+    </text>
+  );
+}
+
 /** 橫軸刻度的間隔(秒)。固定值 —— 刻度上的數字永遠是它的整數倍,不由資料算出來 */
 const X_TICK_S = 30;
 const AXIS_STROKE = "rgba(255,255,255,0.2)";
@@ -1280,10 +1343,13 @@ function TrendChart({
               height={130}
             />
             <YAxis
-              tick={AXIS_TICK}
               tickLine={false}
               axisLine={false}
               tickCount={4}
+              // 最上面那個刻度不標 —— 它緊貼軸頂的單位。tickCount 只是「提示」,
+              // Recharts 仍會自己挑漂亮的數字(給 3 照樣回 4 個),所以改成自訂
+              // 畫法,在最後一個(index = 最大)直接不輸出文字,其餘照舊。
+              tick={YAxisTick}
               width={150}
               allowDecimals={shownDigits > 0}
               domain={["auto", "auto"]}
@@ -1505,3 +1571,43 @@ const PHASE: Record<OptimizationPhase, { label: string; short: string; color: st
 };
 /** 室內一整條的測試進度用這個色 —— 跟牆上其他綠色狀態一致,不代表哪一趟 */
 const PROGRESS_COLOR = "#1C9E88";
+/* 進度條的三段:兩趟維持原本的綠,中間的 xApp 安裝部署另外用藍標出來 ——
+   那一段是「牆上看不到載具在動」的時間,不標的話會以為卡住了。 */
+const STAGE_COLOR: Record<string, string> = {
+  before: PROGRESS_COLOR,
+  deploy: "#5AA9E6",
+  after: PROGRESS_COLOR,
+  all: PROGRESS_COLOR,
+};
+/* 三段的名稱。刻意用同一組詞 ——「app 部署」前 / 中 / 後,三個連著念就知道
+   整個驗測在做什麼:先跑一趟、裝上 app 等它起來、再跑一趟比較。
+   上游的階段標記室內叫「優化前/後」、室外叫「部署前/後」,兩邊不一致,
+   所以牆上不沿用它們的字,統一成這一組。 */
+const STAGE_LABEL: Record<string, string> = {
+  before: "app 部署前",
+  deploy: "app 部署中",
+  after: "app 部署後",
+  all: "",
+};
+
+/**
+ * 標題列右側要顯示的字:現在走到三個階段的哪一個。
+ *
+ * 一律顯示階段,不顯示「已完成」/「失敗」—— 測試的成敗在別的地方交代,
+ * 這一格只回答「進度條上的那個位置是哪一段」。
+ *
+ * 回放時 process.current 是 null(歷史紀錄一律已完成),所以改用回放游標的
+ * 百分比反推步數,階段才會跟著條子一起走。
+ */
+function currentStage(
+  p: FieldProcess | null | undefined,
+  percent: number | null,
+): string | undefined {
+  if (!p?.stages?.length || !p.total) return undefined;
+  const at =
+    percent !== null
+      ? Math.min(p.total - 1, Math.floor((percent / 100) * p.total))
+      : (p.current ?? p.done ?? 0);
+  const seg = p.stages.find((x) => at >= x.from && at < x.to) ?? p.stages[p.stages.length - 1];
+  return STAGE_LABEL[seg.kind] || undefined;
+}

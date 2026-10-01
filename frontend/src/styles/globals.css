@@ -1487,11 +1487,11 @@ html.wall-mode .war-room-main-topbar {
   /* grid template 在 base rule(下方)定義,wall-mode 只蓋高度與 padding。
      不另外給背景色 / border,讓 topbar 融入主牆背景。 */
   /* 規格:畫面頂部到卡片上緣 169px,與右副牆一致(見 --lab-title-h)。
-     main-body 的 padding-top 已設為 0,所以這段距離只由兩層負責:
-         topbar 153 + .field-wall 的上內距 16(畫布 48)= 169。
-     ⚠ 不要把這裡改回 129 —— 內容區起點會從 459 掉到 387,卡身、小卡
-     整組往上位移 72(畫布),小卡標題列就貼不到 y = 1080 的拼接縫。 */
-  height: calc(153px * var(--wall));
+     這整段距離都由 topbar 負責 —— main-body 的 padding-top 是 0,
+     .field-wall 的上內距也收成 0,所以 bar 的下緣直接接著卡片上緣,中間沒有縫。
+     ⚠ 不要把這裡改小 —— 內容區的起點會跟著往上,卡身、小卡整組位移,
+     小卡標題列就貼不到 y = 1080 的拼接縫。 */
+  height: calc(169px * var(--wall));
   padding: 0 calc(12px * var(--wall));
   align-items: center;
 }
@@ -1616,6 +1616,19 @@ html.wall-mode .war-room-main-body {
   padding: 0 3rem 3rem;
   position: relative;
   isolation: isolate;
+}
+/* 上內距再釘一次,用更高的特異度(多了 main 這個元素選擇器)。
+   實測牆上 devtools 量到 main-body 的 padding 是 1.5rem 3rem 4rem,但整份 CSS
+   只有上面那一條規則、git 歷史也從來沒出現過那組值 —— 來源不明。
+   畫面頂到卡片上緣的 169 是由 topbar 的高度負責的,這裡只要是 0,
+   bar 的下緣就會直接接著卡片,不會多一條縫。 */
+html.wall-mode main.war-room-main-body {
+  /* 整組釘死並加 !important —— 牆上 devtools 一直量到 1.5rem 3rem 4rem,
+     但整份 CSS 只有上面那一條規則、DOM 上也只有 war-room-main-body 這一個類別、
+     沒有 inline style,來源始終找不到。與其繼續找,直接讓這一條贏過任何東西。
+     上緣必須是 0:畫面頂到卡片上緣的 169 全部由 topbar 的高度負責,
+     這裡只要多一點,bar 與卡片之間就會出現一條縫。 */
+  padding: 0 3rem 3rem !important;
 }
 
 /* 平面模式下不顯示主牆背景(浮水印是 wall-mode 戰情室才需要的視覺) */
@@ -2700,7 +2713,9 @@ html.wall-mode .field-wall {
   /* 卡片上緣離螢幕頂 169px = 507:內容區從 459 起,這裡再往下 48。
      卡片內的東西不能跟著移(小卡標題列要貼 y = 1080 的縫),所以
      .field-card 的上內距同步從 60 收成 12,卡身仍從 519 起、小卡仍從 885 起。 */
-  padding-top: 48px;
+  /* 0:畫面頂到卡片上緣的 169 全部由 topbar 的高度負責,
+     bar 與卡片之間不要留縫(依前端回饋)。 */
+  padding-top: 0;
   --fw-gap: 96px;
   --fw-pad: 96px;
   /* 卡身下半段(y = 2208 起)高度 = 內容區底(3240 - 4rem)- 段頂(2160 + 卡距/2)- 大卡底內距 */
@@ -2772,7 +2787,11 @@ html.wall-mode .field-wall .dut-wall-band-title {
    +69(= 一個字寬 116.5 的整數倍差)。這個要在真牆上看過再定,預覽看不出拼接縫。
    (平移不影響版面;字級或字體換了要重算) */
 html.wall-mode .field-wall:not(.field-wall--half) > section:nth-of-type(1) .dut-wall-band-title {
-  transform: translateX(-49px);
+  /* +10:「環境與終端狀態」是七個字(字距 111 + 0.05em ≈ 116.6),置中起點 1560,
+     縫 1920 原本落在第 3.09 個字上;−49 更糟,變成 3.51(正好切在「終」中間)。
+     右移 10 之後縫落在第 3 與第 4 個字之間 → 「環境與|終端狀態」,斷在詞的邊界。
+     標題字數或字級一改就要重算(k=3 的解:位移 = 1920 − 起點 − 116.6×3)。 */
+  transform: translateX(10px);
 }
 html.wall-mode .field-wall:not(.field-wall--half) > section:nth-of-type(2) .dut-wall-band-title {
   transform: translateX(47px);
@@ -2835,8 +2854,12 @@ html.wall-mode .field-meta-item {
 html.wall-mode .field-wall--half .field-meta-item {
   grid-template-columns: 503px minmax(0, 1fr);
 }
+/* 標籤靠左 —— 要與底下「測試數據」卡的左緣對齊(兩者都從 9073 起)。
+   靠右對齊雖然讓標籤與值的距離看起來跟隔壁一致,但標籤就離開了卡緣。
+   代價:欄寬 503 比「測試項目」四個字(348)寬,中間會空出 155 —— 那是為了讓
+   值落在 x = 9600 拼接縫的右邊(9648),不然「IM xApp 效能測試」會被邊框切開。 */
 html.wall-mode .field-wall--half .field-meta-item > :first-child {
-  justify-self: end;
+  justify-self: start;
 }
 /* 左卡(室外):標題 / 影像 / 即時小卡。
    即時小卡的標題列要在 y = 2160 之上、內容從 y = 2208 起,所以高度由下往上算:
@@ -2985,8 +3008,10 @@ html.wall-mode .field-video-grid {
   align-content: start;
   /* 卡身頂在 724,第一排影像卡的標題列要從 885 起 */
   /* 161 → 125:標題列加高 36 是往上長的,這裡要讓出同樣的高度,
-     帶子的下緣與底下所有內容才會留在原位(畫面 1005、數值 1029)。 */
-  padding-top: 125px;
+     帶子的下緣與底下所有內容才會留在原位。
+     再 +72:main-body 原本有一條來路不明的 72 上內距,整組內容被它往下墊著,
+     那個內距釘成 0 之後小卡整個往上跑了 24 實際px —— 這裡補回來。 */
+  padding-top: 197px;
 }
 /* 室外只有兩路影像,上下排 —— 列高與列距沿用上面的 .field-video-grid。
    ⚠ 一定要寫在 .field-video-grid 後面:兩者特異度相同,寫在前面會被它的
@@ -3008,8 +3033,10 @@ html.wall-mode .field-live-stack {
   /* 卡身底 3126 − 129 = 2997,與第 2 排影像同底 */
   margin-bottom: 129px;
   /* 161 → 125:標題列加高 36 是往上長的,這裡要讓出同樣的高度,
-     帶子的下緣與底下所有內容才會留在原位(畫面 1005、數值 1029)。 */
-  padding-top: 125px;
+     帶子的下緣與底下所有內容才會留在原位。
+     再 +72:main-body 原本有一條來路不明的 72 上內距,整組內容被它往下墊著,
+     那個內距釘成 0 之後小卡整個往上跑了 24 實際px —— 這裡補回來。 */
+  padding-top: 197px;
   min-height: 0;
   display: grid;
   grid-template-rows: 1032px 1032px;
@@ -3129,8 +3156,9 @@ html.wall-mode .field-status-body {
   /* 跟左卡的小卡對齊:左邊的標題列往上長了 36(見 .field-video-grid 的 padding-top),
      這一側的卡頭是固定 342 高、小卡照舊從 885 起,所以要補同樣的 −36 才會齊平。
      用負外距而不是改卡頭高度 —— 卡頭裡的測試環境 / 測試項目 / 驗測開始時間
-     不能跟著動,它們是對著大卡標題列排的。 */
-  margin-top: -36px;
+     不能跟著動,它們是對著大卡標題列排的。
+     −36 + 72 = +36:左欄補了 72(見 .field-video-grid 的 padding-top),這裡同步。 */
+  margin-top: 36px;
   min-height: 0;
   display: grid;
   grid-template-columns: 3168px 2208px;
@@ -3275,9 +3303,15 @@ html.wall-mode .field-scenario-icon {
   height: 100%;
   border-radius: 9999px;
 }
-/* 室內:一整條,只填目前這趟(見 MissionProgress 的 single) */
+/* single:一整條,只填目前這趟(見 MissionProgress)。
+   改用 flex 而不是 grid —— 條子要分成三段(第一趟 / xApp 安裝部署 / 第二趟),
+   段寬是按步數比例給的(flex-grow),grid 的 1fr 1fr 會把每段切成等寬。 */
 .field-progress-track--single {
-  grid-template-columns: 1fr;
+  display: flex;
+}
+.field-progress-track--single > .field-progress-seg {
+  min-width: 0;
+  flex-basis: 0;
 }
 /* 百分比固定寬度:4 位(100%)也放得下,數字變長時條子不會被往右推 */
 .field-progress-pct {
