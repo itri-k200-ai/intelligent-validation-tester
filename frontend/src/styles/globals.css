@@ -1338,6 +1338,22 @@ html.wall-mode .video-empty svg {
   width: 5rem !important;
   height: 5rem !important;
 }
+/* 轉圈的容器:疊在整格影像上並置中。
+   兩條路徑共用 —— 完全沒有來源(假播放器)與 MJPEG 還沒收到第一格,
+   轉圈要落在同一個位置。放進 .video-screen 的話只會在假控制列以上置中,
+   看起來偏上(實際踩過)。 */
+.video-spin-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+/* 蓋在影像上時壓一層暗底,轉圈才看得清楚 */
+.video-spin-overlay--dim {
+  background: radial-gradient(ellipse at center, rgba(73, 119, 132, 0.18), rgba(0, 0, 0, 0.85));
+}
 /* 沒有畫面時的轉圈 —— 取代原本的「尚無攝影機串流」。
    粗細與直徑都乘 --wall,牆上縮回去才看得見(1px 在 3 倍畫布上只剩 1/3 px)。 */
 .video-spinner {
@@ -2895,7 +2911,12 @@ html.wall-mode .field-video-cell > .field-video {
 /* 攝影機的標題列:高度、底色、內距、圖示都比照小卡標題列(.field-sub-head) */
 html.wall-mode .field-video-head {
   flex: none;
-  height: var(--fw-sub-head);
+  /* 影像格的標題列只佔底色帶的高度(120),不是 195 ——
+     文字靠上之後,195 的外框會在帶子與畫面之間留 75 畫布px(25 實際px)的空白。
+     標題位置不變(仍從 885 / 1965 起),是畫面往上補那段。
+     ⚠ 代價:畫面上緣不再貼在 y = 1080 / 2160 的縫上,會跨過去,
+     每格影像的上緣有一條約 25 實際px 的帶子被電視邊框遮住。 */
+  height: calc(40px * var(--wall));
   display: flex;
   align-items: flex-start;
   gap: 1rem;

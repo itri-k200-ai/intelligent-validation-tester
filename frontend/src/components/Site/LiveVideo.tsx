@@ -53,7 +53,7 @@ function MjpegVideo({ src, emptyText }: { src: string; emptyText: string }) {
           驅動之後載具還要走到起點,這段空白不標示會看起來像壞了。
           onLoad 在第一格到達時就會觸發。 */}
       {!ready && (
-        <div className="video-screen absolute inset-0" role="status" aria-label={emptyText}>
+        <div className="video-spin-overlay video-spin-overlay--dim" role="status" aria-label={emptyText}>
           <span className="video-spinner" />
         </div>
       )}
@@ -79,11 +79,6 @@ export function LiveVideo({
   return (
     <div className="video-placeholder">
       <div className="video-screen">
-        {/* 沒有畫面時顯示轉圈,不寫「尚無攝影機串流」—— 牆上多半是鏡頭還沒接上
-            或正在重連,寫死一句「沒有」看起來像壞了。文字留給輔助技術用。 */}
-        <div className="video-empty" role="status" aria-label={emptyText}>
-          <span className="video-spinner" />
-        </div>
         <div className="video-live-badge">
           <span className="video-live-dot" /> LIVE
         </div>
@@ -96,6 +91,13 @@ export function LiveVideo({
         <span className="video-time">--:--</span>
         <button type="button" aria-label="volume"><Volume2 className="w-5 h-5" /></button>
         <button type="button" aria-label="fullscreen"><Maximize2 className="w-5 h-5" /></button>
+      </div>
+      {/* 沒有畫面時顯示轉圈,不寫「尚無攝影機串流」—— 牆上多半是鏡頭還沒接上
+          或正在重連,寫死一句「沒有」看起來像壞了。文字留給輔助技術用。
+          疊在整格上而不是放進 .video-screen:後者只佔假控制列以上的區域,
+          放在裡面會比真正的正中央偏上,跟 MJPEG 等畫面時的轉圈對不齊。 */}
+      <div className="video-spin-overlay" role="status" aria-label={emptyText}>
+        <span className="video-spinner" />
       </div>
     </div>
   );
