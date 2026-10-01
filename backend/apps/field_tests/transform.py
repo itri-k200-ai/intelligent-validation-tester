@@ -122,6 +122,8 @@ def sample(raw: dict, progress: float) -> dict:
         "speedMps": _num(ue.get("gspeed")),
         "verticalSpeedMps": _num(ue.get("vspeed")),
         "altitudeM": _num(ue.get("alt_rel")),
+        "batteryPct": _num(ue.get("battery_pct")),
+        "satellites": _num(ue.get("satellites")),
         # 絕對時間 —— 回放影像的每一格也有 wall,兩邊靠它對齊
         "wall": _num(raw.get("wall")),
         # 上游沒有路徑進度,留相對秒數給圖表之後改用時間軸
@@ -205,7 +207,11 @@ def vehicle(
                 # 地速 / 垂直速度:上游 /live 的 gspeed、vspeed(m/s)
                 "speedMps": _num(live.get("gspeed")),
                 "verticalSpeedMps": _num(live.get("vspeed")),
-                "batteryPct": _battery_from_targets(targets),
+                # 電量優先吃 /live 的 battery_pct —— 規格 B3 說在 /targets,但 aerial
+                # 的實作沒有這欄(實測在線時也沒有),平台後來補在 /live 裡。
+                # 仍保留 /targets 當退路,兩邊都沒有才是「—」。
+                "batteryPct": _num(live.get("battery_pct")) or _battery_from_targets(targets),
+                "satellites": _num(live.get("satellites")),
             }
         )
     return {k: v for k, v in out.items() if v is not None}

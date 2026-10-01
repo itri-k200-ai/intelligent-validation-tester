@@ -69,6 +69,8 @@ export type FieldSample = {
   speedMps?: number | null;
   verticalSpeedMps?: number | null;
   altitudeM?: number | null;
+  batteryPct?: number | null;
+  satellites?: number | null;
   /** 車頭方向:yawDeg 給數值欄位、headingDeg 給地圖箭頭 */
   yawDeg?: number | null;
   headingDeg?: number | null;
