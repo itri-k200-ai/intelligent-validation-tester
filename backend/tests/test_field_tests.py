@@ -680,7 +680,13 @@ def test_step_label(step, label):
 def test_process_finished_run_is_complete():
     results = [{"ok": True}] * len(INDOOR_STEPS)
     p = transform.process(INDOOR_STEPS, results, "done")
-    assert p == {"total": 8, "done": 8, "current": None, "label": "已完成", "failed": False}
+    assert {k: v for k, v in p.items() if k != "stages"} == {
+        "total": 8,
+        "done": 8,
+        "current": None,
+        "label": "已完成",
+        "failed": False,
+    }
 
 
 def test_process_running_step_is_the_current_one():
@@ -720,7 +726,7 @@ def test_mission_reports_process_from_the_run_record(monkeypatch):
     }
     monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(extra))
     body = APIClient().get("/api/field-tests/missions/indoor/").json()
-    assert body["process"] == {
+    assert {k: v for k, v in body["process"].items() if k != "stages"} == {
         "total": 8,
         "done": 3,
         "current": 3,
@@ -1035,3 +1041,30 @@ def test_a_camera_name_the_platform_does_not_know_gives_404_not_500(monkeypatch)
     monkeypatch.setattr(perf_client.httpx, "Client", _FakeHttpx)
     res = APIClient().get("/api/field-tests/camera/by-name/nope/snapshot")
     assert res.status_code == 404
+
+
+def test_the_middle_stage_is_just_the_wait_step():
+    """三段的中間只取「等待 app」那一步 —— 安裝、啟動都是幾秒的 API 呼叫,
+    一起算進去會讓那一段佔掉條子的 25~40%,看起來不成比例。"""
+    steps = [
+        {"type": "phase", "name": "優化前"},
+        {"type": "ue_control", "wait_done": True},
+        {"type": "xapp_action", "action": "install"},
+        {"type": "wait", "seconds": 5},
+        {"type": "xapp_action", "action": "start"},
+        {"type": "wait", "seconds": 20},            # 最長的那個 wait = 中間段
+        {"type": "phase", "name": "優化後"},
+        {"type": "ue_control", "wait_done": True},
+    ]
+    assert [(x["from"], x["to"], x["kind"]) for x in transform.stages(steps)] == [
+        (0, 5, "before"),
+        (5, 6, "deploy"),
+        (6, 8, "after"),
+    ]
+
+
+def test_process_stages_fall_back_to_one_when_the_plan_has_no_xapp():
+    """結構對不上就回單一段 —— 前端會退回原本的單色進度條,不要讓它畫出亂切的段。"""
+    assert transform.stages([{"type": "ue_control"}, {"type": "wait"}]) == [
+        {"from": 0, "to": 2, "kind": "all"}
+    ]

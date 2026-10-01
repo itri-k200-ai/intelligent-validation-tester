@@ -28,6 +28,7 @@ type MissionPayload = {
   created?: number | null;
   process?: FieldProcess | null;
   status?: string;
+  pinned?: boolean;
   nextSeq?: number;
   phases?: Record<string, number>;
   currentRun: number;
@@ -85,6 +86,7 @@ export const fieldTestService = {
     return {
       runId: data.runId,
       createdAt: data.created ?? null,
+      pinned: !!data.pinned,
       process: data.process ?? null,
       nextSeq: data.nextSeq,
       testcase: sc.testcase,

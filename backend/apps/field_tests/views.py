@@ -159,6 +159,10 @@ class MissionView(WallReadView):
             {
                 "runId": run_id,
                 "status": status_payload.get("status"),
+                # 這一筆是「平台指定要看的歷史」還是「自動挑的最新一筆」。
+                # 牆面只在被指定時才播回放 —— 驗測跑完要停在最後的狀態,
+                # 不要自己開始重播(依前端回饋)。
+                "pinned": history.pinned(scenario) == run_id,
                 # 這一次驗測的開始時間(epoch 秒)—— 牆上要標出「現在看的是哪一筆」
                 "created": status_payload.get("created"),
                 "nextSeq": samples_payload.get("next_seq"),

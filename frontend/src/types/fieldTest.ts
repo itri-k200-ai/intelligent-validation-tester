@@ -136,6 +136,17 @@ export type FieldProcess = {
   /** 現在這一步在做什麼(例:安裝 xApp);跑完是「已完成」,失敗會帶「失敗」 */
   label: string;
   failed: boolean;
+  /**
+   * 進度條要分成的幾段(步驟索引,[from, to) 半開區間)。
+   * 正常是三段:第一趟 / xApp 安裝部署 / 第二趟;推不出來時只有一段 kind="all"。
+   */
+  stages?: {
+    from: number;
+    to: number;
+    kind: "before" | "deploy" | "after" | "all";
+    /** 這一段大概要花多久(秒)—— 條子的段寬按它分,不按步數(見後端 _step_secs) */
+    weight?: number;
+  }[];
 };
 
 export type FieldMission = {
@@ -143,6 +154,11 @@ export type FieldMission = {
   createdAt?: number | null;
   /** 外部平台的 run_id(mock 沒有) */
   runId?: string;
+  /**
+   * 這一筆是平台指定要看的歷史紀錄(notifyHisShow)還是自動挑的最新一筆。
+   * 只有被指定時牆面才播回放 —— 驗測跑完是停在最後的狀態,不自己重播。
+   */
+  pinned?: boolean;
   /** 整個驗測流程的進度;平台查不到步驟時為 null */
   process?: FieldProcess | null;
   /** 增量拉樣本用:下次帶回 since_seq */

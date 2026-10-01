@@ -311,6 +311,38 @@ def _step_running(result: dict) -> bool:
     return (result.get("done") or {}).get("state") in {"running", "pending"}
 
 
+def stages(steps: list[dict]) -> list[dict]:
+    """進度條要分成的三段:第一趟 / xApp 安裝部署 / 第二趟。
+
+    切點從方案的步驟推出來,不寫死 —— 室內 12 步、室外 10 步,結構不一樣:
+      先找出部署區間:第一個 action=install 的 xapp_action → 第二個 phase 標記,
+      中間那段再取區間內最長的那個 wait(等 app 起來的時間)。
+    中間那段只有「等待 app」那一步,所以在條子上就是 1/12(室內)或 1/10(室外)。
+    實測室內 → 0~6 / 6~7 / 7~12;室外 → 0~3 / 3~4 / 4~10。
+
+    推不出來(之後方案改了結構)就回單一段,前端會退回原本的單色進度條。
+    """
+    n = len(steps)
+    if not n:
+        return []
+    xapp = [i for i, st in enumerate(steps) if st.get("type") == "xapp_action"]
+    install = next((i for i in xapp if steps[i].get("action") == "install"), xapp[0] if xapp else None)
+    phase_at = [i for i, st in enumerate(steps) if st.get("type") == "phase"]
+    second = phase_at[1] if len(phase_at) >= 2 else None
+    if install is None or second is None or not 0 < install < second < n:
+        return [{"from": 0, "to": n, "kind": "all"}]
+    # 中間那段只取「等待 app」那一步 —— 安裝、啟動都是幾秒的 API 呼叫,
+    # 把它們一起算進去的話那一段會佔掉 25~40% 的條子,看起來不成比例。
+    # 取 install 與第二個 phase 標記之間最長的那個 wait(室內 20 秒、室外 10 秒)。
+    waits = [i for i in range(install, second) if steps[i].get("type") == "wait"]
+    mid = max(waits, key=lambda i: float(steps[i].get("seconds") or 0)) if waits else install
+    return [
+        {"from": 0, "to": mid, "kind": "before"},
+        {"from": mid, "to": mid + 1, "kind": "deploy"},
+        {"from": mid + 1, "to": n, "kind": "after"},
+    ]
+
+
 def process(steps: list[dict], results: list[dict], status: str, cursor: int | None = None) -> dict:
     """整個驗測流程的進度:共幾步、完成幾步、現在在哪一步。
 
@@ -320,7 +352,14 @@ def process(steps: list[dict], results: list[dict], status: str, cursor: int | N
     total = len(steps)
     failed_at = next((i for i, r in enumerate(results) if _step_failed(r)), None)
     if status in {"done"} and failed_at is None:
-        return {"total": total, "done": total, "current": None, "label": "已完成", "failed": False}
+        return {
+            "total": total,
+            "done": total,
+            "current": None,
+            "label": "已完成",
+            "failed": False,
+            "stages": stages(steps),
+        }
     if failed_at is not None or status in {"error", "aborted"}:
         at = failed_at if failed_at is not None else min(len(results), max(total - 1, 0))
         name = step_label(steps[at]) if 0 <= at < total else ""
@@ -331,6 +370,7 @@ def process(steps: list[dict], results: list[dict], status: str, cursor: int | N
             "current": at,
             "label": f"{name}{word}".strip(),
             "failed": True,
+            "stages": stages(steps),
         }
 
     if cursor is not None:
@@ -341,4 +381,11 @@ def process(steps: list[dict], results: list[dict], status: str, cursor: int | N
         current = len(results)
     current = max(0, min(current, total - 1)) if total else 0
     label = step_label(steps[current]) if total else ""
-    return {"total": total, "done": current, "current": current, "label": label, "failed": False}
+    return {
+        "total": total,
+        "done": current,
+        "current": current,
+        "label": label,
+        "failed": False,
+        "stages": stages(steps),
+    }
