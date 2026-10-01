@@ -29,9 +29,10 @@ type WallModeState = {
  * 電視框線(bezel 參考線)與 topbar 上的「框線」鈕的總開關。
  * 排版時拿來對齊拼接縫用 —— 牆上很多位置是照 y = 1080 / 2160、x = 1920 / 3840
  * 的縫反推的,沒有這條線只能靠猜。
- * 正式展示前把這裡改回 false,按鈕與線會一起藏起來(狀態、CSS、按鈕都保留)。
+ * 正式展示時設 false(現況),按鈕與線會一起藏起來。要再排版就改回 true,
+ * 狀態、CSS、按鈕都還在,不必重寫。
  */
-export const BEZEL_GUIDES_ENABLED = true;
+export const BEZEL_GUIDES_ENABLED = false;
 
 export const useWallModeStore = create<WallModeState>()(
   persist(
