@@ -2928,13 +2928,13 @@ html.wall-mode .field-video-head {
      標題位置不變(仍從 885 / 1965 起),是畫面往上補那段。
      ⚠ 代價:畫面上緣不再貼在 y = 1080 / 2160 的縫上,會跨過去,
      每格影像的上緣有一條約 25 實際px 的帶子被電視邊框遮住。 */
-  height: calc(40px * var(--wall));
+  height: calc(52px * var(--wall));
   /* 標題列維持圓角(直角只要畫面本身)。下緣接著畫面,所以只圓上面兩角,
      不然會在交界處露出缺口。 */
   border-radius: calc(21px * var(--wall)) calc(21px * var(--wall)) 0 0;
   overflow: hidden;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 1rem;
   /* 文字與底色帶都靠上,不置中。
      標題列的外框仍占滿 195 —— 下面的畫面 / 數值才會從 y = 1080、2160 的縫
@@ -2942,11 +2942,7 @@ html.wall-mode .field-video-head {
      45 畫布px(15 實際px),會被電視邊框的實體厚度切掉。
      改成靠上 + 底色帶只畫 120:文字 885~994,離縫 86 畫布px(29 實際px)。 */
   padding: 0 calc(21px * var(--wall));
-  background: linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.1) calc(40px * var(--wall)),
-    transparent 0
-  );
+  background: rgba(255, 255, 255, 0.1);
 }
 /* 室內左卡身(y = 880~2952,左卡內距起算 x = 240):2×2 影像 3552 / 即時小卡 1728,欄距跨 x = 3840 */
 /* 影像 3552(2×1728)+ 即時數值 1632,欄距跨 x = 3840。
@@ -2988,7 +2984,9 @@ html.wall-mode .field-video-grid {
   justify-content: start;
   align-content: start;
   /* 卡身頂在 724,第一排影像卡的標題列要從 885 起 */
-  padding-top: 161px;
+  /* 161 → 125:標題列加高 36 是往上長的,這裡要讓出同樣的高度,
+     帶子的下緣與底下所有內容才會留在原位(畫面 1005、數值 1029)。 */
+  padding-top: 125px;
 }
 /* 室外只有兩路影像,上下排 —— 列高與列距沿用上面的 .field-video-grid。
    ⚠ 一定要寫在 .field-video-grid 後面:兩者特異度相同,寫在前面會被它的
@@ -3009,7 +3007,9 @@ html.wall-mode .field-video-grid--one {
 html.wall-mode .field-live-stack {
   /* 卡身底 3126 − 129 = 2997,與第 2 排影像同底 */
   margin-bottom: 129px;
-  padding-top: 161px;
+  /* 161 → 125:標題列加高 36 是往上長的,這裡要讓出同樣的高度,
+     帶子的下緣與底下所有內容才會留在原位(畫面 1005、數值 1029)。 */
+  padding-top: 125px;
   min-height: 0;
   display: grid;
   grid-template-rows: 1032px 1032px;
@@ -3096,23 +3096,19 @@ html.wall-mode .field-live-stack > .field-sub {
 html.wall-mode .field-sub-head {
   flex: none;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 1rem;
   /* 只佔底色帶的高度(120),不是 195 —— 文字靠上之後,195 的外框會在帶子與
      內容之間留 75 畫布px(25 實際px)的死空間。標題位置不變,是內容往上補。
      與影像格的標題列同一組數字(.field-video-head)。 */
-  height: calc(40px * var(--wall));
+  height: calc(52px * var(--wall));
   /* 文字與底色帶都靠上,不置中。
      標題列的外框仍占滿 195 —— 下面的畫面 / 數值才會從 y = 1080、2160 的縫
      下方開始,整面牆的對縫規則不變。但文字若在 195 裡置中,底部離縫只剩
      45 畫布px(15 實際px),會被電視邊框的實體厚度切掉。
      改成靠上 + 底色帶只畫 120:文字 885~994,離縫 86 畫布px(29 實際px)。 */
   padding: 0 calc(21px * var(--wall));
-  background: linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.1) calc(40px * var(--wall)),
-    transparent 0
-  );
+  background: rgba(255, 255, 255, 0.1);
 }
 html.wall-mode .field-sub-body {
   flex: 1;
@@ -3130,6 +3126,11 @@ html.wall-mode .field-sub-body {
    x 軸刻度落在 9285 / 10186 / 11087,也不壓縫,
    只有格線與折線本身跨過去(圖形可以跨)。 */
 html.wall-mode .field-status-body {
+  /* 跟左卡的小卡對齊:左邊的標題列往上長了 36(見 .field-video-grid 的 padding-top),
+     這一側的卡頭是固定 342 高、小卡照舊從 885 起,所以要補同樣的 −36 才會齊平。
+     用負外距而不是改卡頭高度 —— 卡頭裡的測試環境 / 測試項目 / 驗測開始時間
+     不能跟著動,它們是對著大卡標題列排的。 */
+  margin-top: -36px;
   min-height: 0;
   display: grid;
   grid-template-columns: 3168px 2208px;
