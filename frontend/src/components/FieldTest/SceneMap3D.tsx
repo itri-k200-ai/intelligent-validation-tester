@@ -19,6 +19,28 @@ export type SceneTrack = { key: string; color: string; points: XY[] };
  *
  * 只在資料變動時重畫一次(牆上沒有人在轉視角,不需要每一幀都畫)。
  */
+/** 取景往畫面左邊偏移多少(以取景半徑為單位)。調大 = 看得更左邊、無人機更靠右。 */
+const PAN_LEFT = 0.9;
+
+/**
+ * 固定在場景裡的基站位置(52 館屋頂的兩個角)。
+ *
+ * 座標是場景的公尺座標:x 向東、y 向北,原點 = scene.center(121.0465286, 24.7735643)。
+ * alt 是離地高度,52 館的樓高是 24 m,所以圖示就立在屋頂上。
+ * 位置是從牆上的截圖反推的 —— 把鏡頭參數重算一遍、把 17 棟建築的屋頂角投影到
+ * 畫面上比對,兩個紅圈都落在同一棟(建築 #1,中心 (−126, 96)、94×94 m)的這兩個角。
+ *
+ * 要調整就改這裡:x 加 = 往東、y 加 = 往北,單位是公尺。
+ */
+/** 基站圖示的顏色與大小(公尺)。暖色是為了跟青色的建築、綠色的草坪分開。 */
+const BS_COLOR = "#FFC56B";
+const BS_SIZE = 16;
+
+const BASE_STATIONS: { x: number; y: number; alt: number; label: string }[] = [
+  { x: -103, y: 118, alt: 24, label: "基站 A" },
+  { x: -147, y: 49, alt: 24, label: "基站 B" },
+];
+
 export function SceneMap3D({
   scene,
   tracks,
@@ -92,6 +114,54 @@ export function SceneMap3D({
     // UAV 圖示:沿用右牆「測試設備」的無人機圖(neon 線稿,透明背景)
     const uavTexture = new THREE.TextureLoader().load("/images/dut/uav.png", render);
     uavTexture.colorSpace = THREE.SRGBColorSpace;
+
+    // 基站:位置固定,所以放在靜態的 world 裡(dynamic 每次更新會被清空)。
+    //
+    // 圖示沿用右牆「測試設備」的基站圖,但要重新上色 —— 原圖是青色線稿
+    // (主色 rgb(96,224,224)),跟建築同一個色系,擺在屋頂上分不出來。
+    // 單純給 SpriteMaterial.color 是相乘,青色乘暖色只會變濁,所以在 canvas 上用
+    // source-in 把整個圖形換成 BS_COLOR,只保留原本的輪廓與鏤空。
+    const bsSprite = new THREE.TextureLoader().load("/images/dut/base-station.png", (tex) => {
+      const img = tex.image as HTMLImageElement;
+      const cv = document.createElement("canvas");
+      cv.width = img.width;
+      cv.height = img.height;
+      const g = cv.getContext("2d");
+      if (g) {
+        g.drawImage(img, 0, 0);
+        g.globalCompositeOperation = "source-in";
+        g.fillStyle = BS_COLOR;
+        g.fillRect(0, 0, cv.width, cv.height);
+        tex.image = cv;
+        tex.needsUpdate = true;
+      }
+      render();
+    });
+    bsSprite.colorSpace = THREE.SRGBColorSpace;
+    for (const bs of BASE_STATIONS) {
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: bsSprite, depthTest: false }),
+      );
+      sprite.scale.set(BS_SIZE, BS_SIZE, 1);
+      // 圖示底部對齊屋頂:sprite 是以中心定位的,所以往上抬半個高度
+      sprite.position.set(bs.x, bs.alt + BS_SIZE / 2, -bs.y);
+      sprite.renderOrder = 9;
+      world.add(sprite);
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(BS_SIZE * 0.3, BS_SIZE * 0.4, 32),
+        new THREE.MeshBasicMaterial({
+          color: BS_COLOR,
+          transparent: true,
+          opacity: 0.9,
+          side: THREE.DoubleSide,
+          depthTest: false,
+        }),
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(bs.x, bs.alt + 0.6, -bs.y);
+      ring.renderOrder = 8;
+      world.add(ring);
+    }
     ctx.current = { renderer, world, camera, dynamic, uavTexture, render };
 
     const resize = () => {
@@ -188,7 +258,12 @@ export function SceneMap3D({
     const dist = fit / Math.min(1, c.camera.aspect) * 1.05;
     // 從西南方、仰角約 40° 看過去
     const dir = new THREE.Vector3(-0.45, 0.72, 0.52).normalize();
-    const target = new THREE.Vector3(cx, 0, -cy);
+    // 取景整個往畫面左邊帶 —— 右邊那棟建築不需要看,要看的是左邊那棟。
+    // 無人機因此不會固定在正中央(室內的 AMR 地圖本來也不是置中的)。
+    // 畫面右方在世界座標的方向 = 視線方向 × 上方向;視線是 -dir,算出來是 (dz, 0, -dx)。
+    // 位移量以取景半徑為單位,所以軌跡範圍變大時位移會等比例跟著變,構圖不會跑掉。
+    const screenRight = new THREE.Vector3(dir.z, 0, -dir.x).normalize();
+    const target = new THREE.Vector3(cx, 0, -cy).addScaledVector(screenRight, -PAN_LEFT * radius);
     c.camera.position.copy(target).addScaledVector(dir, dist);
     c.camera.lookAt(target);
     c.render();
