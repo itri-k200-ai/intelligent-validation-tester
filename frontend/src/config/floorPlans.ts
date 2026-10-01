@@ -34,11 +34,18 @@ export type FieldBackdrop = {
  */
 export const ITRI_B51_5F_SLAM: FieldBackdrop = {
   src: "/images/floorplan/slam-b51-5f.png",
-  extent: { xMin: -101.25, xMax: 6.3, yMin: -10.1, yMax: 18.05 },
-  // 整張圖是 101 × 28 m 的細長條,照整張畫在卡片裡只剩中間一條。固定框住測試
-  // 路線那一段:實測 5 趟的軌跡都落在 x −49.8~−30.5、y 0.7~9.4,四周留約 5 m,
-  // 長寬比 30:18 ≈ 1.67 跟卡片一致,填得滿。超出的部分由 SVG 裁掉。
-  view: { xMin: -55, xMax: -25, yMin: -4, yMax: 14 },
+  // AMR 的 SLAM 地圖,2026-10-01 重新從 /map/raster 取的(2151 × 475、解析度 0.05)。
+  // extent 直接照上游 /map 回的 origin + 寬高 × 解析度,不要手調 —— 軌跡與底圖
+  // 同一個座標系就是靠它對上的。要更新:打 /ctrl-conns/{cid}/controllers/{ref}/map
+  // 拿中繼資料與 raster,未知→透明、可走→(40,90)、障礙→(235,255) 轉成 LA PNG,
+  // 並記得 row_order 是 bottom_up(要上下翻)。
+  extent: { xMin: -99.8, xMax: 7.75, yMin: -12.1, yMax: 11.65 },
+  // 整張圖是 107 × 24 m 的細長條,照整張畫在卡片裡只剩中間一條。固定框住測試
+  // 路線那一段:實測軌跡落在 x −49.8~−30.6、y 0.7~9.2,長寬比 30:18 ≈ 1.67
+  // 跟卡片一致,填得滿。超出的部分由 SVG 裁掉。
+  // yMax 貼齊地圖上緣 11.65 —— 舊地圖畫到 18.05,新的只到 11.65,沿用舊的 14
+  // 會在卡片頂端露出一條沒有底圖的空白。
+  view: { xMin: -55, xMax: -25, yMin: -6.35, yMax: 11.65 },
 };
 
 export type FloorPlan = {
