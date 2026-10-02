@@ -3319,3 +3319,144 @@ html.wall-mode .field-scenario-icon {
 }
 
 
+
+/* ── 左副牆:adapter 操作台 ────────────────────────────────────────────
+   左副牆是 5760×3240(畫布),等於 3×3 台電視。這裡不做對縫的精算 —— 它是操作
+   介面不是展示版面,內容會隨紀錄筆數長短變動,硬對縫反而會把列高鎖死。 */
+html.wall-mode .adapter-panel {
+  width: 100%;
+  height: 100%;
+  padding: 96px 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.92);
+}
+html.wall-mode .adapter-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+html.wall-mode .adapter-title {
+  font-size: calc(56px * var(--wall));
+  font-weight: 600;
+  line-height: 1.15;
+}
+html.wall-mode .adapter-head button {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--card-gradient);
+  border: 1px solid rgba(114, 182, 201, 0.28);
+  color: inherit;
+}
+html.wall-mode .adapter-sec {
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+/* 歷史那一段吃掉剩下的高度,裡面自己捲 */
+html.wall-mode .adapter-sec--grow {
+  flex: 1;
+}
+html.wall-mode .adapter-sec h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: calc(37px * var(--wall));
+  font-weight: 400;
+  padding-bottom: 1rem;
+  border-bottom: calc(3px * var(--wall)) solid rgba(255, 255, 255, 0.7);
+}
+html.wall-mode .adapter-dut-name {
+  font-size: calc(29px * var(--wall));
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 0.5rem;
+}
+html.wall-mode .adapter-scenario-name {
+  font-size: calc(24px * var(--wall));
+  color: rgba(255, 255, 255, 0.45);
+  margin: 0.5rem 0;
+}
+/* 驅動鈕:按一下先變成「再按一次」,避免路過的人誤觸讓載具動起來 */
+html.wall-mode .adapter-run {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  text-align: left;
+  background: var(--card-gradient);
+  border: 1px solid rgba(114, 182, 201, 0.28);
+  color: inherit;
+}
+html.wall-mode .adapter-run.is-arming {
+  border-color: rgba(255, 197, 107, 0.9);
+  background: rgba(255, 197, 107, 0.18);
+}
+html.wall-mode .adapter-run:disabled {
+  opacity: 0.45;
+}
+html.wall-mode .adapter-running {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  font-size: calc(28px * var(--wall));
+}
+html.wall-mode .adapter-run-bar {
+  flex: 1;
+  height: 1rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+html.wall-mode .adapter-run-bar > div {
+  height: 100%;
+  background: #1c9e88;
+}
+html.wall-mode .adapter-history {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+html.wall-mode .adapter-hrow {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content max-content max-content max-content;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: calc(var(--r-item) * var(--wall));
+  background: rgba(255, 255, 255, 0.05);
+  font-size: calc(28px * var(--wall));
+}
+/* 已經被丟上中牆的那一筆標出來 */
+html.wall-mode .adapter-hrow.is-shown {
+  background: rgba(90, 169, 230, 0.18);
+  border: 1px solid rgba(90, 169, 230, 0.5);
+}
+html.wall-mode .adapter-hrow-at {
+  color: rgba(255, 255, 255, 0.6);
+}
+html.wall-mode .adapter-hrow-state.s-done { color: #7fe3dd; }
+html.wall-mode .adapter-hrow-state.s-error,
+html.wall-mode .adapter-hrow-state.s-aborted { color: #f5a55a; }
+html.wall-mode .adapter-hrow-n {
+  color: rgba(255, 255, 255, 0.5);
+}
+html.wall-mode .adapter-hrow a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+html.wall-mode .adapter-warn {
+  font-size: calc(28px * var(--wall));
+  color: rgba(255, 197, 107, 0.9);
+}

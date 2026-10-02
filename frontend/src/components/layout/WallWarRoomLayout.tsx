@@ -14,10 +14,10 @@ import {
   RightWingMethod,
 } from "./RightWingStatic";
 import { useFieldScenarioStore } from "@/stores/fieldScenarioStore";
+import { WallLeftAdapter } from "@/components/layout/WallLeftAdapter";
 import { BEZEL_GUIDES_ENABLED, useWallModeStore } from "@/stores/wallModeStore";
 
 import { Sidebar } from "./Sidebar";
-import { WallLeftSimulator } from "./WallLeftSimulator";
 import { FieldScenarioSwitch } from "@/components/FieldTest/FieldScenarioSwitch";
 
 /**
@@ -112,12 +112,10 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
       </section>
 
       {/* === 左副牆 === 全貌預覽原生嵌 selector 選單;region build 由 CSS 裁掉。 */}
+      {/* 左副牆:adapter 的操作台 —— 驅動測試、挑一筆歷史丟上中牆、下載報告。
+          adapter 是外部團隊操作這套系統的唯一入口,左牆就是它的前台。 */}
       <section className="war-room-left">
-        {region === "all" ? (
-          <WallLeftSimulator embedded />
-        ) : (
-          <Sidebar className="war-room-sidebar flex flex-col" />
-        )}
+        <WallLeftAdapter />
       </section>
 
       {/* === 右副牆:實驗室概要 + page slots === */}
