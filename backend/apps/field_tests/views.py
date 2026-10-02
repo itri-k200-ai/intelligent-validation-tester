@@ -181,6 +181,46 @@ class MissionView(WallReadView):
         )
 
 
+class ActiveView(WallReadView):
+    """GET /api/field-tests/active/ —— 兩個情境各自「最後一次操作」是什麼時候。
+
+    牆面用它決定要顯示室內還是室外:規則是「最後一次操作決定顯示什麼」,
+    驅動驗測與指定歷史都算一次操作,比時間先後。
+
+    為什麼不直接輪詢兩邊的 /missions:那個 payload 很大(含上百筆樣本),
+    只為了判斷「哪一邊比較新」不值得。這支只回時間戳。
+
+    時間一律是「我們第一次看到」的時刻,並且一併回 now —— 呼叫端用
+    now 減一下換成「多久以前」,就不必跟瀏覽器的時鐘對齊(機器間有時差)。
+    """
+
+    def get(self, request):
+        try:
+            runs_all = _validations()
+        except client.PerfTesterError as exc:
+            return _error(exc)
+        _sync_adapter_notices(runs_all)
+
+        out: dict[str, dict] = {}
+        for scenario, conf in (settings.FIELD_TEST_TARGETS or {}).items():
+            try:
+                runs = _runs_of_plan(runs_all, (conf or {}).get("plan_id") or "")
+            except client.PerfTesterError:
+                runs = []
+            running = [r for r in runs if r.get("status") in {"running", "ready"}]
+            run_at = history.mark_running(scenario, _rid(running[0]) if running else "")
+            seen = history.running_seen_at(scenario)
+            out[scenario] = {
+                "running": bool(running),
+                "runId": _rid(running[0]) if running else (seen[0] if seen else None),
+                # 執行中的那筆是什麼時候被我們看到在跑的(跑完仍保留,代表那次操作的時間)
+                "runStartedAt": run_at if running else (seen[1] if seen else None),
+                "pinnedRunId": history.pinned(scenario),
+                "pinnedAt": history.pinned_at(scenario),
+            }
+        return Response({"now": time.time(), "scenarios": out})
+
+
 def _validations() -> list[dict]:
     """驗測紀錄清單(A6)。
 
@@ -309,8 +349,15 @@ def _sync_adapter_notices(runs: list[dict]) -> None:
 def _run_id_for(scenario: str, plan_id: str | None) -> str | None:
     """沒指定 run_id 時,這面牆要顯示哪一次驗測。
 
-    順序:執行中的 > 平台指定的歷史紀錄(notifyHisShow,見 history.py)> 最新一次。
-    一有新的驗測開跑就把指定清掉 —— 牆要回到即時,而且那次跑完之後也該跟著新的走。
+    規則是「最後一次操作決定顯示什麼」,沒有誰無條件壓誰:
+      驅動一次驗測 與 指定一筆歷史(notifyHisShow)都算一次操作,比時間先後,
+      晚的那個贏。所以驗測跑到一半被指定看歷史,牆面就跳去看歷史;
+      正在看歷史時又驅動一次,就跳回即時。
+
+    時間一律用「我們第一次看到它」的時刻(history.mark_running / pinned_at)——
+    平台的 run.created 是另一個時鐘,機器間有時差會比錯先後。
+
+    都沒有操作過就挑最新一次(見下面的挑法)。
     """
     runs = _validations()
     # 先看 adapter 有沒有新的「顯示這筆歷史」通知(全部情境一起看,清單只讀一次)
@@ -319,18 +366,26 @@ def _run_id_for(scenario: str, plan_id: str | None) -> str | None:
         runs = _runs_of_plan(runs, plan_id)
     if not runs:
         return None
+
     running = [r for r in runs if r.get("status") in {"running", "ready"}]
-    if running:
-        history.clear(scenario)
-        return _rid(running[0])
+    # 每次輪詢都記一次觀察(沒有在跑就傳空字串)—— 有「上一次的觀察」才分得出
+    # 「後端剛啟動、它早就在跑」與「我們一直在看、它剛剛才開跑」,見 mark_running
+    run_at = history.mark_running(scenario, _rid(running[0]) if running else "")
 
     chosen = history.pinned(scenario)
-    if chosen:
-        if any(_rid(r) == chosen for r in runs):
-            return chosen
-        # 指定的那筆不屬於這個情境(或已經被平台刪了)—— 清掉,照常挑最新一次
+    if chosen and not any(_rid(r) == chosen for r in runs):
+        # 指定的那筆不屬於這個情境(或已經被平台刪了)—— 清掉,照常往下挑
         logger.info("歷史指定 %s 不在 %s 的紀錄裡,改用最新一次", chosen, scenario)
         history.clear(scenario)
+        chosen = None
+    pin_at = history.pinned_at(scenario) if chosen else None
+
+    if running and chosen:
+        return chosen if (pin_at or 0) > (run_at or 0) else _rid(running[0])
+    if running:
+        return _rid(running[0])
+    if chosen:
+        return chosen
 
     # 沒有在跑的就挑最新一次(created 是 epoch 秒)。但平台上留著不少半途失敗的紀錄:
     # 有的一筆樣本都沒收到(status=error、phases={}),有的只跑完第一趟 —— 這張卡是

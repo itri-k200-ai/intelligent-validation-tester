@@ -8,6 +8,14 @@ type FieldScenarioState = {
   scenario: FieldScenarioId;
   /** 中牆是不是正在顯示場域測試 —— 決定標題下方要不要出現切換鈕 */
   active: boolean;
+  /**
+   * 現場最後一次「手動按切換鈕」的時間(performance.now 的毫秒)。
+   * 自動跳轉是比「最後一次操作」,手動按也算一次操作,所以要記時間一起比。
+   * 用瀏覽器自己的時鐘沒問題 —— 比較的是「多久以前」,不是絕對時刻。
+   */
+  manualAt: number | null;
+  /** 現場按鈕用:換情境並記下時間 */
+  pickScenario: (s: FieldScenarioId) => void;
   setScenario: (s: FieldScenarioId) => void;
   setActive: (v: boolean) => void;
 };
@@ -24,6 +32,8 @@ type FieldScenarioState = {
 export const useFieldScenarioStore = create<FieldScenarioState>((set) => ({
   scenario: "outdoor",
   active: false,
+  manualAt: null,
+  pickScenario: (scenario) => set({ scenario, manualAt: performance.now() }),
   setScenario: (scenario) => set({ scenario }),
   setActive: (active) => set({ active }),
 }));

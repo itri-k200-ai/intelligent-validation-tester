@@ -24,37 +24,36 @@ def _clear_caches():
 
 
 class _FakeRedis:
-    """history.py 只用到 hash 與一個集合,測試環境沒有 Redis,拿 dict / set 頂替。"""
+    """history.py 只用到幾個 hash,測試環境沒有 Redis,拿 dict 頂替。
+
+    以「key 名稱」分開存 —— 之前所有 hash 共用一個 dict,新增了
+    history-at(指定時間)與 run-seen(第一次看到在跑)之後會互相覆蓋。
+    """
 
     def __init__(self):
-        self.data: dict[str, str] = {}
-        self.seen: dict[str, str] | None = None
+        self.store: dict[str, dict[str, str]] = {}
 
-    def hget(self, _key, field):
-        return self.data.get(field)
+    def hget(self, key, field):
+        return self.store.get(key, {}).get(field)
 
     def hgetall(self, key):
-        return dict(self.seen or {}) if key.endswith("seen") else dict(self.data)
+        return dict(self.store.get(key, {}))
 
     def hset(self, key, field=None, value=None, mapping=None):
-        target = "seen" if key.endswith("seen") else "data"
-        if target == "seen" and self.seen is None:
-            self.seen = {}
-        store = self.seen if target == "seen" else self.data
+        h = self.store.setdefault(key, {})
         if mapping:
-            store.update(mapping)
+            h.update(mapping)
         else:
-            store[field] = value
+            h[field] = value
 
-    def hdel(self, _key, field):
-        self.data.pop(field, None)
+    def hdel(self, key, field):
+        self.store.get(key, {}).pop(field, None)
 
-    def delete(self, _key):
-        self.data.clear()
+    def delete(self, key):
+        self.store.pop(key, None)
 
-    # 已處理過的 adapter 通知(runId → notified_at)
-    def exists(self, _key):
-        return self.seen is not None
+    def exists(self, key):
+        return key in self.store
 
 
 @pytest.fixture(autouse=True)
@@ -829,8 +828,11 @@ def test_a_new_run_takes_the_wall_back_to_live(monkeypatch):
     running["/ext/validations/live1/samples"] = {"next_seq": 3, "samples": _samples(2, 0)}
     monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(running))
     assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "live1"
-    # 指定已經清掉 —— 那一輪跑完之後牆要跟著新的走,不要再跳回歷史
-    assert APIClient().get("/api/field-tests/history/").json()["pinned"] == {}
+    # 指定不再被清掉 —— 規則改成「最後一次操作決定顯示什麼」,新開跑的那筆只是
+    # 時間比較晚所以贏了。使用者再指定一次歷史,又會換它贏。
+    assert APIClient().get("/api/field-tests/history/").json()["pinned"] == {"indoor": "old"}
+    APIClient().post("/api/field-tests/history/", ["old"], format="json")
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "old"
 
 
 @override_settings(FIELD_TEST_TARGETS=TARGETS)
@@ -1068,3 +1070,25 @@ def test_process_stages_fall_back_to_one_when_the_plan_has_no_xapp():
     assert transform.stages([{"type": "ue_control"}, {"type": "wait"}]) == [
         {"from": 0, "to": 2, "kind": "all"}
     ]
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_pinning_a_history_wins_over_a_run_that_is_already_going(monkeypatch):
+    """驗測跑到一半被指定看歷史 —— 牆要跳去看歷史。
+    規則是「最後一次操作決定顯示什麼」,執行中不再無條件壓過指定。"""
+    extra = dict(_history_runs())
+    extra["/ext/validations"] = {
+        "validations": [
+            {"run_id": "live1", "meta": {"environment_id": "env-indoor"},
+             "status": "running", "created": 400},
+            *_history_runs()["/ext/validations"]["validations"],
+        ]
+    }
+    extra["/ext/validations/live1"] = {"status": "running", "phase": "優化前", "phases": {"優化前": 2}}
+    extra["/ext/validations/live1/samples"] = {"next_seq": 3, "samples": _samples(2, 0)}
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(extra))
+
+    # 先讓牆面看過一輪(建立「我們一直在看」的基準),這時顯示執行中的那筆
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "live1"
+    # 跑到一半指定看歷史 → 指定比較晚,換它贏
+    APIClient().post("/api/field-tests/history/", ["old"], format="json")
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "old"

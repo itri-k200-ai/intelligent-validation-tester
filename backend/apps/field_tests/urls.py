@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    ActiveView,
     CameraByNameSnapshotView,
     CameraByNameStreamView,
     CameraSnapshotView,
@@ -22,6 +23,8 @@ from .views import (
 # 智慧網路中牆(室外 UAV / 室內 AMR)的資料來源 —— 代理外部 Performance_tester。
 urlpatterns = [
     path("field-tests/targets/", TargetsView.as_view(), name="field-test-targets"),
+    # 兩個情境的「最後一次操作」時間 —— 牆面用它決定要顯示室內還是室外
+    path("field-tests/active/", ActiveView.as_view(), name="field-test-active"),
     path("field-tests/plans/", PlanListView.as_view(), name="field-test-plans"),
     # 驗測紀錄清單 —— 左螢幕挑「要顯示哪一次歷史」用
     path("field-tests/records/", RecordListView.as_view(), name="field-test-records"),

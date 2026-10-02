@@ -51,7 +51,8 @@ const ICONS: Record<FieldScenarioId, ReactNode> = {
  */
 export function FieldScenarioSwitch() {
   const scenario = useFieldScenarioStore((s) => s.scenario);
-  const setScenario = useFieldScenarioStore((s) => s.setScenario);
+  // 用 pickScenario:它會一併記下「現場按的時間」,自動跳轉要拿它比先後
+  const pickScenario = useFieldScenarioStore((s) => s.pickScenario);
 
   return (
     <div
@@ -64,7 +65,7 @@ export function FieldScenarioSwitch() {
           key={o.id}
           type="button"
           role="tab"
-          onClick={() => setScenario(o.id)}
+          onClick={() => pickScenario(o.id)}
           className={o.id === scenario ? "is-active" : undefined}
           aria-selected={o.id === scenario}
           title={FIELD_SCENARIOS[o.id].title}
