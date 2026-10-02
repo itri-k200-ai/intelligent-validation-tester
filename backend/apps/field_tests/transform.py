@@ -117,13 +117,16 @@ def sample(raw: dict, progress: float) -> dict:
             if ue.get("yaw") is not None
             else _compass(ue.get("heading"))
         ),
-        # UAV 的飛行狀態(AMR 沒有這幾欄)—— 歷史回放要能重現當下的數值,
+        # 載具狀態 —— 歷史回放要能重現當下的數值,
         # 不能只靠 /live(那是「現在」,對跑完的驗測沒有意義)。
         "speedMps": _num(ue.get("gspeed")),
         "verticalSpeedMps": _num(ue.get("vspeed")),
         "altitudeM": _num(ue.get("alt_rel")),
         "batteryPct": _num(ue.get("battery_pct")),
         "satellites": _num(ue.get("satellites")),
+        # AMR 的 SLAM 定位品質。即時那條走 /robot 的 localization.quality,
+        # 樣本裡平台用的欄名是 loc_quality —— 兩邊不同名,要各接各的。
+        "localizationPct": _num(ue.get("loc_quality")),
         # 絕對時間 —— 回放影像的每一格也有 wall,兩邊靠它對齊
         "wall": _num(raw.get("wall")),
         # 上游沒有路徑進度,留相對秒數給圖表之後改用時間軸

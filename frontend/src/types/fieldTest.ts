@@ -71,6 +71,8 @@ export type FieldSample = {
   altitudeM?: number | null;
   batteryPct?: number | null;
   satellites?: number | null;
+  /** AMR 的 SLAM 定位品質(樣本裡平台的欄名是 loc_quality) */
+  localizationPct?: number | null;
   /** 車頭方向:yawDeg 給數值欄位、headingDeg 給地圖箭頭 */
   yawDeg?: number | null;
   headingDeg?: number | null;

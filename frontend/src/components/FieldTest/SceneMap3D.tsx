@@ -34,10 +34,10 @@ const PAN_LEFT = 0.9;
  */
 /** 基站圖示的顏色與大小(公尺)。暖色是為了跟青色的建築、綠色的草坪分開。 */
 const BS_COLOR = "#FFC56B";
-const BS_SIZE = 16;
+const BS_SIZE = 10;
 
 const BASE_STATIONS: { x: number; y: number; alt: number; label: string }[] = [
-  { x: -103, y: 118, alt: 24, label: "基站 A" },
+  { x: -105, y: 80, alt: 24, label: "基站 A" },
   { x: -147, y: 49, alt: 24, label: "基站 B" },
 ];
 
@@ -81,26 +81,46 @@ export function SceneMap3D({
 
     // 地面鋪到 20 km 見方:斜著看時地面的邊界一定在畫面外(之前只比場景大一點,
     // 透視下會看到一塊深色多邊形的邊)
+    // ── 配色(參考他館的 3D 地圖)────────────────────────────────────────
+    // 城市一律中性灰、不上色,薄荷綠只留給「測試區」與軌跡 —— 建築原本是飽和的
+    // 青色(0x35b8ad),跟軌跡、基站、無人機同一個色系,整張圖糊成一片分不出主次。
+    // 底仍保持暗色(牆面是暗底的戰情室),但從帶藍的 navy 換成中性灰,灰色建築才站得住。
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(20_000, 20_000),
-      new THREE.MeshLambertMaterial({ color: 0x223246 }),
+      new THREE.MeshLambertMaterial({ color: 0x2a2f36 }),
     );
     ground.rotation.x = -Math.PI / 2;
     world.add(ground);
 
+    // 綠地 = 測試區:半透明薄荷 + 亮青邊框,一眼看得出驗測發生在哪一塊
     for (const g of scene.greens) {
-      const mesh = new THREE.Mesh(flatShape(g), new THREE.MeshLambertMaterial({ color: 0x3f8a55 }));
+      const shape = flatShape(g);
+      const mesh = new THREE.Mesh(
+        shape,
+        new THREE.MeshBasicMaterial({
+          color: 0x7fe3dd,
+          transparent: true,
+          opacity: 0.22,
+          side: THREE.DoubleSide,
+        }),
+      );
       mesh.position.y = 0.3;
       world.add(mesh);
+      const edge = new THREE.LineSegments(
+        new THREE.EdgesGeometry(shape),
+        new THREE.LineBasicMaterial({ color: 0x3fd0c9, transparent: true, opacity: 0.85 }),
+      );
+      edge.position.y = 0.35;
+      world.add(edge);
     }
     for (const r of scene.roads) {
       // 帶狀面的法線方向不一定朝上,用不受光的材質,顏色才不會忽明忽暗
-      const mesh = new THREE.Mesh(ribbon(r.map(([x, y]) => ({ x, y })), 7), new THREE.MeshBasicMaterial({ color: 0x6f7c8e }));
+      const mesh = new THREE.Mesh(ribbon(r.map(([x, y]) => ({ x, y })), 7), new THREE.MeshBasicMaterial({ color: 0x9aa5b1 }));
       mesh.position.y = 0.5;
       world.add(mesh);
     }
-    const buildingMat = new THREE.MeshLambertMaterial({ color: 0x35b8ad });
-    const edgeMat = new THREE.LineBasicMaterial({ color: 0xbff7f2, transparent: true, opacity: 0.55 });
+    const buildingMat = new THREE.MeshLambertMaterial({ color: 0x8e9aa8 });
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0xdfe6ee, transparent: true, opacity: 0.5 });
     for (const bd of scene.buildings) {
       const geo = extruded(bd.footprint, bd.height ?? 15);
       world.add(new THREE.Mesh(geo, buildingMat));
@@ -147,20 +167,7 @@ export function SceneMap3D({
       sprite.position.set(bs.x, bs.alt + BS_SIZE / 2, -bs.y);
       sprite.renderOrder = 9;
       world.add(sprite);
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(BS_SIZE * 0.3, BS_SIZE * 0.4, 32),
-        new THREE.MeshBasicMaterial({
-          color: BS_COLOR,
-          transparent: true,
-          opacity: 0.9,
-          side: THREE.DoubleSide,
-          depthTest: false,
-        }),
-      );
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.set(bs.x, bs.alt + 0.6, -bs.y);
-      ring.renderOrder = 8;
-      world.add(ring);
+      // 不畫屋頂的底座圓環(依前端回饋)—— 圖示縮小之後,環反而比圖示還搶眼
     }
     ctx.current = { renderer, world, camera, dynamic, uavTexture, render };
 

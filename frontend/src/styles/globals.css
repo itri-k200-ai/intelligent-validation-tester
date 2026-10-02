@@ -3307,10 +3307,19 @@ html.wall-mode .field-scenario-icon {
    段寬是按步數比例給的(flex-grow),grid 的 1fr 1fr 會把每段切成等寬。 */
 .field-progress-track--single {
   display: flex;
+  /* 條子吃掉「測試進度 / 百分比 / 階段」之後剩下的寬度(flex: 1 由上面那條給)。
+     階段文字是同一列的 flex item,會先佔走自己的寬度,所以條子自然就短了 ——
+     不要寫死成固定比例,那會在文字短的時候留下一大塊空白。 */
 }
 .field-progress-track--single > .field-progress-seg {
   min-width: 0;
   flex-basis: 0;
+}
+/* 階段文字:緊接在百分比後面,與欄位標籤同一級 */
+html.wall-mode .field-progress-stage {
+  font-size: calc(28px * var(--wall));
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
 }
 /* 百分比固定寬度:4 位(100%)也放得下,數字變長時條子不會被往右推 */
 .field-progress-pct {

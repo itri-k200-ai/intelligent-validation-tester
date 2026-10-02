@@ -287,8 +287,13 @@ function LiveResultsLayout({
         <div className="field-status-body field-status-body--results">
           {/* 標題列右側標「現在在做哪一步」—— 進度條只給百分比,看不出是在跑、在裝 xApp
               還是在等(那幾步載具不動,不標會以為卡住了)。文字由平台的方案步驟來。 */}
-          <Sub icon={Route} title={sc.routeTitle} aside={currentStage(mission.process, replayPercent)}>
-            <MissionProgress mission={playMission} single percent={replayPercent} />
+          <Sub icon={Route} title={sc.routeTitle}>
+            <MissionProgress
+              mission={playMission}
+              single
+              percent={replayPercent}
+              stage={currentStage(mission.process, replayPercent)}
+            />
             {/* 有場景就畫 3D(建築依高度立起來、無人機放在實際高度);
                 拿不到場景時退回 2D,只畫 GPS 軌跡 */}
             {scene ? (
@@ -344,9 +349,14 @@ function CameraGridLayout({
   // 原本的值蓋成 undefined,地圖箭頭就又沒方向了。
   const replayVehicle = useMemo(() => {
     if (!rs) return null;
-    const v: { yawDeg?: number; headingDeg?: number } = {};
+    const v: FieldVehicleStatus = {};
     if (rs.yawDeg != null) v.yawDeg = rs.yawDeg;
     if (rs.headingDeg != null) v.headingDeg = rs.headingDeg;
+    // 速度 / 電量 / 定位品質樣本裡本來就有(平台後來補的),不帶的話回放時這三格
+    // 只能退回即時值 —— 而載具跑完多半已經離線,就整排變成「—」
+    if (rs.speedMps != null) v.speedMps = rs.speedMps;
+    if (rs.batteryPct != null) v.batteryPct = rs.batteryPct;
+    if (rs.localizationPct != null) v.localizationPct = rs.localizationPct;
     return v;
   }, [rs]);
   const replayPosition = rs && rs.x != null && rs.y != null ? { x: rs.x, y: rs.y } : null;
@@ -471,11 +481,14 @@ function CameraGridLayout({
             icon={Route}
             title={sc.routeTitle}
             // 有 SLAM 底圖時不畫 RU 圖例,那個位置改標「現在在做哪一步」(理由同室外)
-            aside={
-              sc.floorPlan && !sc.backdrop ? <RadioLegend /> : currentStage(mission.process, replayPercent)
-            }
+            aside={sc.floorPlan && !sc.backdrop ? <RadioLegend /> : undefined}
           >
-            <MissionProgress mission={playMission} single percent={replayPercent} />
+            <MissionProgress
+              mission={playMission}
+              single
+              percent={replayPercent}
+              stage={currentStage(mission.process, replayPercent)}
+            />
             <RouteMap
               mission={playMission}
               floorPlan={sc.floorPlan}
@@ -663,6 +676,8 @@ function vehicleReadings(
   scenario: FieldScenarioId,
   v: FieldVehicleStatus,
   position: { x: number; y: number } | null,
+  /** UAV 的 GPS —— 回放時是當下那一筆樣本的,即時時是 /live 的 */
+  geo: { lat: number; lon: number } | null,
 ): Reading[] {
   const battery: Reading = {
     label: "電量",
@@ -686,24 +701,20 @@ function vehicleReadings(
   return [
     // 欄寬窄,「相對高度 m」會被截斷
     { label: "高度", unit: "m", value: v.altitudeM?.toFixed(1) ?? null },
-    { label: "地速", unit: "m/s", value: v.speedMps?.toFixed(1) ?? null },
-    { label: "垂直", unit: "m/s", value: v.verticalSpeedMps?.toFixed(1) ?? null },
+    { label: "速度", unit: "m/s", value: v.speedMps?.toFixed(1) ?? null },
+    { label: "垂直速度", unit: "m/s", value: v.verticalSpeedMps?.toFixed(1) ?? null },
     battery,
-    // 「模式」拿掉了:後端從來沒填過 FieldVehicleStatus.mode,平台的樣本與 /live
-    // 也沒有對應的飛行模式,牆上永遠是「—」。之後上游真的有了再加回來。
-    // (衛星數同樣還沒有來源,先留著欄位。)
-    {
-      label: "衛星數",
-      value: v.satellites ?? null,
-      // 低於 14 顆代表定位不穩,牆上要一眼看得出來(與電量低於 30% 同一種處理)
-      tone: v.satellites !== undefined && v.satellites < 14 ? "text-danger" : undefined,
-    },
+    // 經緯度拆成兩格:合在一格要放 18 個字,欄寬塞不下。
+    // 取 5 位小數 ≈ 1 公尺,牆上看得出位置在動又不會被截斷。
+    { label: "緯度", unit: "°", value: geo ? geo.lat.toFixed(5) : null },
+    { label: "經度", unit: "°", value: geo ? geo.lon.toFixed(5) : null },
   ];
 }
 
 /** 飛行狀態 / 行駛狀態 */
 function VehicleSub({
   scenario,
+  geo,
   title,
   vehicle,
   position,
@@ -712,13 +723,14 @@ function VehicleSub({
   scenario: FieldScenarioId;
   title: string;
   vehicle: FieldVehicleStatus;
+  geo?: { lat: number; lon: number } | null;
   /** 目前這趟的位置(室內顯示 SLAM x / y);沒在跑就是 null */
   position: { x: number; y: number } | null;
   className?: string;
 }) {
   return (
     <Sub className={className} icon={VEHICLE_ICON[scenario]} title={title}>
-      <MetricGrid items={vehicleReadings(scenario, vehicle, position)} />
+      <MetricGrid items={vehicleReadings(scenario, vehicle, position, geo ?? null)} />
     </Sub>
   );
 }
@@ -1099,11 +1111,14 @@ function MissionProgress({
   mission,
   single = false,
   percent: override = null,
+  stage,
 }: {
   mission: FieldMission;
   single?: boolean;
   /** 回放時由外面指定進度(見 replayPercent);即時模式傳 null 就走原本的算法 */
   percent?: number | null;
+  /** 現在走到三段的哪一段(見 currentStage)—— 緊接在百分比後面 */
+  stage?: string;
 }) {
   const run = mission.runs[mission.currentRun];
   if (!run) return null;
@@ -1128,6 +1143,9 @@ function MissionProgress({
         <span className="field-progress-pct flex-none text-[2.75rem] font-semibold leading-[1.1] text-white">
           {percent === null ? "—" : `${percent}%`}
         </span>
+        {/* 階段緊接在百分比後面 —— 原本放在小卡標題列的右端,離進度條太遠,
+            看的人要在兩個地方之間來回對 */}
+        {stage && <span className="field-progress-stage flex-none">{stage}</span>}
         <div className="field-progress-track field-progress-track--single">
           {/* 規範 09:軌道 rgba(255,255,255,0.15) */}
           {segs ? (
