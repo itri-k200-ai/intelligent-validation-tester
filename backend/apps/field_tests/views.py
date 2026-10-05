@@ -165,6 +165,10 @@ class MissionView(WallReadView):
                 "pinned": history.pinned(scenario) == run_id,
                 # 這一次驗測的開始時間(epoch 秒)—— 牆上要標出「現在看的是哪一筆」
                 "created": status_payload.get("created"),
+                # 結束時間(epoch 秒)。平台沒有這個欄位,見 _ended_at。
+                "endedAt": _ended_at(
+                    samples_payload.get("samples") or [], status_payload.get("status")
+                ),
                 "nextSeq": samples_payload.get("next_seq"),
                 "phases": status_payload.get("phases") or {},
                 "currentRun": current,
@@ -179,6 +183,27 @@ class MissionView(WallReadView):
                 ),
             }
         )
+
+
+def _ended_at(samples: list[dict], status: str | None) -> float | None:
+    """這一次驗測的結束時間(epoch 秒);還在跑、或沒有資料就 None。
+
+    平台的驗測紀錄**沒有**結束時間 —— /ext/validations[/<id>] 的欄位只有 created,
+    meta、phases、steps 裡也都沒有任何時間戳。所以這裡用最後一筆樣本的 wall:
+    資料收到哪裡,驗測就是在那裡停下來的。意思上是「最後一筆資料的時間」,
+    對牆上要表達的「這次驗測跑到什麼時候」已經夠準(實測與 created 差幾分鐘,
+    就是那趟實際的長度)。
+
+    wall 是絕對時間、取最大值,所以牆面用增量輪詢(since_seq)時也是對的。
+    """
+    if status in {"running", "ready", "pending"}:
+        return None
+    walls = [
+        float(s["wall"])
+        for s in samples
+        if isinstance(s, dict) and isinstance(s.get("wall"), (int, float))
+    ]
+    return max(walls) if walls else None
 
 
 class ActiveView(WallReadView):
@@ -380,10 +405,17 @@ def _run_id_for(scenario: str, plan_id: str | None) -> str | None:
         chosen = None
     pin_at = history.pinned_at(scenario) if chosen else None
 
-    if running and chosen:
-        return chosen if (pin_at or 0) > (run_at or 0) else _rid(running[0])
     if running:
+        if chosen and (pin_at or 0) > (run_at or 0):
+            return chosen
         return _rid(running[0])
+
+    # 沒有在跑:最後一次驅動的那筆仍然算一次操作(而且驗測跑完要停在那一筆上,
+    # 不是翻回舊的歷史)。只有在它比歷史指定更早時才讓指定贏。
+    last = history.running_seen_at(scenario)
+    if last and any(_rid(r) == last[0] for r in runs):
+        if not chosen or last[1] > (pin_at or 0):
+            return last[0]
     if chosen:
         return chosen
 

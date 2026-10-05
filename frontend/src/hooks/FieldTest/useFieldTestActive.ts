@@ -40,6 +40,13 @@ export function useFieldTestActive() {
       return data;
     },
     refetchInterval: 1000,
+    // 牆是長時間掛著的,而且現場是在**別的視窗**打 adapter 指定要看哪一筆 ——
+    // 預設的 refetchIntervalInBackground=false 會在視窗被判定不可見時(切到別的
+    // 視窗、或被另一個視窗完全蓋住,Chrome 的 occlusion 會算成 hidden)把輪詢整個
+    // 停掉,牆面就不再跟著跳;加上全域的 refetchOnWindowFocus=false,回到視窗也
+    // 不會補抓。實測 nginx 紀錄出現 60~215 秒完全沒有請求的空窗,就是這個。
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
     retry: false,
     enabled: !USE_MOCK,
   });

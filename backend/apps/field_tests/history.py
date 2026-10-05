@@ -112,30 +112,40 @@ def pinned_at(scenario: str) -> float | None:
 _RUN_SEEN_KEY = "field-tests:run-seen"
 
 
+# 「這個情境我們觀察過了」。與上面那筆分開存,是因為「現在沒有東西在跑」也算
+# 一次觀察,但它**不該**覆蓋 _RUN_SEEN_KEY 裡那筆驗測 —— 見 mark_running。
+_OBSERVED_KEY = "field-tests:run-observed"
+
+
 def mark_running(scenario: str, run_id: str) -> float:
     """每次輪詢都呼叫:記下這個情境現在在跑哪一筆(沒有就傳空字串),
     回「那一筆是什麼時候開始跑的」。
 
     同一筆重複呼叫回原本的時間,不會每次輪詢都刷新。
 
+    ⚠ 傳空字串(現在沒有東西在跑)時**保留**上一次那筆的紀錄,只回它的時間。
+    以前這裡會把空字串連同「現在」寫進去,於是驗測一跑完就留下一筆
+    「run_id 是空的、時間是剛剛」的紀錄 —— 牆面比時間時它贏過使用者的歷史指定,
+    但真的要挑 run_id 時又挑不出東西,結果就跳到某一筆很舊的歷史去。
+    驗測跑完要停在那一筆上,所以那筆的開跑時間必須留著。
+
     ⚠ 這個情境**從來沒被觀察過**時(後端剛啟動)記 0,不是現在:那時我們不知道
     它是什麼時候開跑的,記成「現在」會讓一個早就在跑的驗測憑空變成「最新的操作」,
     壓過使用者剛剛指定的歷史紀錄。記 0 的語意是「已經在跑了,但不知道何時開始」——
     沒有指定時它照樣會被選中,有指定時則讓指定贏。
-
-    反過來,只要我們**之前觀察過**這個情境(哪怕當時沒有東西在跑),之後才冒出來的
-    那一筆就是「剛剛才開跑」,記現在的時間 —— 它理應壓過更早的指定。
     """
     try:
         r = _redis()
         cur = r.hget(_RUN_SEEN_KEY, scenario)
-        if cur:
-            rid, _, at = cur.partition(" ")
-            if rid == run_id:
-                return float(at)
-            at_new = time.time()
-        else:
-            at_new = 0.0
+        rid, _, at = (cur or "").partition(" ")
+        observed = bool(cur) or bool(r.hget(_OBSERVED_KEY, scenario))
+        r.hset(_OBSERVED_KEY, scenario, "1")
+        if not run_id:
+            # 沒有在跑:上一次那筆留著(跑完的那筆仍代表「最後一次驅動」)
+            return float(at) if rid else 0.0
+        if rid == run_id:
+            return float(at)
+        at_new = time.time() if observed else 0.0
         r.hset(_RUN_SEEN_KEY, scenario, f"{run_id} {at_new!r}")
         return at_new
     except (redis.RedisError, ValueError) as exc:
@@ -144,12 +154,17 @@ def mark_running(scenario: str, run_id: str) -> float:
 
 
 def running_seen_at(scenario: str) -> tuple[str, float] | None:
-    """(run_id, 第一次看到它在跑的時間);沒看過就 None。"""
+    """(最後一次看到在跑的 run_id, 看到它開跑的時間);沒看過就 None。
+
+    驗測跑完之後這筆還在 —— 它就是「最後一次驅動」那個操作。
+    """
     try:
         cur = _redis().hget(_RUN_SEEN_KEY, scenario)
         if not cur:
             return None
         rid, _, at = cur.partition(" ")
+        if not rid:  # 舊格式留下的空紀錄
+            return None
         return rid, float(at)
     except (redis.RedisError, ValueError) as exc:
         logger.warning("讀不到執行中的驗測(%s)", exc)

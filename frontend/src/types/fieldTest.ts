@@ -154,6 +154,9 @@ export type FieldProcess = {
 export type FieldMission = {
   /** 這一次驗測的開始時間(epoch 秒);沒有紀錄時是 null */
   createdAt?: number | null;
+  /** 結束時間(epoch 秒)—— 平台沒有這個欄位,後端用最後一筆樣本的時間代替;
+      還在跑、或那一筆沒有任何樣本時是 null */
+  endedAt?: number | null;
   /** 外部平台的 run_id(mock 沒有) */
   runId?: string;
   /**

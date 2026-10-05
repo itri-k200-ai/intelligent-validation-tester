@@ -1092,3 +1092,16 @@ def test_pinning_a_history_wins_over_a_run_that_is_already_going(monkeypatch):
     # 跑到一半指定看歷史 → 指定比較晚,換它贏
     APIClient().post("/api/field-tests/history/", ["old"], format="json")
     assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "old"
+
+
+def test_跑完的驗測不會被更舊的歷史指定搶走(fake_redis):
+    """跑完就停在那一筆上 —— 以前「沒有東西在跑」會被記成一次最新的操作,
+    時間贏過指定但挑不出 run_id,牆面就跳到很舊的那筆歷史去。"""
+    history.pin("indoor", "old-run")          # 先指定一筆舊歷史
+    history.mark_running("indoor", "")        # 觀察過這個情境(此時沒有在跑)
+    at = history.mark_running("indoor", "new-run")   # 驅動一筆新的
+    assert at > 0
+    history.mark_running("indoor", "")        # 跑完了,沒有東西在跑
+    seen = history.running_seen_at("indoor")
+    assert seen == ("new-run", at), "跑完的那筆要留著,不能被空紀錄蓋掉"
+    assert history.mark_running("indoor", "") == at, "回報的時間要是它開跑的時間"

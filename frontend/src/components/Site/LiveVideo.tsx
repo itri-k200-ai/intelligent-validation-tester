@@ -31,20 +31,56 @@ function isMjpeg(src: string) {
  * 載不起來就退回佔位畫面:固定攝影機是陸續接上來的,平台還沒登記的名稱會回 404,
  * 不接 onError 的話那一格會變成瀏覽器的破圖。
  */
-function MjpegVideo({ src, emptyText }: { src: string; emptyText: string }) {
+/** 載不起來之後隔多久再試一次(毫秒)。牆是長時間掛著的,設備修好要能自己復原。 */
+const MJPEG_RETRY_MS = 15_000;
+
+/** 右上角那顆標籤要標「LIVE」還是「回放」—— 回放時那幾格在轉圈,標 LIVE 會騙人 */
+export type VideoBadge = "live" | "replay";
+
+function Badge({ kind }: { kind: VideoBadge }) {
+  if (kind === "replay") return <span className="field-replay-badge">回放</span>;
+  return (
+    <div className="video-live-badge">
+      <span className="video-live-dot" /> LIVE
+    </div>
+  );
+}
+
+function MjpegVideo({
+  src,
+  emptyText,
+  badge,
+}: {
+  src: string;
+  emptyText: string;
+  badge: VideoBadge;
+}) {
   const [failed, setFailed] = useState(false);
   const [ready, setReady] = useState(false);
-  // 換了來源就重新等 —— 驗測一開跑會從回放切成即時,那時還沒有畫面
+  /** 重試次數 —— 一併當成網址上的參數,瀏覽器才會真的重新請求而不是吃快取 */
+  const [attempt, setAttempt] = useState(0);
+  const url = attempt ? `${src}${src.includes("?") ? "&" : "?"}r=${attempt}` : src;
+
+  // 換了來源(或重試)就重新等 —— 驗測一開跑會從回放切成即時,那時還沒有畫面
   useEffect(() => {
     setFailed(false);
     setReady(false);
-  }, [src]);
-  if (failed) return <LiveVideo src={null} emptyText={emptyText} />;
+  }, [url]);
+
+  // 失敗之後定時重試。沒有這段的話,固定攝影機的 src 是常數、永遠不會變,
+  // 那一格就會一直轉圈到頁面重整為止 —— 設備修好也回不來(實際踩過)。
+  useEffect(() => {
+    if (!failed) return;
+    const t = window.setTimeout(() => setAttempt((a) => a + 1), MJPEG_RETRY_MS);
+    return () => window.clearTimeout(t);
+  }, [failed]);
+
+  if (failed) return <LiveVideo src={null} emptyText={emptyText} badge={badge} />;
   return (
     <div className="relative h-full w-full overflow-hidden">
       <img
         className="h-full w-full object-cover"
-        src={src}
+        src={url}
         alt="即時影像"
         onLoad={() => setReady(true)}
         onError={() => setFailed(true)}
@@ -57,9 +93,7 @@ function MjpegVideo({ src, emptyText }: { src: string; emptyText: string }) {
           <span className="video-spinner" />
         </div>
       )}
-      <div className="video-live-badge">
-        <span className="video-live-dot" /> LIVE
-      </div>
+      <Badge kind={badge} />
     </div>
   );
 }
@@ -67,21 +101,21 @@ function MjpegVideo({ src, emptyText }: { src: string; emptyText: string }) {
 export function LiveVideo({
   src,
   emptyText = "尚無攝影機串流",
+  badge = "live",
 }: {
   src?: string | null;
   emptyText?: string;
+  badge?: VideoBadge;
 }) {
   // 車載影像是 MJPEG(外部平台 B6,經後端 /api/field-tests/camera/… 代理):
   // 直接用 <img> 吃 multipart 串流,不進 hls.js。元件卸載瀏覽器就會斷線 ——
   // 上游同時只允許 3 路,不看要真的移除元素。
-  if (src && isMjpeg(src)) return <MjpegVideo src={src} emptyText={emptyText} />;
+  if (src && isMjpeg(src)) return <MjpegVideo src={src} emptyText={emptyText} badge={badge} />;
   if (src) return <HlsPlayer src={src} />;
   return (
     <div className="video-placeholder">
       <div className="video-screen">
-        <div className="video-live-badge">
-          <span className="video-live-dot" /> LIVE
-        </div>
+        <Badge kind={badge} />
       </div>
       <div className="video-controls">
         <button type="button" aria-label="play"><Play className="w-5 h-5" /></button>

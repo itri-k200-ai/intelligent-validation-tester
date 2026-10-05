@@ -45,8 +45,10 @@ export function FieldTestScenarioContainer({ initial }: { initial: FieldScenario
     let best: { id: FieldScenarioId; ago: number } | null = null;
     for (const [id, v] of Object.entries(active.scenarios)) {
       if (!v) continue;
-      // 這個情境最後一次操作:開跑(只在還是 running 時算)與被指定,取較晚的
-      const at = Math.max(v.running ? (v.runStartedAt ?? 0) : 0, v.pinnedAt ?? 0);
+      // 這個情境最後一次操作:開跑與被指定,取較晚的。
+      // 跑完的那一筆**仍然算**一次操作 —— 不然驗測一結束,這一邊的「最後一次操作」
+      // 就塌回更早的歷史指定,牆面會自己跳回另一邊去(跟「跑完就停住」相反)。
+      const at = Math.max(v.runStartedAt ?? 0, v.pinnedAt ?? 0);
       if (!at) continue;
       const ago = active.now - at;
       if (!best || ago < best.ago) best = { id: id as FieldScenarioId, ago };

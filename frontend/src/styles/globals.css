@@ -3315,6 +3315,24 @@ html.wall-mode .field-scenario-icon {
   min-width: 0;
   flex-basis: 0;
 }
+/* 測試數據的兩趟顏色對照(標題列右端) */
+html.wall-mode .field-phase-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.5rem;
+  white-space: nowrap;
+}
+html.wall-mode .field-phase-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+html.wall-mode .field-phase-legend .dot {
+  width: calc(16px * var(--wall));
+  height: calc(16px * var(--wall));
+  border-radius: 9999px;
+  flex: none;
+}
 /* 階段文字:緊接在百分比後面,與欄位標籤同一級 */
 html.wall-mode .field-progress-stage {
   font-size: calc(28px * var(--wall));

@@ -96,9 +96,17 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
   const replayCam = replaying && freshReplay ? (replay?.cameras?.[0] ?? null) : null;
 
   return sc.layout === "live-results" ? (
-    <LiveResultsLayout scenario={scenario} sc={sc} mission={data} live={live} />
+    <LiveResultsLayout scenario={scenario} sc={sc} mission={data} live={live} replaying={replaying} />
   ) : (
-    <CameraGridLayout scenario={scenario} sc={sc} mission={data} live={live} replayCam={replayCam} replayPeriodS={replay?.periodS ?? null} />
+    <CameraGridLayout
+      scenario={scenario}
+      sc={sc}
+      mission={data}
+      live={live}
+      replayCam={replayCam}
+      replayPeriodS={replay?.periodS ?? null}
+      replaying={replaying}
+    />
   );
 }
 
@@ -130,11 +138,14 @@ function LiveResultsLayout({
   sc,
   mission,
   live,
+  replaying,
 }: {
   scenario: FieldScenarioId;
   sc: Extract<FieldScenario, { layout: "live-results" }>;
   mission: FieldMission;
   live: FieldLive | null;
+  /** 牆面正在播歷史回放 —— 沒有回放影像的那幾格不要改播即時 */
+  replaying: boolean;
 }) {
   const run = mission.runs[mission.currentRun];
 
@@ -262,6 +273,7 @@ function LiveResultsLayout({
                 label={label}
                 src={mission.cameras[i] ?? null}
                 scenario={scenario}
+                replaying={replaying}
               />
             ))}
           </div>
@@ -307,7 +319,7 @@ function LiveResultsLayout({
               干擾範圍會隨環境變動,畫面上不標固定的干擾區,只呈現兩趟的吞吐量起伏與平均。
               場域內只觀察這台 UAV;上下兩張圖的間距跨 y = 2160 */}
           {/* 跟室內同一組圖:上格平均上行、下格平均下行 */}
-          <Sub icon={Signal} title="測試數據">
+          <Sub icon={Signal} title="測試數據" aside={<PhaseLegend />}>
             <div className="field-split">
               <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[0]} series={allRuns} />
               <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[1]} series={allRuns} />
@@ -328,6 +340,7 @@ function CameraGridLayout({
   live,
   replayCam,
   replayPeriodS,
+  replaying,
 }: {
   scenario: FieldScenarioId;
   sc: Extract<FieldScenario, { layout: "camera-grid" }>;
@@ -336,6 +349,8 @@ function CameraGridLayout({
   /** 歷史模式才有:車載那格要播的回放鏡頭(沒有回放就是 null)。 */
   replayCam: ReplayCamera | null;
   replayPeriodS: number | null;
+  /** 牆面正在播歷史回放 —— 沒有回放影像的那幾格不要改播即時 */
+  replaying: boolean;
 }) {
   const run = mission.runs[mission.currentRun];
 
@@ -449,6 +464,7 @@ function CameraGridLayout({
                 replay={i === sc.cameras.length - 1 ? replayCam : null}
                 replayAt={cursor.at}
                 scenario={scenario}
+                replaying={replaying}
               />
             ))}
           </div>
@@ -500,7 +516,7 @@ function CameraGridLayout({
           {/* 與室外同一種比較:兩趟的平均與平均差值。
               卡寬 2208 但被 x = 9600 的縫穿過(見 CSS .field-sub--head-past-seam)。
               「平均」寫在每張圖自己的名稱上,標題列就不再重複一次 */}
-          <Sub icon={Signal} title="測試數據" className="field-sub--head-past-seam">
+          <Sub icon={Signal} title="測試數據" className="field-sub--head-past-seam" aside={<PhaseLegend />}>
             <div className="field-split">
               <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[0]} series={playRuns} narrow />
               <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[1]} series={playRuns} narrow />
@@ -527,13 +543,13 @@ function HeadRow({ title, mission }: { title: string; mission: FieldMission }) {
   return (
     <>
       <div className="dut-wall-band-title">{title}</div>
-      {/* 驗測開始時間貼卡片右緣、與大卡標題同高(absolute,見 globals.css .field-head-time)——
+      {/* 驗測時間貼卡片右緣、與大卡標題同高(absolute,見 globals.css .field-head-time)——
           牆上要看得出現在顯示的是哪一次,尤其平台指定顯示歷史紀錄時。
-          沒有時間就整段不顯示,不要在牆上留一格「—」。 */}
+          標題會隨「跑完 / 還在跑」在結束時間與開始時間之間切換,見 runTime。 */}
       {at && (
         <span className="field-head-time">
-          <span className="field-meta-key">驗測開始時間</span>
-          <span className="field-meta-val">{at}</span>
+          <span className="field-meta-key">{at.label}</span>
+          <span className="field-meta-val">{at.at}</span>
         </span>
       )}
       <div className="field-meta-row">
@@ -561,6 +577,7 @@ function VideoTile({
   replay,
   replayAt,
   scenario,
+  replaying,
 }: {
   label: string;
   src: string | null;
@@ -569,6 +586,8 @@ function VideoTile({
   /** 回放播到第幾格(與數值卡、地圖共用同一個游標) */
   replayAt?: number;
   scenario: FieldScenarioId;
+  /** 牆面正在播歷史回放(但這一格沒有回放影像) */
+  replaying?: boolean;
 }) {
   return (
     <div className="field-video-cell">
@@ -579,6 +598,11 @@ function VideoTile({
       <div className="field-video">
         {replay ? (
           <ReplayPlayer scenario={scenario} camera={replay} at={replayAt ?? 0} />
+        ) : replaying ? (
+          /* 牆面在播歷史,但平台沒有存這支鏡頭的影格(實測只有車載有)。
+             這時不能改播即時 —— 畫面會變成「過去的數據配現在的影像」,
+             看的人會以為驗測正在進行。跟等串流一樣轉圈就好,標籤要標「回放」。 */
+          <LiveVideo src={null} badge="replay" />
         ) : (
           <LiveVideo src={src} />
         )}
@@ -608,7 +632,7 @@ function Sub({
         <Icon className="h-10 w-10 flex-none text-teal" strokeWidth={1.75} />
         <span className="field-sub-title flex-none leading-tight">{title}</span>
         {aside && (
-          <span className="field-metric-label ml-auto min-w-0 truncate text-white/60">{aside}</span>
+          <span className="field-metric-label ml-auto flex-none text-white/60">{aside}</span>
         )}
       </div>
       <div className="field-sub-body">{children}</div>
@@ -617,18 +641,27 @@ function Sub({
 }
 
 /**
- * 牆上「驗測開始時間」顯示的內容 —— 這一次驗測開始的時間。
- * 沒有任何驗測紀錄時回 null,呼叫端整段不顯示。
+ * 牆上那個時間要標什麼、顯示哪個時刻。
+ *
+ * 已結束的那一筆標「驗測結束時間」—— 牆上多半在看跑完的紀錄或回放,結束時間
+ * 比開始時間有意義。平台的紀錄沒有結束時間,後端用最後一筆樣本的時間代替。
+ * 還在跑的那筆沒有「結束」可言,照舊標開始時間(也才看得出跑多久了)。
+ * 兩個都沒有就回 null,呼叫端整段不顯示,不要在牆上留一格「—」。
  */
-function runTime(mission: FieldMission): string | null {
-  if (!mission.createdAt) return null;
-  return new Date(mission.createdAt * 1000).toLocaleString("zh-TW", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+function runTime(mission: FieldMission): { label: string; at: string } | null {
+  const ended = mission.endedAt ?? null;
+  const at = ended ?? mission.createdAt ?? null;
+  if (!at) return null;
+  return {
+    label: ended ? "驗測結束時間" : "驗測開始時間",
+    at: new Date(at * 1000).toLocaleString("zh-TW", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }),
+  };
 }
 
 type Reading = {
@@ -1085,6 +1118,26 @@ function FloorPlanLayer({ plan, u }: { plan: FloorPlan; u: number }) {
 }
 
 /** RU 的圖例(與平面圖上的 RU 同一個樣子) */
+/**
+ * 兩趟的顏色對照 —— 掛在「測試數據」的標題列右端。
+ *
+ * 圖上只有兩條線、沒有任何文字說明哪條是哪一趟,之前靠小卡標題列的平均值旁邊
+ * 那兩個點暗示(● 12.4 → ● 18.1),但第二趟還沒資料時那一段整個不顯示,
+ * 圖就變成「兩條不知道是什麼的線」。這裡固定標著。
+ */
+function PhaseLegend() {
+  return (
+    <span className="field-phase-legend">
+      {(["before", "after"] as const).map((p) => (
+        <span key={p}>
+          <span className="dot" style={{ background: PHASE[p].color }} />
+          {PHASE[p].label}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function RadioLegend() {
   return (
     <span className="flex items-center gap-3">

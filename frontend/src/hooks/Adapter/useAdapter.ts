@@ -68,6 +68,9 @@ export function useAdapterHistory(limit = 50) {
       (await api.get<{ runs: AdapterHistoryRow[] }>("/history", { params: { limit }, signal })).data
         .runs ?? [],
     refetchInterval: 10_000,
+    // 左牆也是一直掛著的,視窗不可見時不要停掉輪詢(同 useFieldTestActive)
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
     retry: false,
   });
 }
@@ -117,6 +120,9 @@ export function useRunningStatus(ids: string[]) {
       ).data ?? [],
     enabled: ids.length > 0,
     refetchInterval: 2000,
+    // 左牆也是一直掛著的,視窗不可見時不要停掉輪詢(同 useFieldTestActive)
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
     retry: false,
   });
 }
