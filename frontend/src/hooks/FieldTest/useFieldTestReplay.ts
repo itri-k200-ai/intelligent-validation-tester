@@ -7,7 +7,13 @@ import type { FieldScenarioId } from "@/types/fieldTest";
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 
 export type ReplayFrame = { i: number; phase: string; wall?: number | null };
-export type ReplayCamera = { key: string; name: string; frames: ReplayFrame[] };
+export type ReplayCamera = {
+  key: string;
+  name: string;
+  frames: ReplayFrame[];
+  /** 這支鏡頭屬於哪一次驗測(由索引的 runId 帶下來)—— 圖片網址要帶著它,見 ReplayPlayer */
+  runId?: string;
+};
 export type ReplayIndex = {
   runId: string;
   periodS: number | null;
@@ -38,9 +44,17 @@ export function useFieldTestReplay(scenario: FieldScenarioId) {
       );
       return data;
     },
+    // 每支鏡頭帶上 runId,圖片網址才能指名是哪一次(見 ReplayPlayer)。
+    // select 用模組層級的函式:資料沒變就沿用上一次的結果,不會每次 render 都換新物件
+    select: withRunId,
     refetchInterval: 30000,
     retry: false,
     enabled: !USE_MOCK,
   });
   return { replay: query.data ?? null };
+}
+
+function withRunId(data: ReplayIndex | null): ReplayIndex | null {
+  if (!data) return data;
+  return { ...data, cameras: data.cameras.map((c) => ({ ...c, runId: data.runId })) };
 }
