@@ -42,6 +42,7 @@ import {
   type Reading,
 } from "@/lib/fieldView";
 import { pickRateUnit } from "@/lib/formatRate";
+import { frameAt, replayCameraFor, replayMaster } from "@/lib/fieldCameras";
 import { firstGeo, makeGeoProjector, projectMission } from "@/lib/geoProjection";
 import type {
   FieldMission,
@@ -104,17 +105,27 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
   const running = base.runs.some((r) => r.status === "running");
   const freshReplay = !!replay && !!base.runId && replay.runId === base.runId;
   const replaying = !!base.pinned && !running;
-  const replayCam = replaying && freshReplay ? (replay?.cameras?.[0] ?? null) : null;
+  // 平台有存影格的每一支鏡頭(以前只拿第一支 = 車載,固定攝影機回放時就一直轉圈;
+  // 平台後來也替 camera1~3 存了,見 lib/fieldCameras 的 replayCameraFor)
+  const replayCams = replaying && freshReplay ? (replay?.cameras ?? NO_CAMS) : NO_CAMS;
 
   return sc.layout === "live-results" ? (
-    <LiveResultsLayout scenario={scenario} sc={sc} mission={data} live={live} replaying={replaying} />
+    <LiveResultsLayout
+      scenario={scenario}
+      sc={sc}
+      mission={data}
+      live={live}
+      replayCams={replayCams}
+      replayPeriodS={replay?.periodS ?? null}
+      replaying={replaying}
+    />
   ) : (
     <CameraGridLayout
       scenario={scenario}
       sc={sc}
       mission={data}
       live={live}
-      replayCam={replayCam}
+      replayCams={replayCams}
       replayPeriodS={replay?.periodS ?? null}
       replaying={replaying}
     />
@@ -128,12 +139,17 @@ function LiveResultsLayout({
   sc,
   mission,
   live,
+  replayCams,
+  replayPeriodS,
   replaying,
 }: {
   scenario: FieldScenarioId;
   sc: Extract<FieldScenario, { layout: "live-results" }>;
   mission: FieldMission;
   live: FieldLive | null;
+  /** 有存影格的回放鏡頭(不在回放時是空陣列) */
+  replayCams: ReplayCamera[];
+  replayPeriodS: number | null;
   /** 牆面正在播歷史回放 —— 沒有回放影像的那幾格不要改播即時 */
   replaying: boolean;
 }) {
@@ -143,8 +159,10 @@ function LiveResultsLayout({
   // 室內以逐格影像為準,室外平台一張都沒存,所以直接用樣本自己的 wall。
   // 驗測正在跑時不回放(牆面本來就在即時更新)。
   const running = mission.runs.some((r) => r.status === "running");
-  // 同室內:只有被指定看歷史時才回放,跑完是停在最後的狀態
-  const cursor = useReplayCursor(null, null, mission.runs, !!mission.pinned && !running);
+  // 同室內:只有被指定看歷史時才回放,跑完是停在最後的狀態。
+  // 有鏡頭存了影格就跟著影格走,沒有才用樣本自己的時間軸
+  const master = replayMaster(replayCams);
+  const cursor = useReplayCursor(master?.frames ?? null, replayPeriodS, mission.runs, !!mission.pinned && !running);
   const rs = cursor.sample;
   // 只放這一筆真的有值的欄位:spread 一個 undefined 會把 mission.vehicle 原本的值蓋掉
   const replayVehicle = useMemo(() => {
@@ -219,7 +237,9 @@ function LiveResultsLayout({
   const mapMission = project ? projectMission(playMission, project) : playMission;
   // 回放時標記走在當下那一筆的 GPS 上(室外樣本只有 lat / lon,沒有 x / y)
   const replayGeo = rs && rs.lat != null && rs.lon != null ? { lat: rs.lat, lon: rs.lon } : null;
-  const geoNow = replayGeo ?? live?.geo ?? null;
+  // 回放當下那一筆 → 即時 → 最後已知位置(UAV 離線或驗測跑完時,後端用最後一筆樣本)。
+  // 少了最後一層,電量、速度有值(後端同樣退回最後一筆),經緯度卻永遠是「—」
+  const geoNow = replayGeo ?? live?.geo ?? mission.geo ?? null;
   const livePos = project && geoNow ? project(geoNow) : null;
   // 3D 地圖的軌跡:只在驗測資料或原點變了才重算。react-query 在資料沒變時會沿用
   // 同一個物件,所以每秒的即時輪詢不會讓 3D 軌跡跟著重建
@@ -258,12 +278,15 @@ function LiveResultsLayout({
         <div className="field-live-grid field-live-grid--two">
           <div className="field-video-grid field-video-grid--one">
             {sc.cameras.map((label, i) => (
-              <VideoTile
+              <ReplayTile
                 key={label}
+                index={i}
                 label={label}
                 src={mission.cameras[i] ?? null}
                 scenario={scenario}
                 replaying={replaying}
+                replayCams={replayCams}
+                wall={cursor.wall}
               />
             ))}
           </div>
@@ -329,7 +352,7 @@ function CameraGridLayout({
   sc,
   mission,
   live,
-  replayCam,
+  replayCams,
   replayPeriodS,
   replaying,
 }: {
@@ -337,8 +360,8 @@ function CameraGridLayout({
   sc: Extract<FieldScenario, { layout: "camera-grid" }>;
   mission: FieldMission;
   live: FieldLive | null;
-  /** 歷史模式才有:車載那格要播的回放鏡頭(沒有回放就是 null)。 */
-  replayCam: ReplayCamera | null;
+  /** 有存影格的回放鏡頭(不在回放時是空陣列) */
+  replayCams: ReplayCamera[];
   replayPeriodS: number | null;
   /** 牆面正在播歷史回放 —— 沒有回放影像的那幾格不要改播即時 */
   replaying: boolean;
@@ -346,9 +369,11 @@ function CameraGridLayout({
   const run = mission.runs[mission.currentRun];
 
   // 歷史回放:影像、數值卡、地圖標記共用同一個時間點(見 useReplayCursor)。
-  // replayCam 為 null(有測試在跑、或這次沒有回放)時 cursor.sample 也是 null,
+  // 不在回放(有測試在跑、或沒被指定看歷史)時 cursor.sample 是 null,
   // 下面所有 ?? 就會退回原本的即時 / 最後一筆行為。
-  const cursor = useReplayCursor(replayCam?.frames ?? null, replayPeriodS, mission.runs);
+  // 時鐘跟著錄得最完整的那支鏡頭(有車載就用車載);一支都沒有就用樣本的時間軸
+  const master = replayMaster(replayCams);
+  const cursor = useReplayCursor(master?.frames ?? null, replayPeriodS, mission.runs, replaying);
   const rs = cursor.sample;
   // 回放當下那一筆的載具狀態 —— 沒有回放時是 null,不影響即時模式。
   // 只放「這一筆真的有值」的欄位:spread 一個 undefined 會把底下 mission.vehicle
@@ -447,15 +472,15 @@ function CameraGridLayout({
         <div className="field-live-grid">
           <div className="field-video-grid">
             {sc.cameras.map((label, i) => (
-              <VideoTile
+              <ReplayTile
                 key={label}
+                index={i}
                 label={label}
                 src={mission.cameras[i] ?? null}
-                // 車載是最後一格;有回放就播回放(見 FieldTestWall 的 replayCam)
-                replay={i === sc.cameras.length - 1 ? replayCam : null}
-                replayAt={cursor.at}
                 scenario={scenario}
                 replaying={replaying}
+                replayCams={replayCams}
+                wall={cursor.wall}
               />
             ))}
           </div>
@@ -558,6 +583,44 @@ function HeadRow({ title, mission }: { title: string; mission: FieldMission }) {
 }
 
 
+const NO_CAMS: ReplayCamera[] = [];
+
+/**
+ * 一格影像 + 回放時該播哪一張:找出這一格對應的回放鏡頭(lib/fieldCameras 的 replayCameraFor),
+ * 再用目前播到的時間找它自己最接近的一張(frameAt)—— 各鏡頭錄的時段與張數不同,不能共用序號。
+ * 這支鏡頭這個時段沒錄到就轉圈(VideoTile 的 replaying 分支)。
+ */
+function ReplayTile({
+  index,
+  label,
+  src,
+  scenario,
+  replaying,
+  replayCams,
+  wall,
+}: {
+  index: number;
+  label: string;
+  src: string | null;
+  scenario: FieldScenarioId;
+  replaying: boolean;
+  replayCams: ReplayCamera[];
+  wall: number | null;
+}) {
+  const cam = replaying ? replayCameraFor(scenario, index, replayCams) : null;
+  const at = cam ? frameAt(cam, wall) : null;
+  return (
+    <VideoTile
+      label={label}
+      src={src}
+      replay={at !== null ? cam : null}
+      replayAt={at ?? 0}
+      scenario={scenario}
+      replaying={replaying}
+    />
+  );
+}
+
 /**
  * 一路影像(16:9):名稱獨立成一條標題列放在畫面上方,樣式與小卡標題列(飛行狀態、
  * 通訊品質)相同 —— 標題列落在上一排電視的下緣,畫面整個放在下一排電視裡。
@@ -633,7 +696,7 @@ function Sub({
 
 /**
  * 3 欄 × 2 列的即時數值:標籤(含單位)在上、數值在下。
- * 小卡縮到 1632 後欄距收成 gap-x-3(36):三欄各 478,裝得下最寬的「RSRP dBm」(474)。
+ * 欄距 gap-x-2(24)。室外數值欄 1728 → 三欄各約 517,裝得下最寬的「垂直速度 m/s」(510)。
  */
 function MetricGrid({ items }: { items: Reading[] }) {
   return (
@@ -641,7 +704,8 @@ function MetricGrid({ items }: { items: Reading[] }) {
        卡片比內容高不少,舊寫法會把多出來的高度平均分到每一格的上下,每格的
        標籤與數值上下各空出約 45 實際px,看起來鬆散。現在多出來的高度統一留在
        卡片下緣,兩列之間只隔 gap-y-8。標題列不受影響。 */
-    <div className="grid min-h-0 flex-1 grid-cols-3 content-start gap-x-3 gap-y-8">
+    // 欄距 gap-x-2(24):室外「垂直速度 m/s」要 510,數值欄加寬到 1728 之後每欄約 517 才放得下
+    <div className="grid min-h-0 flex-1 grid-cols-3 content-start gap-x-2 gap-y-8">
       {items.map(({ label, unit, value, tone = "text-white", size = "field-metric-value" }) => (
         <div key={label} className="flex min-w-0 flex-col gap-2">
           <span className="field-metric-label truncate whitespace-nowrap text-white/55">

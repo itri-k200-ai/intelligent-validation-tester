@@ -157,6 +157,8 @@ export type FieldMission = {
   /** 結束時間(epoch 秒)—— 平台沒有這個欄位,後端用最後一筆樣本的時間代替;
       還在跑、或那一筆沒有任何樣本時是 null */
   endedAt?: number | null;
+  /** UAV 最後已知的 GPS(即時拿不到時是最後一筆樣本的);室內為 null */
+  geo?: { lat: number; lon: number } | null;
   /** 外部平台的 run_id(mock 沒有) */
   runId?: string;
   /**

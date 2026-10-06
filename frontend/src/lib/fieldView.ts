@@ -86,9 +86,9 @@ export function vehicleReadings(
     { label: "垂直速度", unit: "m/s", value: v.verticalSpeedMps?.toFixed(1) ?? null },
     battery,
     // 經緯度拆成兩格:合在一格要放 18 個字,欄寬塞不下。
-    // 取 5 位小數 ≈ 1 公尺,牆上看得出位置在動又不會被截斷。
-    { label: "緯度", unit: "°", value: geo ? geo.lat.toFixed(5) : null },
-    { label: "經度", unit: "°", value: geo ? geo.lon.toFixed(5) : null },
+    // 取 4 位小數 ≈ 11 公尺:場域內仍看得出位置在動(5 位太長,依現場回饋收一位)
+    { label: "緯度", unit: "°", value: geo ? geo.lat.toFixed(4) : null },
+    { label: "經度", unit: "°", value: geo ? geo.lon.toFixed(4) : null },
   ];
 }
 

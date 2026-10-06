@@ -41,6 +41,16 @@ class WallReadView(APIView):
     permission_classes = [AllowAny]
 
 
+# 判斷 /live「有沒有實際數值」用的欄位:訊號、位置(室內 x / y、室外 GPS)、高度。
+# 載具離線時,控制端還連得上,/live 會回一整包欄位、但值全是 None ——
+# 不能只看 dict 是不是空的(實測:室外 UAV 離線時 lat / alt_rel / sinr 都是 None)。
+_LIVE_VALUE_KEYS = ("sinr", "rsrp", "rsrq", "thp_dl_kbps", "thp_ul_kbps", "x", "y", "lat", "lon", "alt_rel")
+
+
+def _has_live_data(live: dict) -> bool:
+    return any(live.get(k) is not None for k in _LIVE_VALUE_KEYS)
+
+
 def _last_ue(raw_samples: list[dict]) -> dict:
     """樣本裡最後一筆 ue(顯示歷史紀錄時拿它頂替 /live)。
 
@@ -90,6 +100,10 @@ class LiveView(WallReadView):
             return _error(exc)
 
         robot, targets = _vehicle_extras(scenario)
+        # 載具離線時 /live 是一包 None(見 _has_live_data)。照轉的話 link 是一個「每格都是 None」
+        # 的物件,前端會拿它蓋掉 mission 裡最後一筆的訊號值 —— 回 null 才會退回最後一筆
+        if not _has_live_data(live):
+            live = {}
 
         return Response(
             {
@@ -144,7 +158,9 @@ class MissionView(WallReadView):
         # 改用這次驗測最後一筆樣本的 ue —— 訊號(SINR/RSRP/RSRQ/DL/UL)與位置、yaw
         # 都在裡面,不補的話牆上那兩張小卡整片空白。
         # 速度 / 電量 / 定位品質只存在於即時的 /robot,歷史樣本沒有,那幾格仍是「—」。
-        if not live:
+        # 「沒有實際數值」也算拿不到(見 _has_live_data)—— 以前只看是不是空 dict,
+        # UAV 離線時 /live 回一包 None,經緯度、電量、速度、訊號就一起變「—」
+        if not _has_live_data(live):
             live = _last_ue(samples_payload.get("samples") or [])
 
         runs = transform.build_runs(status_payload, samples_payload.get("samples") or [])
@@ -174,6 +190,10 @@ class MissionView(WallReadView):
                 "currentRun": current,
                 "runs": runs,
                 "vehicle": transform.vehicle(scenario, live, robot, None, targets),
+                # UAV 的 GPS。載具離線(/live 拿不到)時 live 已經換成最後一筆樣本的 ue,
+                # 所以這裡就是「最後已知位置」—— 跟上面 vehicle 的電量、速度同一個來源。
+                # 以前沒給,牆上的電量、速度有值,經緯度卻永遠是「—」。
+                "geo": transform.geo(live) if scenario != "indoor" else None,
                 "link": transform.link(live),
                 # 整個驗測流程走到第幾步(進度條用這個,不用行駛進度)
                 "process": _process(

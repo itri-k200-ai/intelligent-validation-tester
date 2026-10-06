@@ -28,6 +28,8 @@ type MissionPayload = {
   created?: number | null;
   /** 結束時間(epoch 秒)—— 平台沒給,後端用最後一筆樣本的時間代替 */
   endedAt?: number | null;
+  /** UAV 最後已知的 GPS(後端:/live 拿不到時用最後一筆樣本) */
+  geo?: { lat: number; lon: number } | null;
   process?: FieldProcess | null;
   status?: string;
   pinned?: boolean;
@@ -89,6 +91,7 @@ export const fieldTestService = {
       runId: data.runId,
       createdAt: data.created ?? null,
       endedAt: data.endedAt ?? null,
+      geo: data.geo ?? null,
       pinned: !!data.pinned,
       process: data.process ?? null,
       nextSeq: data.nextSeq,

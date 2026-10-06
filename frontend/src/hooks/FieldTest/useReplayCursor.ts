@@ -74,5 +74,7 @@ export function useReplayCursor(
     return best;
   }, [steps, at, flat]);
 
-  return { at, sample, phase: steps[at]?.phase || null, total };
+  // wall:目前播到的絕對時間 —— 每支鏡頭各自拿它去找「自己最接近這個時刻的那一格」
+  // (各鏡頭錄的時段與張數不一樣,不能共用同一個序號,見 lib/fieldCameras 的 frameAt)
+  return { at, sample, phase: steps[at]?.phase || null, total, wall: steps[at]?.wall ?? null };
 }

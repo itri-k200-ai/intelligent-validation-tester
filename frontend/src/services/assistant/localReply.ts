@@ -63,7 +63,7 @@ export function localReply(text: string, c: AssistantContext): string {
       : `載具電量 ${c.vehicle.batteryPct}%${c.vehicle.batteryPct < 30 ? ",偏低了。" : "。"}`;
 
   if (has("位置", "在哪", "座標", "經緯度")) {
-    if (c.geo) return `UAV 目前位置:緯度 ${c.geo.lat.toFixed(5)}、經度 ${c.geo.lon.toFixed(5)}。`;
+    if (c.geo) return `UAV 目前位置:緯度 ${c.geo.lat.toFixed(4)}、經度 ${c.geo.lon.toFixed(4)}。`;
     if (c.position) return `AMR 目前位置:x ${c.position.x.toFixed(1)} m、y ${c.position.y.toFixed(1)} m。`;
     return "目前拿不到載具位置(載具可能離線)。";
   }

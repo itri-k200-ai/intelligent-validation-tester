@@ -1105,3 +1105,70 @@ def test_跑完的驗測不會被更舊的歷史指定搶走(fake_redis):
     seen = history.running_seen_at("indoor")
     assert seen == ("new-run", at), "跑完的那筆要留著,不能被空紀錄蓋掉"
     assert history.mark_running("indoor", "") == at, "回報的時間要是它開跑的時間"
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_outdoor_mission_gives_last_known_gps_when_uav_offline(monkeypatch):
+    """UAV 離線(/live 拿不到)時,經緯度要跟電量、速度一樣退回最後一筆樣本 ——
+    以前 mission 沒有 geo,牆上電量有值、經緯度卻永遠是「—」。"""
+    raw = [
+        {"seq": i, "t": i, "wall": 1000 + i, "phase": "部署前",
+         "ue": {"sinr": 10, "lat": 24.7735 + i * 1e-4, "lon": 121.0465 + i * 1e-4, "battery_pct": 60}}
+        for i in range(3)
+    ]
+    extra = {
+        "/ext/validations": {"validations": [{"run_id": "u1", "plan_id": "p2", "status": "done"}]},
+        "/ext/validations/u1": {"status": "done", "phases": {"部署前": 3}},
+        "/ext/validations/u1/samples": {"next_seq": 3, "samples": raw},
+    }
+    base = _fake_ctrl_get(extra)
+
+    def offline(path, params=None, timeout=None):
+        if path.endswith(("/live", "/robot", "/targets")):
+            raise perf_client.PerfTesterError("timed out", status=503)
+        return base(path, params)
+
+    monkeypatch.setattr(perf_client, "get", offline)
+    body = APIClient().get("/api/field-tests/missions/outdoor/").json()
+    assert body["geo"] == {"lat": pytest.approx(24.7737), "lon": pytest.approx(121.0467)}
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_indoor_mission_has_no_geo(monkeypatch):
+    extra = {
+        "/ext/validations": {"validations": [{"run_id": "r1", "plan_id": "p1", "status": "done"}]},
+        "/ext/validations/r1": {"status": "done", "phases": {"部署前": 5, "部署後": 3}},
+        "/ext/validations/r1/samples": {"next_seq": 8, "samples": _samples(5, 3)},
+    }
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(extra))
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["geo"] is None
+
+
+# 實測:UAV 離線時控制端還在,/live 回一整包欄位但值全是 None
+_NULL_LIVE = {"live": {"sinr": None, "rsrp": None, "lat": None, "lon": None, "alt_rel": None,
+                       "gspeed": None, "battery_pct": None, "connected": False}}
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_outdoor_mission_falls_back_when_live_is_all_none(monkeypatch):
+    raw = [{"seq": 0, "t": 0, "wall": 1000, "phase": "部署前",
+            "ue": {"sinr": 3, "lat": 24.7732481, "lon": 121.0459531, "alt_rel": 0.5, "battery_pct": 67}}]
+    extra = {
+        "/ext/validations": {"validations": [{"run_id": "u1", "plan_id": "p2", "status": "done"}]},
+        "/ext/validations/u1": {"status": "done", "phases": {"部署前": 1}},
+        "/ext/validations/u1/samples": {"next_seq": 1, "samples": raw},
+        "/live": _NULL_LIVE,
+    }
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(extra))
+    body = APIClient().get("/api/field-tests/missions/outdoor/").json()
+    assert body["geo"] == {"lat": 24.7732481, "lon": 121.0459531}
+    assert body["link"]["sinrDb"] == 3
+    assert body["vehicle"]["altitudeM"] == 0.5
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_live_endpoint_returns_null_link_when_live_is_all_none(monkeypatch):
+    """回 null,前端才會改用 mission 的最後一筆;回一包 None 會把它蓋掉"""
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get({"/live": _NULL_LIVE}))
+    body = APIClient().get("/api/field-tests/live/outdoor/").json()
+    assert body["link"] is None and body["geo"] is None

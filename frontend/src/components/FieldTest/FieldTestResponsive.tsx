@@ -20,7 +20,7 @@ import { FieldHlsVideo } from "@/components/Site/FieldHlsVideo";
 import { SnapshotVideo, VideoBadge } from "@/components/Site/SnapshotVideo";
 import type { TrendSpec } from "@/config/fieldScenarios";
 import { useFieldView } from "@/hooks/FieldTest/useFieldView";
-import { snapshotSources } from "@/lib/fieldCameras";
+import { frameAt, replayCameraFor, snapshotSources } from "@/lib/fieldCameras";
 import {
   PHASE,
   PROGRESS_COLOR,
@@ -313,13 +313,15 @@ function Cameras({
     // 室內 4 路:手機也排 2×2,一路一列要滑很久;室外 2 路:手機一路一列,看得清楚
     <div className={cn("grid gap-3", labels.length > 2 ? "grid-cols-2" : "grid-cols-1 min-[420px]:grid-cols-2")}>
       {labels.map((label, i) => {
-        const vehicle = i === labels.length - 1;
+        // 回放:這一格對應的鏡頭,在目前播到的時刻該顯示的那一張(規則同中牆)
+        const cam = view.replaying ? replayCameraFor(scenario, i, view.replayCams) : null;
+        const at = cam ? frameAt(cam, view.replayWall) : null;
         return (
           <figure key={label} className="min-w-0">
             <div className="relative aspect-video overflow-hidden rounded-item">
-              {vehicle && view.replayCam ? (
+              {cam && at !== null ? (
                 <div className="field-rwd-replay h-full w-full">
-                  <ReplayPlayer scenario={scenario} camera={view.replayCam} at={view.replayAt} />
+                  <ReplayPlayer scenario={scenario} camera={cam} at={at} />
                 </div>
               ) : view.replaying ? (
                 // 回放中但這支鏡頭沒存影格:不能改播即時(理由同中牆),轉圈 + 標「回放」

@@ -8,6 +8,7 @@ import { useFieldTestMission } from "@/hooks/FieldTest/useFieldTestMission";
 import { useFieldTestReplay } from "@/hooks/FieldTest/useFieldTestReplay";
 import { useFieldTestScene } from "@/hooks/FieldTest/useFieldTestScene";
 import { useReplayCursor } from "@/hooks/FieldTest/useReplayCursor";
+import { replayMaster } from "@/lib/fieldCameras";
 import { PHASE, currentStage, emptyMission } from "@/lib/fieldView";
 import { firstGeo, makeGeoProjector, projectMission } from "@/lib/geoProjection";
 import type { FieldMission, FieldVehicleStatus, FieldScenarioId, LinkQuality } from "@/types/fieldTest";
@@ -37,14 +38,14 @@ export function useFieldView(scenario: FieldScenarioId) {
   const replaying = !!base.pinned && !running;
   // 回放索引 30 秒才重抓一次,切換歷史的頭幾十秒還是上一筆 —— 比對 runId 擋掉
   const freshReplay = !!replay && !!base.runId && replay.runId === base.runId;
-  const replayCam = replaying && freshReplay ? (replay?.cameras?.[0] ?? null) : null;
-
-  const cursor = useReplayCursor(
-    replayCam?.frames ?? null,
-    replay?.periodS ?? null,
-    base.runs,
-    replaying && !replayCam,
+  // 每一支有存影格的鏡頭(畫面依各格對應的名稱自己挑,見 lib/fieldCameras)
+  const replayCams = useMemo(
+    () => (replaying && freshReplay ? (replay?.cameras ?? []) : []),
+    [replaying, freshReplay, replay],
   );
+  // 時鐘跟著錄得最完整的那支(有車載用車載);一支都沒有就用樣本的時間軸
+  const master = replayMaster(replayCams);
+  const cursor = useReplayCursor(master?.frames ?? null, replay?.periodS ?? null, base.runs, replaying);
   const rs = replaying ? cursor.sample : null;
 
   // 只放這一筆真的有值的欄位:spread 一個 undefined 會把原本的值蓋掉
@@ -123,7 +124,8 @@ export function useFieldView(scenario: FieldScenarioId) {
   const project = useMemo(() => (origin ? makeGeoProjector(origin) : null), [origin?.lat, origin?.lon]); // eslint-disable-line react-hooks/exhaustive-deps
   const mapMission = project ? projectMission(play, project) : play;
   const replayGeo = rs && rs.lat != null && rs.lon != null ? { lat: rs.lat, lon: rs.lon } : null;
-  const geo = replayGeo ?? live?.geo ?? null;
+  // 回放當下 → 即時 → 最後已知位置(同中牆;UAV 離線時電量、速度也是這樣退回最後一筆)
+  const geo = replayGeo ?? live?.geo ?? base.geo ?? null;
   const replayXY = rs && rs.x != null && rs.y != null ? { x: rs.x, y: rs.y } : null;
   const position =
     scenario === "outdoor"
@@ -158,8 +160,9 @@ export function useFieldView(scenario: FieldScenarioId) {
     mapMission,
     running,
     replaying,
-    replayCam,
-    replayAt: cursor.at,
+    replayCams,
+    /** 目前播到的絕對時間;各格用它找自己那支鏡頭最接近的一張 */
+    replayWall: cursor.wall,
     percent,
     stage: currentStage(p, replayPercent),
     vehicle: { ...base.vehicle, ...live?.vehicle, ...(replayVehicle ?? {}) } as FieldVehicleStatus,
