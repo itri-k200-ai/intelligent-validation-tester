@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 /**
  * 右副牆下半部三格的「靜態」內容:待測物 / 測試設備 / 測試方法。
@@ -27,25 +27,27 @@ import { useState } from "react";
 type DutItem = { name: string; items: string; icon?: string };
 
 const DUT_LIST: DutItem[] = [
+  // 文案依 PM 提供;順序是由上往下的層級:SMO → Non-RT RIC → Near-RT RIC → 上面跑的 app
   {
     name: "SMO",
-    items: "服務管理與協調(O1 / O2 / A1 / R1)",
+    items: "網路的總管理平台，負責設定、監控與調度整個網路",
     icon: "/images/dut/smo.png",
   },
   {
-    name: "Near-RT RIC",
-    items: "E2 / A1 / O1 介面一致性與互通",
-    icon: "/images/dut/near-rt-ric.png",
-  },
-  {
     name: "Non-RT RIC",
-    items: "A1 Policy / EI、R1(SME / DME / AIML)",
+    // \n = PM 原稿指定的換行位置
+    items: "負責長期規劃，分析網路歷史資料，\n訂定優化策略",
     icon: "/images/dut/non-rt-ric.png",
   },
   {
-    // xApp 與 rApp 的測試內容相同,合併一行;圖示用 rApp 那張
+    name: "Near-RT RIC",
+    items: "負責即時控制，依據策略與當下狀況，\n在毫秒內直接調整基站設定",
+    icon: "/images/dut/near-rt-ric.png",
+  },
+  {
+    // xApp 與 rApp 合併一行;圖示用 rApp 那張
     name: "xApp / rApp",
-    items: "效能測試",
+    items: "安裝在 RIC 上的網路優化應用程式，例如干擾抑制、體驗品質提升",
     icon: "/images/dut/rapp.png",
   },
 ];
@@ -53,20 +55,16 @@ const DUT_LIST: DutItem[] = [
 /**
  * 測試設備 —— 「用什麼測」,一律寫設備名詞,不要寫測試方法(那是隔壁
  * 「測試方法」那格的事)。不分類,就是一份設備清單。
+ * 順序從網路端往使用者端排:基站 → 手機 → AMR → 無人機。
  *
  * icon 同「待測物」:留空顯示待補圖框,圖檔放 public/images/dut/ 後填路徑。
  */
 const EQUIPMENT: DutItem[] = [
   {
-    name: "無人機",
-    items: "app 實地驗測載具",
-    icon: "/images/dut/uav.png",
-  },
-  {
-    // TODO(PM):型號待提供
-    name: "AMR",
-    items: "自主移動機器人 —— app 實地驗測載具",
-    icon: "/images/dut/amr.png",
+    name: "基站",
+    // 廠商放前面 —— 牆上遠看先辨識是誰的設備,再看型號
+    items: "和碩 Pegatron · 室外型 RU_PR2400-79EA",
+    icon: "/images/dut/base-station.png",
   },
   {
     // 室內 / 室外都用它當 5G UE(見「測試方法」);廠商放前面,同基站
@@ -75,55 +73,42 @@ const EQUIPMENT: DutItem[] = [
     icon: "/images/dut/ue.png",
   },
   {
-    name: "基站",
-    // 廠商放前面 —— 牆上遠看先辨識是誰的設備,再看型號
-    items: "和碩 Pegatron · 室外型 RU_PR2400-79EA",
-    icon: "/images/dut/base-station.png",
+    // TODO(PM):型號待提供
+    name: "AMR",
+    items: "自主移動機器人 —— app 實地驗測載具",
+    icon: "/images/dut/amr.png",
+  },
+  {
+    name: "無人機",
+    items: "app 實地驗測載具",
+    icon: "/images/dut/uav.png",
   },
 ];
 
 /**
- * 測試方法 —— 各待測物的測試方法不同,所以分頁呈現。
+ * 測試方法 —— 兩頁:介面測試、效能測試(文案與示意圖依 PM 提供,
+ * 圖檔原稿在 docs/外部文件/前端UI建議/,是會自己動的 SVG)。
  *
- * 分頁鍵沿用「待測物」那格的分類名稱,兩格對照得起來。
- * 內容由 PM 提供,填 lines 即可;留空會顯示待補提示。
- */
-/**
- * 測試方法 —— 三頁。
- *
- * SMO / Near-RT RIC / Non-RT RIC 的測試方法相近,合併成「介面測試」一頁;
- * xApp / rApp 依場域拆成室內、室外兩頁。
- *
- * 順序 = 牆上的翻頁順序,第一筆就是開機後先顯示的那頁(目前是室外測試)。
+ * 順序 = 牆上的翻頁順序,第一筆就是開機後先顯示的那頁。
  *
  * figure:示意圖檔放 public/images/dut/ 後填路徑,留空顯示虛線待補框。
  */
 const METHODS: { tab: string; lines: string[]; figure?: string }[] = [
   {
-    tab: "室外測試",
-    lines: [
-      "於工研院 52 館外大草坪配置手機與無人機進行實測。" +
-        "透過無人機穿越干擾與非干擾區,驗證 QoE xApp 的改善效果。",
-    ],
-    figure: "/images/dut/method-outdoor.svg",
-  },
-  {
     tab: "介面測試",
     lines: [
-      "依 O-RAN / 3GPP 規格逐項驗證各介面的程序與回應",
-      "SMO — O1 / O2 / A1 / R1",
-      "Near-RT RIC — E2 / A1 / O1",
-      "Non-RT RIC — A1 Policy / EI、R1(SME / DME / AIML)",
+      "將待測物接入驗測平台的網路架構中，依 3GPP 規格逐項驗證各介面的訊息與回應是否正確，" +
+        "自動產出介面一致性驗測報告。",
     ],
     figure: "/images/dut/method-interface.svg",
   },
   {
-    tab: "室內測試",
+    tab: "效能測試",
     lines: [
-      "於工研院 51 館 5 樓建立室內干擾情境,配置手機與 AMR 作為 5G UE。" +
-        "比較 IM xApp 啟用前後的網路表現,驗證干擾抑制效果。",
+      "將待測物部署至網路架構中，在實體場域比較啟用前後的網路表現，如傳輸速率與訊號品質，" +
+        "自動產出效能比較報告。",
     ],
-    figure: "/images/dut/method-indoor.svg",
+    figure: "/images/dut/method-performance.svg",
   },
 ];
 
@@ -145,7 +130,23 @@ function CatItem({ item }: { item: DutItem }) {
             圖
           </span>
         )}
-        <div className="war-room-cat-items">{item.items}</div>
+        <div className="war-room-cat-items">
+          {/* 放不下要換行時只在「，」後面換,不要在詞中間斷開
+              (實際踩過:「整個網 / 路」「調整基 / 站行為」)。
+              段與段之間用 <wbr>:可以換行、但不換行時不會多出空白 */}
+          {/* 文字裡的 \n 是指定的換行位置(照原稿),一定換 */}
+          {item.items.split("\n").map((line, l) => (
+            <Fragment key={l}>
+              {l > 0 && <br />}
+              {line.split(/(?<=，)/).map((part, i) => (
+                <Fragment key={i}>
+                  {i > 0 && <wbr />}
+                  <span className="whitespace-nowrap">{part}</span>
+                </Fragment>
+              ))}
+            </Fragment>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -161,7 +162,8 @@ export function RightWingDut() {
     <div className="war-room-slot">
       <div className="war-room-slot-title">待測物</div>
       {/* --tight:5 項要收緊間距,否則最後一項會被卡片裁到 */}
-      <div className="war-room-cat-list war-room-cat-list--fill war-room-cat-list--tight">
+      {/* --multiline:每項內文都是兩行,行距放寬(見 globals.css) */}
+      <div className="war-room-cat-list war-room-cat-list--fill war-room-cat-list--tight war-room-cat-list--multiline">
         {DUT_LIST.map((d) => (
           <CatItem key={d.name} item={d} />
         ))}

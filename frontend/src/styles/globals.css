@@ -2177,6 +2177,12 @@ html.wall-mode .war-room-cat-list--tight .war-room-cat-icon {
   width: calc(60px * var(--wall));
   height: calc(60px * var(--wall));
 }
+/* 內文兩行的清單(待測物):行高從 1.35 放到 1.55。
+   字型 / 字級跟隔壁「測試設備」完全相同;那格每項只有一行看不出行距,
+   兩行疊起來就顯得擠。只加在這一格,測試設備不動。 */
+html.wall-mode .war-room-cat-list--multiline .war-room-cat-items {
+  line-height: 1.55;
+}
 /* 一個項目:標題一行,底下 icon + 內容並排(仿參考圖) */
 html.wall-mode .war-room-cat {
   display: flex;
