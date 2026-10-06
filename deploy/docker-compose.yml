@@ -124,6 +124,8 @@ services:
     volumes:
       # 樣板:官方 entrypoint 會 envsubst 後輸出成 /etc/nginx/nginx.conf
       - ./nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
+      # HTTPS 自簽憑證(不進版控;重產方式見 nginx.conf.template 的 443 段)
+      - ./certs:/etc/nginx/certs:ro
     environment:
       NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx
       # 只替換 RIC_* 前綴,避免動到 nginx 自己的 host / remote_addr 等變數
@@ -144,10 +146,13 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # 單一入口 —— ?wall=left / center / right 切畫面。
-    # ⚠ 這是唯一對外的埠。其餘服務一律綁 127.0.0.1:上面那些埠只給本機除錯
-    #   用,不能再對 0.0.0.0 發布 —— 2026-09-18 就是因為 Next.js 直接曝露在
-    #   0.0.0.0:3005(繞過 nginx)被植入 XMRig 挖礦程式。
-    ports: ["${IVT_NGINX_PORT:-8080}:80"]
+    # ⚠ 這是唯一對外的入口(HTTP + HTTPS 兩個埠,都進同一個 nginx)。其餘服務一律綁
+    #   127.0.0.1:上面那些埠只給本機除錯用,不能再對 0.0.0.0 發布 —— 2026-09-18
+    #   就是因為 Next.js 直接曝露在 0.0.0.0:3005(繞過 nginx)被植入 XMRig 挖礦程式。
+    ports:
+      - "${IVT_NGINX_PORT:-8080}:80"
+      # HTTPS(語音輸入需要),自簽憑證
+      - "${IVT_NGINX_TLS_PORT:-38443}:443"
     depends_on: [frontend, backend-web, backend-ws, mediamtx]
 
 volumes:

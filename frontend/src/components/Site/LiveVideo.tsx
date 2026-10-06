@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Maximize2, Pause, Play, Volume2 } from "lucide-react";
 
+import { FieldHlsVideo } from "./FieldHlsVideo";
 import { HlsPlayer } from "./HlsPlayer";
 
 /**
@@ -111,6 +112,17 @@ export function LiveVideo({
   // 直接用 <img> 吃 multipart 串流,不進 hls.js。元件卸載瀏覽器就會斷線 ——
   // 上游同時只允許 3 路,不看要真的移除元素。
   if (src && isMjpeg(src)) return <MjpegVideo src={src} emptyText={emptyText} badge={badge} />;
+  // 場域攝影機的 HLS:展示用(不顯示控制列、填滿整格、轉圈與標籤跟其他格一致)。
+  // 只認 /hls/field-* —— DUT 牆等其他地方的 HLS 維持原本的 HlsPlayer,不跟著改
+  if (src && src.startsWith("/hls/field-"))
+    return (
+      <FieldHlsVideo
+        src={src}
+        badge={<Badge kind={badge} />}
+        spinner={<span className="video-spinner" />}
+        messageClassName="field-hls-message"
+      />
+    );
   if (src) return <HlsPlayer src={src} />;
   return (
     <div className="video-placeholder">

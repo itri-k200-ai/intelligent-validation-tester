@@ -45,11 +45,17 @@ export function SceneMap3D({
   scene,
   tracks,
   uav,
+  pixelRatio = 1,
 }: {
   scene: FieldScene;
   tracks: SceneTrack[];
   /** 無人機目前位置;altM 是相對起飛點的高度(上游 alt_rel) */
   uav: (XY & { altM?: number | null }) | null;
+  /**
+   * 畫布的像素比。牆面維持 1(版面 px 已經是實體像素的 3 倍);
+   * 一般 / 手機版傳 devicePixelRatio,不然在高解析螢幕上會糊。
+   */
+  pixelRatio?: number;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const ctx = useRef<{
@@ -66,8 +72,8 @@ export function SceneMap3D({
     const host = hostRef.current;
     if (!host) return;
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    // 牆面的版面 px 已經是實體像素的 3 倍,不必再乘裝置像素比
-    renderer.setPixelRatio(1);
+    // 牆面的版面 px 已經是實體像素的 3 倍,不必再乘裝置像素比(預設 1)
+    renderer.setPixelRatio(pixelRatio);
     renderer.domElement.style.display = "block";
     renderer.domElement.style.width = "100%";
     renderer.domElement.style.height = "100%";
@@ -197,7 +203,7 @@ export function SceneMap3D({
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [scene]);
+  }, [scene, pixelRatio]);
 
   // ── 動態:軌跡、無人機、視角(資料每次更新都重畫)──
   useEffect(() => {

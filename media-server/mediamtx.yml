@@ -29,6 +29,18 @@ hlsSegmentMaxSize: 50M
 webrtc: no
 
 paths:
+  # 場域測試:室外固定攝影機(52 館屋頂)。來源在場域網段的 MediaMTX,手機 / 院外連不到,
+  # 所以由這裡向它拉一路,再經 nginx 的 /hls/ 發給所有觀看的人(牆面、/field)。
+  # 有人看才拉(sourceOnDemand),沒人看就斷,不佔場域端的頻寬。
+  # ⚠ 來源是 H.265(HEVC)4K 30fps 約 6.8 Mbps:原樣轉送、不轉檔。瀏覽器要能硬體解 H.265
+  #   (Windows / Mac 的 Chrome、Edge 與 Safari 多半可以;Firefox 不行)。
+  # 名稱以 field- 開頭:前端靠這個前綴改用牆面版的播放器(見 LiveVideo / FieldHlsVideo)。
+  field-b52-roof:
+    source: rtsp://192.168.145.61:8554/B52_Roof
+    sourceOnDemand: yes
+    sourceOnDemandStartTimeout: 15s
+    sourceOnDemandCloseAfter: 15s
+    rtspTransport: tcp
   all_others:
     source: publisher
     sourceOnDemand: no

@@ -14,8 +14,8 @@ import {
 
 import { SceneMap3D } from "@/components/FieldTest/SceneMap3D";
 import { ReplayPlayer } from "@/components/FieldTest/ReplayPlayer";
+import { RADIO_RING, RouteMap } from "@/components/FieldTest/RouteMap";
 import { LiveVideo } from "@/components/Site/LiveVideo";
-import type { FieldBackdrop, FloorPlan, FloorRect } from "@/config/floorPlans";
 import {
   FIELD_SCENARIOS,
   type FieldScenario,
@@ -28,14 +28,25 @@ import { useFieldTestMission } from "@/hooks/FieldTest/useFieldTestMission";
 import { useFieldTestReplay, type ReplayCamera } from "@/hooks/FieldTest/useFieldTestReplay";
 import { useReplayCursor } from "@/hooks/FieldTest/useReplayCursor";
 import { useFieldTestScene } from "@/hooks/FieldTest/useFieldTestScene";
-import { cameraSources } from "@/lib/fieldCameras";
-import { formatRate, pickRateUnit } from "@/lib/formatRate";
+import {
+  CHART_SURFACE,
+  PHASE,
+  PROGRESS_COLOR,
+  STAGE_COLOR,
+  STAGE_LABEL,
+  currentStage,
+  emptyMission,
+  runTime,
+  signalReadings,
+  vehicleReadings,
+  type Reading,
+} from "@/lib/fieldView";
+import { pickRateUnit } from "@/lib/formatRate";
 import { firstGeo, makeGeoProjector, projectMission } from "@/lib/geoProjection";
 import type {
   FieldMission,
   FieldRun,
   LinkQuality,
-  FieldProcess,
   FieldSample,
   FieldScenarioId,
   FieldVehicleStatus,
@@ -108,27 +119,6 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
       replaying={replaying}
     />
   );
-}
-
-/** 沒資料時的骨架:兩趟都 pending、沒有樣本,其餘取設定檔(影像照樣要播) */
-function emptyMission(sc: FieldScenario, scenario: FieldScenarioId): FieldMission {
-  const blank = (phase: OptimizationPhase): FieldRun => ({
-    phase,
-    status: "pending",
-    progress: 0,
-    reachedWaypoints: 0,
-    position: null,
-    link: null,
-    samples: [],
-  });
-  return {
-    testcase: sc.testcase,
-    route: sc.route,
-    currentRun: 1,
-    runs: [blank("before"), blank("after")],
-    vehicle: {},
-    cameras: cameraSources(scenario),
-  };
 }
 
 // ── 版面:左即時、右結果(室外)─────────────────────────────────────────
@@ -283,6 +273,7 @@ function LiveResultsLayout({
               title={sc.live.vehicleTitle}
               vehicle={{ ...mission.vehicle, ...live?.vehicle, ...(replayVehicle ?? {}) }}
               position={livePos ?? live?.position ?? run?.position ?? null}
+              geo={geoNow}
             />
             <SignalSub title={sc.live.signalTitle} link={replayLink ?? baseLink} />
           </div>
@@ -641,40 +632,6 @@ function Sub({
 }
 
 /**
- * 牆上那個時間要標什麼、顯示哪個時刻。
- *
- * 已結束的那一筆標「驗測結束時間」—— 牆上多半在看跑完的紀錄或回放,結束時間
- * 比開始時間有意義。平台的紀錄沒有結束時間,後端用最後一筆樣本的時間代替。
- * 還在跑的那筆沒有「結束」可言,照舊標開始時間(也才看得出跑多久了)。
- * 兩個都沒有就回 null,呼叫端整段不顯示,不要在牆上留一格「—」。
- */
-function runTime(mission: FieldMission): { label: string; at: string } | null {
-  const ended = mission.endedAt ?? null;
-  const at = ended ?? mission.createdAt ?? null;
-  if (!at) return null;
-  return {
-    label: ended ? "驗測結束時間" : "驗測開始時間",
-    at: new Date(at * 1000).toLocaleString("zh-TW", {
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }),
-  };
-}
-
-type Reading = {
-  label: string;
-  /** 單位放在標籤後面(欄寬窄,接在數值後面會被截斷) */
-  unit?: string;
-  value: string | number | null;
-  tone?: string;
-  /** 數值字級(Tailwind class) */
-  size?: string;
-};
-
-/**
  * 3 欄 × 2 列的即時數值:標籤(含單位)在上、數值在下。
  * 小卡縮到 1632 後欄距收成 gap-x-3(36):三欄各 478,裝得下最寬的「RSRP dBm」(474)。
  */
@@ -704,46 +661,6 @@ function MetricGrid({ items }: { items: Reading[] }) {
 
 // ── 即時數值小卡 ─────────────────────────────────────────────────────
 
-/** 載具即時數值:室外 UAV 與室內 AMR 各看各的參數,都是 3 欄 × 2 列。上游沒給就顯示 — */
-function vehicleReadings(
-  scenario: FieldScenarioId,
-  v: FieldVehicleStatus,
-  position: { x: number; y: number } | null,
-  /** UAV 的 GPS —— 回放時是當下那一筆樣本的,即時時是 /live 的 */
-  geo: { lat: number; lon: number } | null,
-): Reading[] {
-  const battery: Reading = {
-    label: "電量",
-    unit: "%",
-    value: v.batteryPct ?? null,
-    tone: v.batteryPct !== undefined && v.batteryPct < 30 ? "text-danger" : undefined,
-  };
-  if (scenario === "indoor") {
-    // 照 AMR 即時遙測畫面:SLAM 位置 x / y、yaw、定位品質,再加上速度與電量
-    return [
-      { label: "位置 x", unit: "m", value: position?.x.toFixed(1) ?? null },
-      { label: "位置 y", unit: "m", value: position?.y.toFixed(1) ?? null },
-      // 顯示上游的 yaw(-180~180,0 = 朝 +x);地圖箭頭另外用 headingDeg 換算過。
-      // 標籤不用「航向」—— 那是羅盤方位(0 = 正北),跟這個值的基準不同,會誤導。
-      { label: "車頭方向", unit: "°", value: (v.yawDeg ?? v.headingDeg)?.toFixed(0) ?? null },
-      { label: "定位品質", value: v.localizationPct ?? null },
-      { label: "速度", unit: "m/s", value: v.speedMps?.toFixed(2) ?? null },
-      battery,
-    ];
-  }
-  return [
-    // 欄寬窄,「相對高度 m」會被截斷
-    { label: "高度", unit: "m", value: v.altitudeM?.toFixed(1) ?? null },
-    { label: "速度", unit: "m/s", value: v.speedMps?.toFixed(1) ?? null },
-    { label: "垂直速度", unit: "m/s", value: v.verticalSpeedMps?.toFixed(1) ?? null },
-    battery,
-    // 經緯度拆成兩格:合在一格要放 18 個字,欄寬塞不下。
-    // 取 5 位小數 ≈ 1 公尺,牆上看得出位置在動又不會被截斷。
-    { label: "緯度", unit: "°", value: geo ? geo.lat.toFixed(5) : null },
-    { label: "經度", unit: "°", value: geo ? geo.lon.toFixed(5) : null },
-  ];
-}
-
 /** 飛行狀態 / 行駛狀態 */
 function VehicleSub({
   scenario,
@@ -768,24 +685,6 @@ function VehicleSub({
   );
 }
 
-/**
- * 通訊品質數值。欄位對齊外部平台的 /live —— 只有 SINR / RSRP / RSRQ / RTT /
- * 吞吐 DL / UL;SNR、RSSI、丟包上游沒有,所以兩個情境都不放。
- * (欄寬 502,「吞吐 DL」配上單位會被截,用 DL / UL。)
- */
-function signalReadings(link: LinkQuality | null): Reading[] {
-  // 吞吐量的單位跟著數值跑(kbps / Mbps / Gbps),不然閒置時 Mbps 會全是 0
-  const rate = (kbps: number | null | undefined) => formatRate(kbps);
-  return [
-    { label: "SINR", unit: "dB", value: link?.sinrDb?.toFixed(1) ?? null },
-    { label: "RSRP", unit: "dBm", value: link?.rsrpDbm?.toFixed(1) ?? null },
-    { label: "RSRQ", unit: "dB", value: link?.rsrqDb?.toFixed(1) ?? null },
-    { label: "RTT", unit: "ms", value: link?.rttMs?.toFixed(1) ?? null },
-    { label: "DL", ...rate(link?.dlKbps) },
-    { label: "UL", ...rate(link?.ulKbps) },
-  ];
-}
-
 /** UAV / AMR 通訊品質:目前這趟的鏈路數值 */
 function SignalSub({
   title,
@@ -800,320 +699,6 @@ function SignalSub({
     <Sub className={className} icon={Signal} title={title}>
       <MetricGrid items={signalReadings(link)} />
     </Sub>
-  );
-}
-
-// ── 測試路徑 ─────────────────────────────────────────────────────────
-
-/**
- * 路線圖:兩趟軌跡(啟用前 / 啟用後)與載具目前位置。
- *
- * 兩種底:
- *  - 有 backdrop(圖檔 + extent):用世界座標畫,軌跡取載具實際回報的座標 ——
- *    圖與座標同一個系,不必校正。視野自動縮到活動範圍,不然整層樓只有一小段有東西。
- *  - 沒有 backdrop:畫向量平面圖與規劃路線(室外沒有底圖,就只有路線)。
- */
-function RouteMap({
-  mission,
-  floorPlan,
-  backdrop,
-  livePosition,
-  realFrame = false,
-}: {
-  mission: FieldMission;
-  floorPlan?: FloorPlan;
-  backdrop?: FieldBackdrop;
-  /** 即時位置(來自 /live);沒有就用目前那趟的最後位置 */
-  livePosition?: { x: number; y: number } | null;
-  /**
-   * 軌跡與位置是真實座標(室外由 GPS 換算)—— 沒有底圖也照樣畫取樣軌跡,並且不畫
-   * 寫死的示意航線:兩者座標系不同,混在一起會讓人以為照著那條線飛。
-   */
-  realFrame?: boolean;
-}) {
-  // 用取樣軌跡(真實座標)還是示意航線 + 路徑點
-  const real = !!backdrop || realFrame;
-  // 規劃路線只在「畫在向量平面圖上」時才畫 —— 那時的路徑點是照實際樓層描的。
-  // 室外的路徑點(config 的 UAV_ROUTE)只是早期的版面示意,跟 GPS 對不上,等於假資料,
-  // 所以沒有位置資料時地圖寧可空著,也不畫它。
-  const planned = !real && !!floorPlan;
-  const { route, runs, vehicle } = mission;
-  const live = livePosition ?? runs[mission.currentRun]?.position ?? null;
-  const pts = (list: { x: number; y: number }[]) => list.map((p) => `${p.x},${-p.y}`).join(" ");
-
-  // 每趟的實際軌跡(樣本裡的座標);沒有座標的樣本(例如 UAV 只有 GPS)就沒有軌跡
-  const tracks = runs.map((r) => ({
-    phase: r.phase,
-    points: r.samples
-      .filter((s): s is typeof s & { x: number; y: number } =>
-        typeof s.x === "number" && typeof s.y === "number",
-      )
-      .map((s) => ({ x: s.x, y: s.y })),
-  }));
-
-  // 視野:有底圖就看「軌跡 + 目前位置」,並留邊、夾在底圖範圍內
-  const focus = [...tracks.flatMap((t) => t.points), ...(live ? [live] : [])];
-  const view = floorPlan?.view;
-  let minX: number;
-  let minY: number;
-  let spanX: number;
-  let spanY: number;
-  if (backdrop) {
-    const ext = backdrop.extent;
-    // 設了 view 就固定看那一塊 —— 鏡頭一直跟著軌跡縮放的話,牆上看不出 AMR 走到哪。
-    // 沒設才退回「框住軌跡 + 目前位置」(留 6 m 邊,夾在底圖範圍內)。
-    const margin = 6;
-    const box = backdrop.view ?? {
-      xMin: focus.length ? Math.max(ext.xMin, Math.min(...focus.map((p) => p.x)) - margin) : ext.xMin,
-      xMax: focus.length ? Math.min(ext.xMax, Math.max(...focus.map((p) => p.x)) + margin) : ext.xMax,
-      yMin: focus.length ? Math.max(ext.yMin, Math.min(...focus.map((p) => p.y)) - margin) : ext.yMin,
-      yMax: focus.length ? Math.min(ext.yMax, Math.max(...focus.map((p) => p.y)) + margin) : ext.yMax,
-    };
-    minX = box.xMin;
-    minY = -box.yMax;
-    spanX = Math.max(box.xMax - box.xMin, 1);
-    spanY = Math.max(box.yMax - box.yMin, 1);
-  } else if (realFrame) {
-    // 沒有底圖的真實座標(室外 GPS、場景還沒拿到):框住「軌跡 + 目前位置」並留邊。
-    // 範圍至少 40 m —— 只有一個點時才不會放大到什麼都看不出來
-    const xs = focus.length ? focus.map((p) => p.x) : [0];
-    const ys = focus.length ? focus.map((p) => p.y) : [0];
-    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-    const half = Math.max(20, ((x1 - x0) / 2) * 1.1, ((y1 - y0) / 2) * 1.1);
-    const cx = (x0 + x1) / 2;
-    const cy = (y0 + y1) / 2;
-    minX = cx - half;
-    minY = -(cy + half);
-    spanX = half * 2;
-    spanY = half * 2;
-  } else {
-    const extent = view
-      ? [
-          { x: view.x1, y: view.y1 },
-          { x: view.x2, y: view.y2 },
-        ]
-      : [...route, ...(live ? [live] : [])];
-    const xs = extent.map((p) => p.x);
-    const ys = extent.map((p) => -p.y);
-    minX = Math.min(...xs);
-    minY = Math.min(...ys);
-    spanX = Math.max(...xs) - minX;
-    spanY = Math.max(...ys) - minY;
-  }
-  // u = 一個視覺單位:線寬、點大小都乘它,範圍不管幾公尺比例都一致
-  const u = Math.max(spanX, spanY) / 300 || 1;
-  // view / backdrop 已經框好範圍,留一點點邊就好;室外沒有底圖,路線要留寬一點
-  const pad = (view || real ? 3 : 20) * u;
-  const start = route[0];
-
-  return (
-    <div className="relative min-h-0 flex-1">
-      <svg
-        className="absolute inset-0 h-full w-full"
-        viewBox={`${minX - pad} ${minY - pad} ${spanX + pad * 2} ${spanY + pad * 2}`}
-        preserveAspectRatio="xMidYMid meet"
-        role="img"
-        aria-label="測試路徑與兩趟軌跡"
-      >
-        <defs>
-          {/* SLAM 掃出來的牆是白的,直接疊在深底上又亮又雜。染成牆面的青色系、
-              壓低亮度,變成「藍圖」的感覺,軌跡與載具才跳得出來 */}
-          <filter id="slam-tint" colorInterpolationFilters="sRGB">
-            <feColorMatrix
-              type="matrix"
-              values="0 0 0 0 0.42  0 0 0 0 0.78  0 0 0 0 0.85  0 0 0 0.5 0"
-            />
-          </filter>
-          {/* 軌跡與載具的柔光:牆離得遠,純線條看起來會太細 */}
-          <filter id="track-glow" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation={1.6 * u} result="b" />
-            <feMerge>
-              <feMergeNode in="b" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <clipPath id="map-clip">
-            <rect
-              x={minX - pad}
-              y={minY - pad}
-              width={spanX + pad * 2}
-              height={spanY + pad * 2}
-              rx={pad}
-            />
-          </clipPath>
-          <pattern
-            id="map-grid"
-            x={0}
-            y={0}
-            width={5}
-            height={5}
-            patternUnits="userSpaceOnUse"
-          >
-            <path d="M5 0 L0 0 L0 5" fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth={0.6 * u} />
-          </pattern>
-        </defs>
-        {backdrop && (
-          // 整塊裁成圓角面板 —— 底圖比視野大,不裁的話會溢出到 SVG 的留白區
-          <g clipPath="url(#map-clip)">
-            {/* 底板 + 5 m 格線:讓地圖看起來是一塊面板,也給得出距離感 */}
-            <rect
-              x={minX - pad}
-              y={minY - pad}
-              width={spanX + pad * 2}
-              height={spanY + pad * 2}
-              fill="rgba(10,23,47,0.55)"
-            />
-            <image
-              href={backdrop.src}
-              x={backdrop.extent.xMin}
-              y={-backdrop.extent.yMax}
-              width={backdrop.extent.xMax - backdrop.extent.xMin}
-              height={backdrop.extent.yMax - backdrop.extent.yMin}
-              preserveAspectRatio="none"
-              filter="url(#slam-tint)"
-            />
-            <rect
-              x={minX - pad}
-              y={minY - pad}
-              width={spanX + pad * 2}
-              height={spanY + pad * 2}
-              fill="url(#map-grid)"
-            />
-            <rect
-              x={minX - pad}
-              y={minY - pad}
-              width={spanX + pad * 2}
-              height={spanY + pad * 2}
-              rx={pad}
-              fill="none"
-              stroke="rgba(255,255,255,0.12)"
-              strokeWidth={0.8 * u}
-            />
-          </g>
-        )}
-        {!backdrop && floorPlan && <FloorPlanLayer plan={floorPlan} u={u} />}
-        {planned && (
-          <polyline
-            points={pts(route)}
-            fill="none"
-            stroke="rgba(255,255,255,0.35)"
-            strokeWidth={2 * u}
-            strokeDasharray={`${7 * u} ${6 * u}`}
-            strokeLinejoin="round"
-          />
-        )}
-        {/* 先畫啟用前、再畫啟用後,重疊的路段以啟用後為準 */}
-        {real
-          ? tracks.map((t) =>
-              t.points.length > 1 ? (
-                <g key={t.phase} filter="url(#track-glow)">
-                  <polyline
-                    points={pts(t.points)}
-                    fill="none"
-                    stroke={PHASE[t.phase].color}
-                    strokeWidth={2.5 * u}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-                  {/* 起點畫空心圈、終點畫實心點 —— 一眼看得出走的方向 */}
-                  <circle
-                    cx={t.points[0].x}
-                    cy={-t.points[0].y}
-                    r={4 * u}
-                    fill="none"
-                    stroke={PHASE[t.phase].color}
-                    strokeWidth={1.8 * u}
-                  />
-                  <circle
-                    cx={t.points[t.points.length - 1].x}
-                    cy={-t.points[t.points.length - 1].y}
-                    r={3.2 * u}
-                    fill={PHASE[t.phase].color}
-                  />
-                </g>
-              ) : null,
-            )
-          : planned &&
-            runs.map((r) =>
-              r.reachedWaypoints > 0 ? (
-                <polyline
-                  key={r.phase}
-                  points={pts([...route.slice(0, r.reachedWaypoints), ...(r.position ? [r.position] : [])])}
-                  fill="none"
-                  stroke={PHASE[r.phase].color}
-                  strokeWidth={2.5 * u}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                />
-              ) : null,
-            )}
-        {/* RU 疊在軌跡上面,路徑經過 RU 時才不會被蓋掉。RU 座標屬於向量平面圖 */}
-        {!backdrop &&
-          floorPlan?.radios.map((ru) => (
-            <g key={ru.id} transform={`translate(${ru.x} ${-ru.y})`}>
-              <circle r={5.5 * u} fill={CHART_SURFACE} stroke={RADIO_RING} strokeWidth={1.2 * u} />
-              <circle r={2 * u} fill={RADIO_RING} />
-            </g>
-          ))}
-        {planned && start && (
-          <circle cx={start.x} cy={-start.y} r={6 * u} fill="#4C8DFF" stroke="#0A172F" strokeWidth={1.5 * u} />
-        )}
-        {live && (
-          <g className="field-live-marker" filter="url(#track-glow)" transform={`translate(${live.x} ${-live.y})`}>
-            {/* 標記整體縮約三成(光暈 16→11、外圈 11→7.5、箭頭 1.2→0.85):
-                軌跡線收細之後,原本的尺寸會把一小段路徑整個蓋住 */}
-            <circle r={11 * u} fill="#80FFE8" fillOpacity={0.18} />
-            <circle r={7.5 * u} fill="none" stroke="#80FFE8" strokeOpacity={0.55} strokeWidth={0.8 * u} />
-            {/* 箭頭圖形朝上、SVG rotate 順時針,headingDeg 後端已由 SLAM yaw 換算過(0 = 正北) */}
-            <path
-              d="M0,-10 L7.5,8 L0,4 L-7.5,8 Z"
-              transform={`rotate(${vehicle.headingDeg ?? 0}) scale(${0.85 * u})`}
-              fill="#80FFE8"
-              stroke="#0A172F"
-              strokeWidth={1.2}
-            />
-          </g>
-        )}
-      </svg>
-    </div>
-  );
-}
-
-/** 平面圖的線:壓暗,路徑與載具才跳得出來 */
-const PLAN_LINE = "rgba(255,255,255,0.22)";
-const PLAN_OUTLINE = "rgba(255,255,255,0.45)";
-const RADIO_RING = "rgba(255,255,255,0.85)";
-
-/** 室內平面圖底圖:外牆、隔間、電梯樓梯(交叉線);RU 由 RouteMap 疊在軌跡上。只畫線不寫字,地圖跨拼接縫 */
-function FloorPlanLayer({ plan, u }: { plan: FloorPlan; u: number }) {
-  const box = (r: FloorRect) => ({
-    x: Math.min(r.x1, r.x2),
-    y: -Math.max(r.y1, r.y2),
-    width: Math.abs(r.x2 - r.x1),
-    height: Math.abs(r.y2 - r.y1),
-  });
-  return (
-    <g fill="none" stroke={PLAN_LINE} strokeWidth={0.8 * u}>
-      {plan.rooms.map((r, i) => (
-        <rect key={`room-${i}`} {...box(r)} fill="rgba(255,255,255,0.03)" />
-      ))}
-      {plan.cores.map((r, i) => {
-        const b = box(r);
-        return (
-          <g key={`core-${i}`}>
-            <rect {...b} />
-            <path
-              d={`M${b.x},${b.y} L${b.x + b.width},${b.y + b.height} M${b.x + b.width},${b.y} L${b.x},${b.y + b.height}`}
-              strokeWidth={0.5 * u}
-            />
-          </g>
-        );
-      })}
-      {plan.walls.map((w, i) => (
-        <line key={`wall-${i}`} x1={w.x1} y1={-w.y1} x2={w.x2} y2={-w.y2} />
-      ))}
-      <rect {...box(plan.outline)} stroke={PLAN_OUTLINE} strokeWidth={1.4 * u} />
-    </g>
   );
 }
 
@@ -1302,8 +887,6 @@ function YAxisTick(props: {
 const X_TICK_S = 30;
 const AXIS_STROKE = "rgba(255,255,255,0.2)";
 const GRID_STROKE = "rgba(255,255,255,0.08)";
-/** 圖表底色(小卡疊在大卡上的近似色),端點外圈用它隔開線條 */
-const CHART_SURFACE = "#16263A";
 const TOOLTIP_BOX = {
   background: "rgba(10,23,47,0.94)",
   border: "3px solid rgba(255,255,255,0.2)",
@@ -1627,58 +1210,4 @@ function ThroughputCompare({
       />
     </div>
   );
-}
-
-// ── 對照表 ───────────────────────────────────────────────────────────
-
-/**
- * 兩趟的名稱與代表色(路線軌跡、進度條、折線、長條、圖例共用)。
- * 顏色用 dataviz 驗證器在深色底(#16263A)上驗過:亮度帶、彩度、色盲 / 一般視覺分辨度、
- * 對比都通過 —— 規範的 #FFC56B / #80FFE8 太亮,當系列色會失去層次。
- */
-const PHASE: Record<OptimizationPhase, { label: string; short: string; color: string }> = {
-  before: { label: "啟用前", short: "啟用前", color: "#C07F22" },
-  after: { label: "啟用後", short: "啟用後", color: "#1C9E88" },
-};
-/** 室內一整條的測試進度用這個色 —— 跟牆上其他綠色狀態一致,不代表哪一趟 */
-const PROGRESS_COLOR = "#1C9E88";
-/* 進度條的三段:兩趟維持原本的綠,中間的 xApp 安裝部署另外用藍標出來 ——
-   那一段是「牆上看不到載具在動」的時間,不標的話會以為卡住了。 */
-const STAGE_COLOR: Record<string, string> = {
-  before: PROGRESS_COLOR,
-  deploy: "#5AA9E6",
-  after: PROGRESS_COLOR,
-  all: PROGRESS_COLOR,
-};
-/* 三段的名稱。刻意用同一組詞 ——「app 部署」前 / 中 / 後,三個連著念就知道
-   整個驗測在做什麼:先跑一趟、裝上 app 等它起來、再跑一趟比較。
-   上游的階段標記室內叫「優化前/後」、室外叫「部署前/後」,兩邊不一致,
-   所以牆上不沿用它們的字,統一成這一組。 */
-const STAGE_LABEL: Record<string, string> = {
-  before: "app 部署前",
-  deploy: "app 部署中",
-  after: "app 部署後",
-  all: "",
-};
-
-/**
- * 標題列右側要顯示的字:現在走到三個階段的哪一個。
- *
- * 一律顯示階段,不顯示「已完成」/「失敗」—— 測試的成敗在別的地方交代,
- * 這一格只回答「進度條上的那個位置是哪一段」。
- *
- * 回放時 process.current 是 null(歷史紀錄一律已完成),所以改用回放游標的
- * 百分比反推步數,階段才會跟著條子一起走。
- */
-function currentStage(
-  p: FieldProcess | null | undefined,
-  percent: number | null,
-): string | undefined {
-  if (!p?.stages?.length || !p.total) return undefined;
-  const at =
-    percent !== null
-      ? Math.min(p.total - 1, Math.floor((percent / 100) * p.total))
-      : (p.current ?? p.done ?? 0);
-  const seg = p.stages.find((x) => at >= x.from && at < x.to) ?? p.stages[p.stages.length - 1];
-  return STAGE_LABEL[seg.kind] || undefined;
 }

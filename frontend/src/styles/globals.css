@@ -3493,3 +3493,20 @@ html.wall-mode .adapter-warn {
   font-size: calc(28px * var(--wall));
   color: rgba(255, 197, 107, 0.9);
 }
+
+/* 一般 / 手機版(FieldTestResponsive)的回放播放器:標籤用一般字級,
+   .field-replay-badge 本身是照牆面尺寸定的(2rem),在手機的小格子裡會蓋掉半個畫面 */
+.field-rwd-replay .field-replay-badge {
+  top: 0.5rem;
+  right: 0.5rem;
+  bottom: auto;
+  padding: 0.125rem 0.5rem;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* 中牆的 HLS 格子:瀏覽器不能解 H.265 時的說明文字(見 FieldHlsVideo) */
+html.wall-mode .field-hls-message {
+  font-size: calc(22px * var(--wall));
+  line-height: 1.5;
+}

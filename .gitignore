@@ -43,3 +43,9 @@ backend/.venv-mig/
 
 # Design reference (too large for git)
 *.pdf
+
+# pdf.js 的 worker,build 時由 node_modules 複製過來(見 package.json prebuild)
+frontend/public/pdf.worker.min.mjs
+
+# HTTPS 自簽憑證(私鑰不進版控;重產方式見 deploy/nginx.conf.template 的 443 段)
+deploy/certs/

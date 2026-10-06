@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "apps.overview",
     "apps.documents",
     "apps.agent_sessions",
+    "apps.assistant",
     "apps.selection",
     "apps.field_tests",
 ]
@@ -186,6 +187,11 @@ FIELD_TEST_NOTIFY_TOKEN = env("FIELD_TEST_NOTIFY_TOKEN", default="")
 # 只是把它標成 notified,不會轉發,所以牆面輪詢時順便去問它的 /autoTest/history。
 # 留空 = 不問(例如對方改成直接轉發給我們之後就可以關掉)。
 FIELD_TEST_ADAPTER_BASE = env("FIELD_TEST_ADAPTER_BASE", default="")
+
+# 場域測試小助理(/field)串接的網管 agent —— Infrastructure Operator Co-pilot(nmagent 架構)。
+# 留空就關掉,前端會退回本地的關鍵字回覆。runner:claude / ollama(ollama 要對方有載入模型)。
+ASSISTANT_AGENT_BASE = env("ASSISTANT_AGENT_BASE", default="http://10.194.87.115:8002")
+ASSISTANT_AGENT_RUNNER = env("ASSISTANT_AGENT_RUNNER", default="claude")
 # 情境 → 控制器(cid 來自 GET /api/ctrl-conns、ref 如 amr-01)與要跑的方案
 FIELD_TEST_TARGETS = env.json(
     "FIELD_TEST_TARGETS",

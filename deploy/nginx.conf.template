@@ -42,6 +42,23 @@ http {
     # 單一入口。前端一份 image,靠 URL ?wall=left|center|right 切畫面。
     server {
         listen 80;
+        # HTTPS —— 語音輸入(麥克風)只能在 HTTPS 下用,所以 /field 的小助理需要它。
+        # 對外發布成 38443(見 docker-compose.yml),原本的 38080 HTTP 照常保留。
+        #
+        # 憑證是自簽的(deploy/certs/,不進版控),每台裝置第一次開會跳「不安全」警告,
+        # 按「繼續前往」之後就能用。之後有網域與正式憑證,換掉這兩個檔案即可。重產:
+        #   openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 825 \
+        #     -keyout deploy/certs/ivt.key -out deploy/certs/ivt.crt -subj "/CN=60.250.213.44" \
+        #     -addext "subjectAltName=IP:60.250.213.44,IP:10.194.87.120,IP:127.0.0.1,DNS:localhost" \
+        #     -addext "extendedKeyUsage=serverAuth"
+        listen 443 ssl;
+        ssl_certificate     /etc/nginx/certs/ivt.crt;
+        ssl_certificate_key /etc/nginx/certs/ivt.key;
+        ssl_protocols       TLSv1.2 TLSv1.3;
+        # HTTPS 走 HTTP/2:同一條連線多工,永不結束的 MJPEG 串流不會再把輪詢擠到排隊
+        # (HTTP/1.1 每個來源只開 6 條連線 —— 中牆切換卡住就是這個)。
+        # 只對 TLS 生效;瀏覽器在 80 上照樣講 HTTP/1.1。
+        http2 on;
         server_name _;
 
         # ── RICtester 整合(電視牆資料來源)──
@@ -95,6 +112,18 @@ http {
             proxy_set_header   X-Forwarded-Proto $scheme;
         }
 
+        # 小助理 → 網管 agent 的串流(SSE)。不能緩衝(不然整段答完才一次送到),
+        # 也不能用預設 60 秒逾時(agent 一輪常超過一分鐘;中間有 15 秒一次的心跳)。
+        location /api/assistant/ {
+            proxy_pass         http://backend_web;
+            proxy_http_version 1.1;
+            proxy_buffering    off;
+            proxy_read_timeout 10m;
+            proxy_set_header   Host              $host;
+            proxy_set_header   X-Real-IP         $remote_addr;
+            proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header   X-Forwarded-Proto $scheme;
+        }
         location /api/ {
             proxy_pass         http://backend_web;
             proxy_set_header   Host              $host;
@@ -131,6 +160,12 @@ http {
         location /hls/ {
             proxy_pass         http://ivt_hls/;
             proxy_set_header   Host              $host;
+            # mediamtx 第一次請求會先 302 到 /<路徑>/index.m3u8?cookieCheck=1 —— 那是絕對路徑、
+            # 沒有 /hls 前綴,不改寫的話瀏覽器會被轉到前端,拿到 Next 的 404 頁
+            proxy_redirect     / /hls/;
+            # 轉址維持相對路徑:絕對網址會用 nginx 容器內的埠(80 / 443),對外的 38080 / 38443 就不見了
+            absolute_redirect  off;
+            proxy_buffering    off;
             add_header         Cache-Control     no-cache;
         }
 
