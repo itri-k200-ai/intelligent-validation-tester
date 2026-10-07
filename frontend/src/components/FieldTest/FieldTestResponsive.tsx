@@ -53,7 +53,14 @@ const TABS: { id: FieldScenarioId; label: string }[] = [
   { id: "indoor", label: "室內" },
 ];
 
-export function FieldTestResponsive() {
+export function FieldTestResponsive({
+  title = "智慧網路場域測試",
+  controls,
+}: {
+  title?: string;
+  /** 操作區塊(驗測控制頁 /field/control 用);檢視頁 /field 不給,維持只能看 */
+  controls?: (p: { scenario: FieldScenarioId; running: boolean }) => ReactNode;
+} = {}) {
   const scenario = useFieldScenarioStore((s) => s.scenario);
   const pickScenario = useFieldScenarioStore((s) => s.pickScenario);
   const v = useFieldView(scenario);
@@ -67,7 +74,7 @@ export function FieldTestResponsive() {
       {/* ── 標題列:情境分頁 + 狀態 ── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-medium tracking-tight text-white md:text-2xl">智慧網路場域測試</h1>
+          <h1 className="text-xl font-medium tracking-tight text-white md:text-2xl">{title}</h1>
           <StatusChip running={v.running} replaying={v.replaying} hasData={v.hasData} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -98,6 +105,8 @@ export function FieldTestResponsive() {
         <Meta k="測試項目" v={mission.testcase.name} />
         <Meta k={at?.label ?? "驗測時間"} v={at?.at ?? "—"} />
       </dl>
+
+      {controls?.({ scenario, running: v.running })}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         {/* ── 右欄(手機排在前面):進度 + 路徑 + 測試數據 ── */}
