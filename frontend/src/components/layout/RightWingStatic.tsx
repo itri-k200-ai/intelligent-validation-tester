@@ -1,5 +1,5 @@
 "use client";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 /**
  * 右副牆下半部三格的「靜態」內容:待測物 / 測試設備 / 測試方法。
@@ -200,6 +200,34 @@ export function RightWingEquip() {
 export function RightWingMethod() {
   const [page, setPage] = useState(0);
   const total = METHODS.length;
+
+  // 每一頁的示意圖先各抓一次,存成記憶體裡的 blob 網址,換頁就用它。
+  //
+  // 為什麼不是 new Image() 預載就好:圖檔的快取是 max-age=0,實測每換一個新的 <img>
+  // Chrome 都還是會先回伺服器確認一次,網路慢時就「字換了、圖慢半拍」(模擬 2 秒延遲:
+  // 每次換頁都等滿 2 秒)。blob 網址不經網路,換頁當下就有圖。
+  const [blobs, setBlobs] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let alive = true;
+    const made: string[] = [];
+    METHODS.forEach(({ figure }) => {
+      if (!figure) return;
+      fetch(figure)
+        .then((r) => (r.ok ? r.blob() : Promise.reject()))
+        .then((b) => {
+          const url = URL.createObjectURL(b);
+          made.push(url);
+          if (alive) setBlobs((m) => ({ ...m, [figure]: url }));
+        })
+        .catch(() => {
+          /* 抓不到就用原本的網址(照舊從網路拿) */
+        });
+    });
+    return () => {
+      alive = false;
+      made.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, []);
   const current = METHODS[page];
   const go = (d: number) => setPage((p) => (p + d + total) % total);
 
@@ -227,7 +255,15 @@ export function RightWingMethod() {
           ‹
         </button>
         {current.figure ? (
-          <img className="war-room-method-figure" src={current.figure} alt="" />
+          // key 換成圖檔路徑:換頁就換一個新的 <img>,不是只改同一個的 src ——
+          // 只改 src 的話,新圖載完之前瀏覽器會一直顯示舊圖(字換了、圖還是上一頁的)。
+          // src 用預先抓好的 blob 網址(見上面),新的 <img> 不用等網路;動畫也會從第 ① 步重播
+          <img
+            key={current.figure}
+            className="war-room-method-figure"
+            src={blobs[current.figure] ?? current.figure}
+            alt=""
+          />
         ) : (
           /* 示意圖待補 —— 圖檔放 public/images/dut/ 後把 figure 填成路徑 */
           <div className="war-room-method-figure war-room-method-figure--todo">
