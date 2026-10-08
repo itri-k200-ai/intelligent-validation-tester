@@ -1,5 +1,5 @@
 "use client";
-import { Bot, Plane, Route, Signal, Video, type LucideIcon } from "lucide-react";
+import { Bot, Moon, Plane, Route, Signal, Sun, Video, type LucideIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   CartesianGrid,
@@ -19,8 +19,9 @@ import { SceneMap3D } from "@/components/FieldTest/SceneMap3D";
 import { FieldHlsVideo } from "@/components/Site/FieldHlsVideo";
 import { SnapshotVideo, VideoBadge } from "@/components/Site/SnapshotVideo";
 import type { TrendSpec } from "@/config/fieldScenarios";
+import { useFieldTheme } from "@/hooks/FieldTest/useFieldTheme";
 import { useFieldView } from "@/hooks/FieldTest/useFieldView";
-import { frameAt, replayCameraFor, snapshotSources } from "@/lib/fieldCameras";
+import { frameAt, liveInReplay, replayCameraFor, snapshotSources } from "@/lib/fieldCameras";
 import {
   PHASE,
   PROGRESS_COLOR,
@@ -68,6 +69,7 @@ export function FieldTestResponsive({
   const at = runTime(mission);
   const dpr = useDpr();
   const status = statusLabel(v.running, v.replaying, v.hasData);
+  const { theme, toggle } = useFieldTheme();
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-4 pb-24">
@@ -96,6 +98,15 @@ export function FieldTestResponsive({
           ))}
         </div>
         <FieldReportDialog mission={mission} status={status} />
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={theme === "dark" ? "切換成亮色模式" : "切換成暗色模式"}
+          title={theme === "dark" ? "亮色模式" : "暗色模式"}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white transition-colors hover:bg-white/10"
+        >
+          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
         </div>
       </div>
 
@@ -113,7 +124,7 @@ export function FieldTestResponsive({
         <div className="flex min-w-0 flex-col gap-4 lg:order-2 lg:col-span-7">
           <Panel icon={Route} title={sc.routeTitle}>
             <Progress mission={mission} percent={v.percent} stage={v.stage} />
-            <div className="mt-3 flex h-56 flex-col sm:h-80 lg:h-[420px]">
+            <div className="field-keep-dark field-map-surface mt-3 flex h-56 flex-col sm:h-80 lg:h-[420px]">
               {scenario === "outdoor" && v.scene ? (
                 <SceneMap3D scene={v.scene} tracks={v.sceneTracks} uav={v.sceneUav} pixelRatio={dpr} />
               ) : (
@@ -139,7 +150,9 @@ export function FieldTestResponsive({
 
         {/* ── 左欄:數值 + 影像(桌機影像在上,手機數值在上 —— 影像最佔流量也最不急)── */}
         <div className="flex min-w-0 flex-col gap-4 lg:order-1 lg:col-span-5">
-          <div className="order-1 grid grid-cols-1 gap-4 md:grid-cols-2 lg:order-2 lg:grid-cols-1 xl:grid-cols-2">
+          {/* 桌機(lg 以上)上下疊:並排時每張卡只剩約 280px,經緯度(4 位小數)會被截成「24.77…」;
+              左欄本來就比右欄短,疊起來不會多佔高度。平板(md)寬度夠,維持並排 */}
+          <div className="order-1 grid grid-cols-1 gap-4 md:grid-cols-2 lg:order-2 lg:grid-cols-1">
             <Panel icon={VEHICLE_ICON[scenario]} title={sc.live.vehicleTitle}>
               <Metrics items={vehicleReadings(scenario, v.vehicle, v.position, v.geo)} />
             </Panel>
@@ -327,11 +340,18 @@ function Cameras({
         const at = cam ? frameAt(cam, view.replayWall) : null;
         return (
           <figure key={label} className="min-w-0">
-            <div className="relative aspect-video overflow-hidden rounded-item">
+            <div className="field-keep-dark relative aspect-video overflow-hidden rounded-item">
               {cam && at !== null ? (
                 <div className="field-rwd-replay h-full w-full">
                   <ReplayPlayer scenario={scenario} camera={cam} at={at} />
                 </div>
+              ) : view.replaying && liveInReplay(scenario, i) && srcs[i]?.endsWith(".m3u8") ? (
+                // 室外固定攝影機:回放時沒有影格就播即時,標籤照樣是「回放」(規則同中牆)
+                <FieldHlsVideo
+                  src={srcs[i]!}
+                  badge={<VideoBadge kind="replay" />}
+                  spinner={<span className="video-spinner !h-8 !w-8 !border-[3px]" />}
+                />
               ) : view.replaying ? (
                 // 回放中但這支鏡頭沒存影格:不能改播即時(理由同中牆),轉圈 + 標「回放」
                 <div className="absolute inset-0 flex items-center justify-center bg-black">

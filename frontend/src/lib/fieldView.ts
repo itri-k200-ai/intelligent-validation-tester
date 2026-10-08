@@ -186,3 +186,21 @@ export function emptyMission(sc: FieldScenario, scenario: FieldScenarioId): Fiel
     cameras: cameraSources(scenario),
   };
 }
+
+/** 某一趟、某個指標的平均(跟「測試數據」那兩張圖同一套算法:各趟各算各的) */
+export function phaseMean(runs: FieldRun[], phase: OptimizationPhase, metric: "ulKbps" | "dlKbps"): number | null {
+  const vals = (runs.find((r) => r.phase === phase)?.samples ?? [])
+    .map((s) => s[metric])
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+}
+
+/**
+ * 啟用後相對啟用前的平均提升(%)。兩趟都要有資料;啟用前是 0 時算不出比例,回 null。
+ */
+export function meanGainPct(runs: FieldRun[], metric: "ulKbps" | "dlKbps"): number | null {
+  const before = phaseMean(runs, "before", metric);
+  const after = phaseMean(runs, "after", metric);
+  if (before === null || after === null || before === 0) return null;
+  return ((after - before) / before) * 100;
+}

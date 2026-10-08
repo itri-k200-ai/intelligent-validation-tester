@@ -36,13 +36,14 @@ import {
   STAGE_LABEL,
   currentStage,
   emptyMission,
+  meanGainPct,
   runTime,
   signalReadings,
   vehicleReadings,
   type Reading,
 } from "@/lib/fieldView";
 import { pickRateUnit } from "@/lib/formatRate";
-import { frameAt, replayCameraFor, replayMaster } from "@/lib/fieldCameras";
+import { frameAt, liveInReplay, replayCameraFor, replayMaster } from "@/lib/fieldCameras";
 import { firstGeo, makeGeoProjector, projectMission } from "@/lib/geoProjection";
 import type {
   FieldMission,
@@ -575,7 +576,11 @@ function HeadRow({ title, mission }: { title: string; mission: FieldMission }) {
         </span>
         <span className="field-meta-item flex min-w-0 items-baseline gap-6">
           <span className="field-meta-key flex-none">測試項目</span>
-          <span className="field-meta-val min-w-0 truncate">{mission.testcase.name}</span>
+          <span className="field-meta-val min-w-0 truncate">
+            {mission.testcase.name}
+            {/* 跟項目名稱隔約兩個字的距離(2em),同一個字級 */}
+            {meanGainText(mission) && <span className="ml-[2em]">{meanGainText(mission)}</span>}
+          </span>
         </span>
       </div>
     </>
@@ -617,8 +622,22 @@ function ReplayTile({
       replayAt={at ?? 0}
       scenario={scenario}
       replaying={replaying}
+      liveInReplay={liveInReplay(scenario, index)}
     />
   );
+}
+
+/**
+ * 測試項目名稱後面接的幾個字:「平均上行提升 +x%」(跟項目名稱同一段文字、同一個字級,不另外排版)。
+ *
+ * 只在驗測結束、或看歷史回放時出現(有驗測在跑時兩趟還沒比完);兩趟都要有資料。
+ * 回放時用整次驗測的最終結果,不跟著回放游標變。算法跟右邊「測試數據」圖表一樣。
+ */
+function meanGainText(mission: FieldMission): string | null {
+  if (mission.runs.some((r) => r.status === "running")) return null;
+  const ul = meanGainPct(mission.runs, "ulKbps");
+  if (ul === null) return null;
+  return `平均上行提升 ${ul > 0.05 ? "+" : ""}${ul.toFixed(1)}%`;
 }
 
 /**
@@ -632,6 +651,7 @@ function VideoTile({
   replayAt,
   scenario,
   replaying,
+  liveInReplay = false,
 }: {
   label: string;
   src: string | null;
@@ -642,6 +662,8 @@ function VideoTile({
   scenario: FieldScenarioId;
   /** 牆面正在播歷史回放(但這一格沒有回放影像) */
   replaying?: boolean;
+  /** 回放時沒有影格就改播即時(標籤仍是「回放」),見 lib/fieldCameras 的 liveInReplay */
+  liveInReplay?: boolean;
 }) {
   return (
     <div className="field-video-cell">
@@ -653,10 +675,10 @@ function VideoTile({
         {replay ? (
           <ReplayPlayer scenario={scenario} camera={replay} at={replayAt ?? 0} />
         ) : replaying ? (
-          /* 牆面在播歷史,但平台沒有存這支鏡頭的影格(實測只有車載有)。
-             這時不能改播即時 —— 畫面會變成「過去的數據配現在的影像」,
-             看的人會以為驗測正在進行。跟等串流一樣轉圈就好,標籤要標「回放」。 */
-          <LiveVideo src={null} badge="replay" />
+          /* 牆面在播歷史,但平台沒有存這支鏡頭在這個時段的影格。
+             一般不改播即時 —— 畫面會變成「過去的數據配現在的影像」,看的人會以為驗測正在進行,
+             所以轉圈、標「回放」。例外(室外固定攝影機)改播即時,標籤一樣是「回放」 */
+          <LiveVideo src={liveInReplay ? src : null} badge="replay" />
         ) : (
           <LiveVideo src={src} />
         )}

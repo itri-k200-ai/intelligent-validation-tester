@@ -3512,3 +3512,55 @@ html.wall-mode .field-hls-message {
   font-size: calc(22px * var(--wall));
   line-height: 1.5;
 }
+
+/* ── /field 亮色模式 ─────────────────────────────────────────────────
+   <html data-field-theme="light"> 時(見 hooks/FieldTest/useFieldTheme),把 /field 與 /field/control
+   用到的顏色 class 換成亮色版,不必在每個元件裡各寫一份 dark: / light:。
+   .field-keep-dark 裡面不換:影像格(黑底影片 + 白色 LIVE / 回放標籤)與地圖(3D 校園、SLAM
+   平面圖都是照深底設計的)在亮色模式也維持深色。 */
+html[data-field-theme="light"] body { background-color: #EEF2F7; background-image: none; color: rgb(15 31 56); }
+html[data-field-theme="light"] .field-map-surface { background-color: #0F1D33; border-radius: 0.875rem; }
+html[data-field-theme="light"] .text-white:not(.field-keep-dark, .field-keep-dark *) { color: rgb(15 31 56 / 1); }
+html[data-field-theme="light"] .text-white\/80:not(.field-keep-dark, .field-keep-dark *) { color: rgb(15 31 56 / 0.85); }
+html[data-field-theme="light"] .text-white\/75:not(.field-keep-dark, .field-keep-dark *) { color: rgb(15 31 56 / 0.8); }
+html[data-field-theme="light"] .text-white\/70:not(.field-keep-dark, .field-keep-dark *) { color: rgb(15 31 56 / 0.75); }
+html[data-field-theme="light"] .text-white\/60:not(.field-keep-dark, .field-keep-dark *) { color: rgb(15 31 56 / 0.65); }
+html[data-field-theme="light"] .text-white\/55:not(.field-keep-dark, .field-keep-dark *) { color: rgb(15 31 56 / 0.6); }
+html[data-field-theme="light"] .text-white\/50:not(.field-keep-dark, .field-keep-dark *) { color: rgb(15 31 56 / 0.55); }
+html[data-field-theme="light"] .text-white\/45:not(.field-keep-dark, .field-keep-dark *) { color: rgb(15 31 56 / 0.5); }
+html[data-field-theme="light"] .text-white\/40:not(.field-keep-dark, .field-keep-dark *) { color: rgb(15 31 56 / 0.45); }
+html[data-field-theme="light"] .text-white\/35:not(.field-keep-dark, .field-keep-dark *) { color: rgb(15 31 56 / 0.42); }
+html[data-field-theme="light"] .text-white\/30:not(.field-keep-dark, .field-keep-dark *) { color: rgb(15 31 56 / 0.38); }
+html[data-field-theme="light"] .hover\:text-white:hover:not(.field-keep-dark, .field-keep-dark *) { color: rgb(15 31 56); }
+html[data-field-theme="light"] .group:hover .group-hover\:text-white:not(.field-keep-dark, .field-keep-dark *) { color: rgb(15 31 56); }
+html[data-field-theme="light"] .placeholder\:text-white\/35::placeholder { color: rgb(15 31 56 / .4); }
+html[data-field-theme="light"] .bg-white\/5:not(.field-keep-dark, .field-keep-dark *) { background-color: rgb(15 31 56 / 0.04); }
+html[data-field-theme="light"] .bg-white\/10:not(.field-keep-dark, .field-keep-dark *) { background-color: rgb(15 31 56 / 0.07); }
+html[data-field-theme="light"] .bg-white\/15:not(.field-keep-dark, .field-keep-dark *) { background-color: rgb(15 31 56 / 0.1); }
+html[data-field-theme="light"] .bg-white\/60:not(.field-keep-dark, .field-keep-dark *) { background-color: rgb(15 31 56 / 0.35); }
+html[data-field-theme="light"] .hover\:bg-white\/10:hover:not(.field-keep-dark, .field-keep-dark *) { background-color: rgb(15 31 56 / .08); }
+html[data-field-theme="light"] .hover\:bg-white\/15:hover:not(.field-keep-dark, .field-keep-dark *) { background-color: rgb(15 31 56 / .12); }
+html[data-field-theme="light"] .border-white\/10:not(.field-keep-dark, .field-keep-dark *) { border-color: rgb(15 31 56 / 0.12); }
+html[data-field-theme="light"] .border-white\/15:not(.field-keep-dark, .field-keep-dark *) { border-color: rgb(15 31 56 / 0.16); }
+html[data-field-theme="light"] .border-white\/20:not(.field-keep-dark, .field-keep-dark *) { border-color: rgb(15 31 56 / 0.2); }
+html[data-field-theme="light"] .border-white\/25:not(.field-keep-dark, .field-keep-dark *) { border-color: rgb(15 31 56 / 0.25); }
+html[data-field-theme="light"] .bg-navy-500 { background-color: #FFFFFF; }
+html[data-field-theme="light"] .bg-navy-500\/60 { background-color: rgb(255 255 255 / .92); }
+html[data-field-theme="light"] .bg-navy-500\/70 { background-color: rgb(255 255 255 / .94); }
+html[data-field-theme="light"] .bg-navy-500\/95 { background-color: rgb(255 255 255 / .97); }
+html[data-field-theme="light"] .bg-black\/20:not(.field-keep-dark, .field-keep-dark *) { background-color: rgb(15 31 56 / .06); }
+html[data-field-theme="light"] .bg-black\/30:not(.field-keep-dark, .field-keep-dark *) { background-color: rgb(15 31 56 / .06); }
+html[data-field-theme="light"] .bg-black\/40:not(.field-keep-dark, .field-keep-dark *) { background-color: rgb(15 31 56 / .06); }
+html[data-field-theme="light"] .text-mint:not(.field-keep-dark, .field-keep-dark *) { color: rgb(14 140 122); }
+html[data-field-theme="light"] .bg-mint\/10 { background-color: rgb(14 140 122 / .1); }
+html[data-field-theme="light"] .bg-mint\/15 { background-color: rgb(14 140 122 / .14); }
+html[data-field-theme="light"] .border-mint\/30 { border-color: rgb(14 140 122 / .35); }
+html[data-field-theme="light"] .hover\:border-mint\/60:hover { border-color: rgb(14 140 122 / .6); }
+html[data-field-theme="light"] .text-teal:not(.field-keep-dark, .field-keep-dark *) { color: #2A7E92; }
+html[data-field-theme="light"] .text-warning:not(.field-keep-dark, .field-keep-dark *) { color: #A86A0B; }
+html[data-field-theme="light"] .text-danger:not(.field-keep-dark, .field-keep-dark *) { color: #D33A35; }
+html[data-field-theme="light"] .recharts-cartesian-axis-tick-value { fill: rgb(15 31 56 / .6); }
+html[data-field-theme="light"] .recharts-cartesian-grid line { stroke: rgb(15 31 56 / .1); }
+html[data-field-theme="light"] .recharts-cartesian-axis-line { stroke: rgb(15 31 56 / .25); }
+html[data-field-theme="light"] .recharts-default-tooltip { background-color: #FFFFFF !important; border-color: rgb(15 31 56 / .15) !important; color: rgb(15 31 56) !important; }
+html[data-field-theme="light"] .recharts-tooltip-label, html[data-field-theme="light"] .recharts-tooltip-item { color: rgb(15 31 56) !important; }

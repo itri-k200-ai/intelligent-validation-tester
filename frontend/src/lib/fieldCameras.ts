@@ -131,3 +131,20 @@ export function frameAt(camera: ReplayCamera, wall: number | null): number | nul
   });
   return best === null || bestGap > frameGapS(camera) ? null : best;
 }
+
+/**
+ * 回放時「這支鏡頭沒存影格」要不要改播即時畫面(標籤照樣寫「回放」)。
+ *
+ * 一般是不要(轉圈):回放配上現在的畫面,看的人會以為驗測正在進行。
+ * 例外是室外固定攝影機(52 館屋頂):平台從來不存它的影格,而室外場景一場測試前後
+ * 景物差不多,現場決定回放時直接放即時畫面就好(依現場回饋)。
+ * 之後平台若開始替它存影格,有影格時仍優先播回放。
+ */
+const LIVE_IN_REPLAY: Record<FieldScenarioId, boolean[]> = {
+  indoor: [false, false, false, false],
+  outdoor: [true, false],
+};
+
+export function liveInReplay(scenario: FieldScenarioId, index: number): boolean {
+  return LIVE_IN_REPLAY[scenario][index] ?? false;
+}
