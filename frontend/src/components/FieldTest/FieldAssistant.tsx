@@ -40,7 +40,14 @@ const VOICE_PREF_KEY = "ivt-assistant-voice-reply";
  * - 語音輸入:按麥克風說話,說完自動送出(見 hooks/Assistant/useSpeech;需要 HTTPS)。
  * - 語音輸出:用說的問就用說的回;標題列的喇叭打開則每一則都念。每則回覆也能單獨按「朗讀」。
  */
-export function FieldAssistant({ ctx }: { ctx: AssistantContext }) {
+export function FieldAssistant({
+  ctx,
+  raised = false,
+}: {
+  ctx: AssistantContext;
+  /** 浮動按鈕往上抬,讓出底部的分頁列(/field 手機一頁版) */
+  raised?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   // 招呼語不放進訊息串,而是跟吉祥物一起放在最上面的歡迎區
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -150,7 +157,8 @@ export function FieldAssistant({ ctx }: { ctx: AssistantContext }) {
         aria-label={open ? "關閉小助理" : "開啟小助理"}
         onClick={() => (open ? close() : setOpen(true))}
         className={cn(
-          "fixed bottom-4 right-4 z-40 flex h-16 w-16 items-center justify-center overflow-hidden rounded-full",
+          "fixed right-4 z-40 flex h-16 w-16 items-center justify-center overflow-hidden rounded-full",
+          raised ? "bottom-24" : "bottom-4",
           "mb-[env(safe-area-inset-bottom)] shadow-lg shadow-black/40 ring-2 ring-mint/70 transition-transform hover:scale-105",
           open ? "bg-mint text-dark-text max-sm:hidden" : "bg-[#EAF4FD]",
         )}

@@ -2,10 +2,13 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { ReplayCamera } from "@/hooks/FieldTest/useFieldTestReplay";
+import { REPLAY_SPEED } from "@/hooks/FieldTest/useReplayCursor";
 import type { FieldScenarioId } from "@/types/fieldTest";
 
 /** 目前這張之後先載入幾張 —— 播到時已經在快取裡,不會出現空白 */
 const LOOKAHEAD = 2;
+/** 某張載失敗之後隔多久再試(網路一閃斷就不該永遠空著) */
+const RETRY_MS = 2000;
 
 /**
  * 歷史驗測的影像回放 —— 把平台存下來的逐格畫面依原本的間隔播成動畫。
@@ -21,6 +24,7 @@ const LOOKAHEAD = 2;
  *    「現在要顯示的那張」會排在幾十張後面。改成只掛目前這張與後面 LOOKAHEAD 張,
  *    播到哪載到哪;掛過的留著(第二輪起直接用快取)。
  *  - 目前這張還沒載完時,先繼續顯示上一張載好的,不要整格變黑。
+ *  - 載失敗的那張先拿掉,RETRY_MS 後重新掛上再試(以前失敗就一直空著,要重整頁面)。
  */
 export function ReplayPlayer({
   scenario,
@@ -34,6 +38,8 @@ export function ReplayPlayer({
 }) {
   const frames = camera.frames;
   const total = frames.length;
+  // 快轉時一次會往前跳好幾格,預載也要跟著拉長,不然播到時還沒載到
+  const lookahead = LOOKAHEAD * REPLAY_SPEED;
 
   const urls = useMemo(() => {
     const q = camera.runId ? `?run_id=${encodeURIComponent(camera.runId)}` : "";
@@ -43,16 +49,25 @@ export function ReplayPlayer({
   // 已經掛上 / 已經載完的序號。換了鏡頭或換了一次驗測就重來
   const [mounted, setMounted] = useState<Set<number>>(() => new Set());
   const [loaded, setLoaded] = useState<Set<number>>(() => new Set());
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     setMounted(new Set());
     setLoaded(new Set());
   }, [urls]);
+  const failed = (i: number) => {
+    setMounted((prev) => {
+      const next = new Set(prev);
+      next.delete(i);
+      return next;
+    });
+    window.setTimeout(() => setRetry((r) => r + 1), RETRY_MS);
+  };
   useEffect(() => {
     if (!total) return;
     setMounted((prev) => {
       let changed = false;
       const next = new Set(prev);
-      for (let k = 0; k <= LOOKAHEAD; k++) {
+      for (let k = 0; k <= lookahead; k++) {
         const i = (at + k) % total;
         if (!next.has(i)) {
           next.add(i);
@@ -61,7 +76,7 @@ export function ReplayPlayer({
       }
       return changed ? next : prev;
     });
-  }, [at, total, urls]);
+  }, [at, total, urls, retry, lookahead]);
 
   if (!total) return null;
 
@@ -87,6 +102,7 @@ export function ReplayPlayer({
             className="absolute inset-0 h-full w-full object-cover"
             style={{ opacity: i === shown ? 1 : 0 }}
             onLoad={() => setLoaded((prev) => (prev.has(i) ? prev : new Set(prev).add(i)))}
+            onError={() => failed(i)}
           />
         ) : null,
       )}

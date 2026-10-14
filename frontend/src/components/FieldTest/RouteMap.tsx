@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useRef } from "react";
 
 import type { FieldBackdrop, FloorPlan, FloorRect } from "@/config/floorPlans";
 import { CHART_SURFACE, PHASE } from "@/lib/fieldView";
@@ -258,20 +259,13 @@ export function RouteMap({
           <circle cx={start.x} cy={-start.y} r={6 * u} fill="#4C8DFF" stroke="#0A172F" strokeWidth={1.5 * u} />
         )}
         {live && (
-          <g className="field-live-marker" filter="url(#track-glow)" transform={`translate(${live.x} ${-live.y})`}>
-            {/* 標記整體縮約三成(光暈 16→11、外圈 11→7.5、箭頭 1.2→0.85):
-                軌跡線收細之後,原本的尺寸會把一小段路徑整個蓋住 */}
-            <circle r={11 * u} fill="#80FFE8" fillOpacity={0.18} />
-            <circle r={7.5 * u} fill="none" stroke="#80FFE8" strokeOpacity={0.55} strokeWidth={0.8 * u} />
-            {/* 箭頭圖形朝上、SVG rotate 順時針,headingDeg 後端已由 SLAM yaw 換算過(0 = 正北) */}
-            <path
-              d="M0,-10 L7.5,8 L0,4 L-7.5,8 Z"
-              transform={`rotate(${vehicle.headingDeg ?? 0}) scale(${0.85 * u})`}
-              fill="#80FFE8"
-              stroke="#0A172F"
-              strokeWidth={1.2}
-            />
-          </g>
+          <LiveMarker
+            x={live.x}
+            y={live.y}
+            headingDeg={vehicle.headingDeg ?? 0}
+            u={u}
+            snapDistance={Math.max(spanX, spanY) / 3}
+          />
         )}
       </svg>
     </div>
@@ -316,3 +310,88 @@ function FloorPlanLayer({ plan, u }: { plan: FloorPlan; u: number }) {
   );
 }
 
+
+/** 一次滑行最短 / 最長多久(毫秒):照「上一次更新到這一次」的間隔走,夾在這範圍裡 */
+const GLIDE_MIN_MS = 150;
+const GLIDE_MAX_MS = 3000;
+
+/**
+ * 載具目前位置的標記。
+ *
+ * 位置是輪詢來的(/live 約每 1~2 秒一筆、回放照取樣間隔),直接照抄會一格一格跳。
+ * 這裡在兩筆之間用 requestAnimationFrame 滑過去:每次新位置進來,就從「畫面上現在的位置」
+ * 花「上一筆到這一筆的時間」走到新位置 —— 速度跟實際移動差不多,下一筆剛好接上。
+ * 方向角走最短的那一邊(350° → 10° 是轉 20°,不是倒轉 340°)。
+ *
+ * ⚠ 直接改 DOM 的 transform,不經過 React state:整張地圖(底圖、濾鏡、軌跡)每秒重畫
+ *   60 次,在 11520px 寬的牆上會很吃力,而且這裡只有標記本身在動。
+ *
+ * 一次跳太遠(切換歷史紀錄、換情境)就直接跳過去,不要看它橫越整張地圖。
+ */
+function LiveMarker({
+  x,
+  y,
+  headingDeg,
+  u,
+  snapDistance,
+}: {
+  x: number;
+  y: number;
+  headingDeg: number;
+  u: number;
+  snapDistance: number;
+}) {
+  const g = useRef<SVGGElement>(null);
+  const arrow = useRef<SVGPathElement>(null);
+  const shown = useRef({ x, y, h: headingDeg });
+  const lastAt = useRef<number | null>(null);
+  const scale = 0.85 * u;
+
+  useEffect(() => {
+    const now = performance.now();
+    const from = { ...shown.current };
+    // 方向角換成最接近目前角度的等價值,才會走短的那邊
+    const to = { x, y, h: from.h + ((((headingDeg - from.h) % 360) + 540) % 360) - 180 };
+    const gap = lastAt.current == null ? 0 : now - lastAt.current;
+    lastAt.current = now;
+    const far = Math.hypot(to.x - from.x, to.y - from.y) > snapDistance;
+    const duration = far || gap === 0 ? 0 : Math.min(GLIDE_MAX_MS, Math.max(GLIDE_MIN_MS, gap));
+
+    const paint = (p: { x: number; y: number; h: number }) => {
+      shown.current = p;
+      g.current?.setAttribute("transform", `translate(${p.x} ${-p.y})`);
+      arrow.current?.setAttribute("transform", `rotate(${p.h}) scale(${scale})`);
+    };
+    if (!duration) {
+      paint(to);
+      return;
+    }
+    let raf = 0;
+    const step = (t: number) => {
+      const k = Math.min(1, (t - now) / duration);
+      paint({ x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k, h: from.h + (to.h - from.h) * k });
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [x, y, headingDeg, scale, snapDistance]);
+
+  const p = shown.current;
+  return (
+    <g ref={g} className="field-live-marker" filter="url(#track-glow)" transform={`translate(${p.x} ${-p.y})`}>
+      {/* 標記整體縮約三成(光暈 16→11、外圈 11→7.5、箭頭 1.2→0.85):
+          軌跡線收細之後,原本的尺寸會把一小段路徑整個蓋住 */}
+      <circle r={11 * u} fill="#80FFE8" fillOpacity={0.18} />
+      <circle r={7.5 * u} fill="none" stroke="#80FFE8" strokeOpacity={0.55} strokeWidth={0.8 * u} />
+      {/* 箭頭圖形朝上、SVG rotate 順時針,headingDeg 後端已由 SLAM yaw 換算過(0 = 正北) */}
+      <path
+        ref={arrow}
+        d="M0,-10 L7.5,8 L0,4 L-7.5,8 Z"
+        transform={`rotate(${p.h}) scale(${scale})`}
+        fill="#80FFE8"
+        stroke="#0A172F"
+        strokeWidth={1.2}
+      />
+    </g>
+  );
+}

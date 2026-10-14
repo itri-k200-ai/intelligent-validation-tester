@@ -117,6 +117,9 @@ def _detail(resp: httpx.Response) -> str:
         return resp.text[:500]
 
 
+_STREAM_READ_TIMEOUT_S = 20.0
+
+
 def stream(path: str, chunk_size: int = 8192) -> tuple[str, Iterator[bytes]]:
     """轉送上游的長連線內容(B6 的 MJPEG / snapshot)。
 
@@ -124,7 +127,10 @@ def stream(path: str, chunk_size: int = 8192) -> tuple[str, Iterator[bytes]]:
     這裡不先讀完 —— MJPEG 是不會結束的。
     """
     url = f"{_base()}/{path.lstrip('/')}"
-    client = httpx.Client(timeout=None, headers=_headers())
+    # 不能完全不設逾時:載具離線時平台會一直不回,每個觀看者都卡住一條 gunicorn 執行緒
+    # (總共才 24 條)。read 是「兩段資料之間」的上限 —— MJPEG 每 0.2 秒就有一張,
+    # 20 秒都沒東西就是斷了,前端會自己重連。
+    client = httpx.Client(timeout=httpx.Timeout(10.0, read=_STREAM_READ_TIMEOUT_S), headers=_headers())
     try:
         ctx = client.stream("GET", url)
         resp = ctx.__enter__()
@@ -149,6 +155,9 @@ def stream(path: str, chunk_size: int = 8192) -> tuple[str, Iterator[bytes]]:
     def chunks() -> Iterator[bytes]:
         try:
             yield from resp.iter_bytes(chunk_size)
+        except httpx.HTTPError as exc:
+            # 串流中途斷掉 / 太久沒資料:安靜地結束這條,前端看到斷線會自己重連
+            logger.info("串流 %s 中斷:%s", path, exc)
         finally:
             ctx.__exit__(None, None, None)
             client.close()

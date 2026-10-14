@@ -22,6 +22,7 @@ ncclient==0.6.16
 httpx==0.27.0
 minio==7.2.7
 weasyprint==62.3
+Pillow==12.3.0
 
 structlog==24.2.0
 django-prometheus==2.3.1

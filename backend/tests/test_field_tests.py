@@ -20,6 +20,8 @@ def _clear_caches():
     views._plan_env_cache.clear()
     views._process_cache.clear()
     views._scene_cache.clear()
+    views._grab_cache.clear()
+    views._step_secs_cache.clear()
     yield
 
 
@@ -679,12 +681,13 @@ def test_step_label(step, label):
 def test_process_finished_run_is_complete():
     results = [{"ok": True}] * len(INDOOR_STEPS)
     p = transform.process(INDOOR_STEPS, results, "done")
-    assert {k: v for k, v in p.items() if k != "stages"} == {
+    assert {k: v for k, v in p.items() if k not in ("stages", "drives")} == {
         "total": 8,
         "done": 8,
         "current": None,
         "label": "已完成",
         "failed": False,
+        "fraction": 1.0,
     }
 
 
@@ -725,13 +728,15 @@ def test_mission_reports_process_from_the_run_record(monkeypatch):
     }
     monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(extra))
     body = APIClient().get("/api/field-tests/missions/indoor/").json()
-    assert {k: v for k, v in body["process"].items() if k != "stages"} == {
+    assert {k: v for k, v in body["process"].items() if k not in ("stages", "fraction", "drives")} == {
         "total": 8,
         "done": 3,
         "current": 3,
         "label": "安裝 xApp",
         "failed": False,
     }
+    # 完成比例 = 完成幾步 ÷ 總步數
+    assert body["process"]["fraction"] == 3 / 8
 
 
 @override_settings(FIELD_TEST_TARGETS=TARGETS)
@@ -1045,30 +1050,49 @@ def test_a_camera_name_the_platform_does_not_know_gives_404_not_500(monkeypatch)
     assert res.status_code == 404
 
 
-def test_the_middle_stage_is_just_the_wait_step():
-    """三段的中間只取「等待 app」那一步 —— 安裝、啟動都是幾秒的 API 呼叫,
-    一起算進去會讓那一段佔掉條子的 25~40%,看起來不成比例。"""
+def test_the_deploy_stage_spans_install_to_the_second_phase():
+    """部署中 = install 到第二個階段標記之前(安裝、等待、啟動、enable、再等待都算)。
+    以前只取最長的 wait,方案多了「啟動後再等 5 秒」「enable」之後,那幾步被算到部署後。"""
     steps = [
-        {"type": "phase", "name": "優化前"},
-        {"type": "ue_control", "wait_done": True},
+        {"type": "phase", "name": "部署前"},
+        {"type": "ue_control"},
         {"type": "xapp_action", "action": "install"},
-        {"type": "wait", "seconds": 5},
+        {"type": "wait", "seconds": 10},
         {"type": "xapp_action", "action": "start"},
-        {"type": "wait", "seconds": 20},            # 最長的那個 wait = 中間段
-        {"type": "phase", "name": "優化後"},
-        {"type": "ue_control", "wait_done": True},
+        {"type": "xapp_action", "action": "enable"},
+        {"type": "wait", "seconds": 5},
+        {"type": "phase", "name": "部署後"},
+        {"type": "ue_control"},
+        {"type": "compare"},
+        {"type": "xapp_action", "action": "uninstall"},
     ]
-    assert [(x["from"], x["to"], x["kind"]) for x in transform.stages(steps)] == [
-        (0, 5, "before"),
-        (5, 6, "deploy"),
-        (6, 8, "after"),
+    segs = transform.stages(steps)
+    assert [(x["from"], x["to"], x["kind"]) for x in segs] == [
+        (0, 2, "before"),
+        (2, 7, "deploy"),
+        (7, 11, "after"),
+    ]
+    # 段寬按步數分:部署前 2 步、部署中 5 步、部署後 4 步
+    assert [round((x["end"] - x["start"]) * 11) for x in segs] == [2, 5, 4]
+
+
+def test_progress_follows_the_steps():
+    """進度跟著步驟走:完成幾步 ÷ 總步數,做到一半的那一步不算(依現場要求)。"""
+    steps = [{"type": "phase"}, {"type": "ue_control"}, {"type": "xapp_action", "action": "install"}, {"type": "wait"}]
+    assert transform.process(steps, [{"ok": True}], "running")["fraction"] == 1 / 4
+    assert transform.process(steps, [{"ok": True}] * 3, "running")["fraction"] == 3 / 4
+    segs = transform.stages(steps + [{"type": "phase"}, {"type": "ue_control"}])
+    assert [(x["kind"], x["start"], x["end"]) for x in segs] == [
+        ("before", 0.0, 2 / 6),
+        ("deploy", 2 / 6, 4 / 6),
+        ("after", 4 / 6, 1.0),
     ]
 
 
 def test_process_stages_fall_back_to_one_when_the_plan_has_no_xapp():
     """結構對不上就回單一段 —— 前端會退回原本的單色進度條,不要讓它畫出亂切的段。"""
     assert transform.stages([{"type": "ue_control"}, {"type": "wait"}]) == [
-        {"from": 0, "to": 2, "kind": "all"}
+        {"from": 0, "to": 2, "kind": "all", "start": 0.0, "end": 1.0}
     ]
 
 @override_settings(FIELD_TEST_TARGETS=TARGETS)
@@ -1172,3 +1196,73 @@ def test_live_endpoint_returns_null_link_when_live_is_all_none(monkeypatch):
     monkeypatch.setattr(perf_client, "get", _fake_ctrl_get({"/live": _NULL_LIVE}))
     body = APIClient().get("/api/field-tests/live/outdoor/").json()
     assert body["link"] is None and body["geo"] is None
+
+
+def _noisy_jpeg() -> bytes:
+    """幾乎沒壓的 JPEG(跟平台送來的一樣大),拿來確認重壓真的有變小。"""
+    import io
+    import random
+
+    from PIL import Image
+
+    rnd = random.Random(0)
+    im = Image.new("RGB", (64, 36))
+    im.putdata([(rnd.randrange(256), 120, 200) for _ in range(64 * 36)])
+    out = io.BytesIO()
+    im.save(out, "JPEG", quality=100)
+    return out.getvalue()
+
+
+def test_recompress_shrinks_and_keeps_bad_input_as_is():
+    from apps.field_tests import jpeg
+
+    raw = _noisy_jpeg()
+    small = jpeg.recompress(raw)
+    assert small[:2] == b"\xff\xd8" and len(small) < len(raw)
+    assert jpeg.recompress(b"not a jpeg") == b"not a jpeg"
+    with override_settings(FIELD_CAMERA_JPEG_QUALITY=0):
+        assert jpeg.recompress(raw) == raw
+
+
+def test_mjpeg_is_split_by_frame_even_across_chunk_edges():
+    """上游的 multipart 切成任意大小的 chunk 進來,都要拆回完整的每一張再重壓。"""
+    from apps.field_tests import jpeg
+
+    raw = _noisy_jpeg()
+    part = (
+        b"--up\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n" % len(raw) + raw + b"\r\n"
+    )
+    body = part * 3
+    chunks = iter([body[i : i + 777] for i in range(0, len(body), 777)])
+    assert list(jpeg.frames(chunks)) == [raw] * 3
+
+    out = b"".join(jpeg.mjpeg(iter([body])))
+    assert out.count(b"--frame\r\n") == 3 and len(out) < len(body)
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_uav_snapshot_takes_the_first_frame_of_its_mjpeg(monkeypatch):
+    """UAV 上游沒有快照端點:從 MJPEG 取一張就關掉串流,短時間內的請求共用那一張。"""
+    raw = _noisy_jpeg()
+    part = b"--up\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n" % len(raw) + raw + b"\r\n"
+    opened, closed = [], []
+
+    def fake_stream(path, chunk_size=8192):
+        opened.append(path)
+
+        def chunks():
+            try:
+                yield part[:500]
+                yield part[500:] + part
+            finally:
+                closed.append(path)
+
+        return "multipart/x-mixed-replace; boundary=up", chunks()
+
+    monkeypatch.setattr(perf_client, "stream", fake_stream)
+    api = APIClient()
+    first = api.get("/api/field-tests/camera/outdoor/snapshot/")
+    second = api.get("/api/field-tests/camera/outdoor/snapshot/")
+    assert first.status_code == 200 and first["Content-Type"] == "image/jpeg"
+    assert first.content[:2] == b"\xff\xd8" and second.content == first.content
+    assert len(opened) == 1 and opened[0].endswith("/camera/mjpeg") and closed == opened

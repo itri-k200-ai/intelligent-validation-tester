@@ -29,7 +29,7 @@ export function localReply(text: string, c: AssistantContext): string {
     return `你好!目前畫面是${c.scenarioLabel}的「${c.testName}」,狀態是${c.status}。想知道什麼呢?`;
 
   if (has("能做什麼", "可以問", "幫助", "help", "功能"))
-    return "可以問我:\n・目前進度 / 階段\n・驗測狀態\n・通訊品質(SINR、RSRP、RSRQ、RTT)\n・啟用前後的上行、下行比較\n・載具的電量、速度、位置\n・測試項目與環境";
+    return "可以問我:\n・目前進度 / 階段\n・驗測狀態\n・通訊品質(SINR、RSRP、RSRQ、PCI)\n・啟用前後的上行、下行比較\n・載具的電量、速度、位置\n・測試項目與環境";
 
   if (has("報告"))
     return "請點頁面上方的「驗測報告」按鈕,會顯示這一次驗測的 PDF 報告,也可以下載。";
@@ -54,7 +54,7 @@ export function localReply(text: string, c: AssistantContext): string {
   if (has("訊號", "通訊", "品質", "sinr", "rsrp", "rsrq", "rtt", "延遲")) {
     const l = c.link;
     if (!l) return "目前拿不到通訊品質的資料(載具可能離線)。";
-    return `通訊品質:\nSINR ${num(l.sinrDb)} dB、RSRP ${num(l.rsrpDbm)} dBm、RSRQ ${num(l.rsrqDb)} dB\nRTT ${num(l.rttMs)} ms、下行 ${rate(l.dlKbps ?? null)}、上行 ${rate(l.ulKbps ?? null)}`;
+    return `通訊品質:\nSINR ${num(l.sinrDb)} dB、RSRP ${num(l.rsrpDbm)} dBm、RSRQ ${num(l.rsrqDb)} dB\nPCI ${l.pci ?? "—"}、下行 ${rate(l.dlKbps ?? null)}、上行 ${rate(l.ulKbps ?? null)}`;
   }
 
   if (has("電量", "電池", "battery"))

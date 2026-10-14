@@ -152,7 +152,7 @@ function describeContext(c: AssistantContext): string {
     `測試項目:${c.testName};測試環境:${c.environment}`,
     `驗測狀態:${c.status};測試進度:${c.percent == null ? "無資料" : `${c.percent}%`}${c.stage ? `(${c.stage})` : ""}`,
     l
-      ? `通訊品質:SINR ${n(l.sinrDb)} dB、RSRP ${n(l.rsrpDbm)} dBm、RSRQ ${n(l.rsrqDb)} dB、RTT ${n(l.rttMs)} ms、下行 ${r(l.dlKbps)}、上行 ${r(l.ulKbps)}`
+      ? `通訊品質:SINR ${n(l.sinrDb)} dB、RSRP ${n(l.rsrpDbm)} dBm、RSRQ ${n(l.rsrqDb)} dB、PCI ${l.pci ?? "無資料"}、下行 ${r(l.dlKbps)}、上行 ${r(l.ulKbps)}`
       : "通訊品質:無資料(載具可能離線)",
     `載具:電量 ${v.batteryPct ?? "無資料"}%、速度 ${n(v.speedMps)} m/s${v.altitudeM != null ? `、高度 ${n(v.altitudeM)} m` : ""}`,
     c.geo

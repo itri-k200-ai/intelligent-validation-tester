@@ -49,7 +49,7 @@ http {
         # 按「繼續前往」之後就能用。之後有網域與正式憑證,換掉這兩個檔案即可。重產:
         #   openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 825 \
         #     -keyout deploy/certs/ivt.key -out deploy/certs/ivt.crt -subj "/CN=60.250.213.44" \
-        #     -addext "subjectAltName=IP:60.250.213.44,IP:10.194.87.120,IP:127.0.0.1,DNS:localhost" \
+        #     -addext "subjectAltName=IP:60.250.213.44,IP:10.194.87.120,IP:192.168.143.42,IP:127.0.0.1,DNS:localhost" \
         #     -addext "extendedKeyUsage=serverAuth"
         listen 443 ssl;
         ssl_certificate     /etc/nginx/certs/ivt.crt;
@@ -100,7 +100,18 @@ http {
         #   read/send timeout     預設 60s 會在上游短暫停頓時切線;牆整天掛著,
         #                         這裡放長
         # (前綴比 /api/ 長,nginx 走最長前綴,會優先命中這條)
+        #
+        # CORS:http://…:38080 的頁面會改從 https://…:38443 拉串流(HTTP/2 一條連線多工,
+        # 沒有 HTTP/1.1 每個來源 6 條的上限,見 frontend/src/lib/fieldCameras.ts),跨來源要這個。
+        # 這些端點本來就不用登入;先藏掉後端自己加的,免得送出兩個值被瀏覽器拒收
+        location = /api/field-tests/camera/_ping {
+            add_header Access-Control-Allow-Origin * always;
+            return 204;
+        }
         location /api/field-tests/camera/ {
+            proxy_hide_header  Access-Control-Allow-Origin;
+            proxy_hide_header  Access-Control-Allow-Credentials;
+            add_header         Access-Control-Allow-Origin * always;
             proxy_pass         http://backend_web;
             proxy_http_version 1.1;
             proxy_buffering    off;
@@ -178,6 +189,46 @@ http {
             proxy_set_header   X-Real-IP         $remote_addr;
             proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
             proxy_set_header   X-Forwarded-Proto $scheme;
+        }
+    }
+
+    # ── 攝影機串流專用入口(對外 38081)────────────────────────────────
+    # 只轉送 /api/field-tests/camera/(MJPEG 串流與快照),其他一律 404,不是第二個完整入口。
+    #
+    # 為什麼要另開一個埠:MJPEG 是永不結束的連線,瀏覽器對「同一個主機 + 埠」只開 6 條,
+    # 而且整個瀏覽器(含所有 iframe)共用。室內中牆光攝影機就佔 4 條,外層頁面又同時嵌了
+    # 右牆時,資料輪詢就排不到連線,中牆變得很卡(別的團隊用 iframe 嵌入時實際踩過)。
+    # 串流改走另一個埠就是另一組 6 條,不會擋到 38080 上的輪詢。前端只在 http://…:38080
+    # 的頁面上改用這個埠,連不到時自動退回 38080(見 frontend/src/lib/fieldCameras.ts)。
+    log_format camport '$remote_addr - - [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" port=camera';
+    server {
+        listen 8081;
+        server_name _;
+        access_log /var/log/nginx/access.log camport;
+
+        # 前端開頁時打一次,確認這個埠連得到(院內 / 院外的防火牆不一定有開)
+        location = /api/field-tests/camera/_ping {
+            add_header Access-Control-Allow-Origin * always;
+            return 204;
+        }
+        location /api/field-tests/camera/ {
+            # 前端用 fetch 自己讀 MJPEG(才知道串流斷了 / 卡住要重連),跨埠就要 CORS。
+            # 這些端點本來就不用登入,開 * 沒有多放出什麼;先藏掉後端自己加的,免得送出兩個值被瀏覽器拒收
+            proxy_hide_header  Access-Control-Allow-Origin;
+            proxy_hide_header  Access-Control-Allow-Credentials;
+            add_header         Access-Control-Allow-Origin * always;
+            proxy_pass         http://backend_web;
+            proxy_http_version 1.1;
+            proxy_buffering    off;
+            proxy_read_timeout 24h;
+            proxy_send_timeout 24h;
+            proxy_set_header   Host              $host;
+            proxy_set_header   X-Real-IP         $remote_addr;
+            proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header   X-Forwarded-Proto $scheme;
+        }
+        location / {
+            return 404;
         }
     }
 }

@@ -1,5 +1,5 @@
 "use client";
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * 右副牆下半部三格的「靜態」內容:待測物 / 測試設備 / 測試方法。
@@ -27,21 +27,16 @@ import { Fragment, useEffect, useState } from "react";
 type DutItem = { name: string; items: string; icon?: string };
 
 const DUT_LIST: DutItem[] = [
-  // 文案依 PM 提供;順序是由上往下的層級:SMO → Non-RT RIC → Near-RT RIC → 上面跑的 app
+  // 文案依 PM 提供;順序是由上往下的層級:SMO → RIC → 上面跑的 app,最後是核心網路
   {
     name: "SMO",
     items: "網路的總管理平台，負責設定、監控與調度整個網路",
     icon: "/images/dut/smo.png",
   },
   {
-    name: "Non-RT RIC",
-    // \n = PM 原稿指定的換行位置
-    items: "負責長期規劃，分析網路歷史資料，\n訂定優化策略",
-    icon: "/images/dut/non-rt-ric.png",
-  },
-  {
-    name: "Near-RT RIC",
-    items: "負責即時控制，依據策略與當下狀況，\n在毫秒內直接調整基站設定",
+    // Non-RT / Near-RT 合併成一項(依現場要求);圖示用 Near-RT RIC 那張
+    name: "RIC",
+    items: "網路的智慧控制器，依策略分析網路狀態，即時調整基站設定以優化效能",
     icon: "/images/dut/near-rt-ric.png",
   },
   {
@@ -49,6 +44,12 @@ const DUT_LIST: DutItem[] = [
     name: "xApp / rApp",
     items: "安裝在 RIC 上的網路優化應用程式，例如干擾抑制、體驗品質提升",
     icon: "/images/dut/rapp.png",
+  },
+  {
+    name: "Core Network",
+    items: "行動網路的中樞，負責使用者認證、連線管理與數據轉送",
+    // 原始檔 docs/外部文件/前端UI建議/icon原始檔/CN_icon.png,裁掉留白、縮成跟其他圖示一樣 192×192
+    icon: "/images/dut/core-network.png",
   },
 ];
 
@@ -131,21 +132,9 @@ function CatItem({ item }: { item: DutItem }) {
           </span>
         )}
         <div className="war-room-cat-items">
-          {/* 放不下要換行時只在「，」後面換,不要在詞中間斷開
-              (實際踩過:「整個網 / 路」「調整基 / 站行為」)。
-              段與段之間用 <wbr>:可以換行、但不換行時不會多出空白 */}
-          {/* 文字裡的 \n 是指定的換行位置(照原稿),一定換 */}
-          {item.items.split("\n").map((line, l) => (
-            <Fragment key={l}>
-              {l > 0 && <br />}
-              {line.split(/(?<=，)/).map((part, i) => (
-                <Fragment key={i}>
-                  {i > 0 && <wbr />}
-                  <span className="whitespace-nowrap">{part}</span>
-                </Fragment>
-              ))}
-            </Fragment>
-          ))}
+          {/* 照欄寬自然換行(依現場要求:固定長度換就好,不要只在「，」後面換、也不指定換行位置)。
+              標點不會跑到行首(瀏覽器的中文斷行規則本來就會處理) */}
+          {item.items}
         </div>
       </div>
     </div>
@@ -163,7 +152,7 @@ export function RightWingDut() {
       <div className="war-room-slot-title">待測物</div>
       {/* --tight:5 項要收緊間距,否則最後一項會被卡片裁到 */}
       {/* --multiline:每項內文都是兩行,行距放寬(見 globals.css) */}
-      <div className="war-room-cat-list war-room-cat-list--fill war-room-cat-list--tight war-room-cat-list--multiline">
+      <div className="war-room-cat-list war-room-cat-list--fill war-room-cat-list--tight war-room-cat-list--multiline war-room-cat-list--dut">
         {DUT_LIST.map((d) => (
           <CatItem key={d.name} item={d} />
         ))}

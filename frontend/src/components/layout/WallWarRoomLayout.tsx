@@ -136,7 +136,7 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
             <div className="war-room-lab-intro-text">
               <h3 className="war-room-lab-intro-title">智慧網路</h3>
               <p className="war-room-lab-intro-desc">
-                自動化驗測平台:SMO / RIC 介面測試、xApp / rApp 效能測試,
+                自動化驗測平台:SMO / RIC / Core Network 介面測試、xApp / rApp 效能測試,
                 提供室內外及虛擬場域實測。
               </p>
             </div>
@@ -152,7 +152,7 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
               <p className="war-room-lab-icon-desc">
                 {/* 整句寫成一個字串 —— JSX 的換行會被當成空白,
                     「自動化產出 驗測報告」中間會多出一格 */}
-                {"依據 3GPP 標準驗測 SMO / RIC 介面與 xApp / rApp 效能,自動化產出驗測報告,加速智慧網路技術落地。"}
+                {"依據 3GPP 標準驗測 SMO / RIC / Core Network 介面與 xApp / rApp 效能,自動化產出驗測報告,加速智慧網路技術落地。"}
               </p>
             </div>
           </div>

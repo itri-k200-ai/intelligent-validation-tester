@@ -108,6 +108,8 @@ def sample(raw: dict, progress: float) -> dict:
         "dlKbps": rate_kbps(ue.get("thp_dl_kbps")),
         "ulKbps": rate_kbps(ue.get("thp_ul_kbps")),
         "rttMs": _num(ue.get("rtt_ms")),
+        # 服務細胞的 PCI —— 通訊品質卡顯示它;樣本也帶,回放時才看得出中途換手
+        "pci": _num(ue.get("pci")),
         # yaw 同理(行駛狀態那張卡要顯示);headingDeg 是地圖箭頭用的換算值
         "yawDeg": yaw_deg(ue.get("yaw")),
         # AMR 給的是 SLAM yaw(弧度,0 = 朝 +x),要換算;UAV 的 yaw 是 null,
@@ -314,45 +316,84 @@ def _step_running(result: dict) -> bool:
     return (result.get("done") or {}).get("state") in {"running", "pending"}
 
 
-def stages(steps: list[dict]) -> list[dict]:
-    """進度條要分成的三段:第一趟 / xApp 安裝部署 / 第二趟。
+def default_step_secs(step: dict) -> float:
+    """每一步在進度條上的權重 —— 一律 1:進度跟著「走到第幾步」,不按每一步的耗時
+    (依現場要求:進度條要跟著階段走)。"""
+    return 1.0
 
-    切點從方案的步驟推出來,不寫死 —— 室內 12 步、室外 10 步,結構不一樣:
-      先找出部署區間:第一個 action=install 的 xapp_action → 第二個 phase 標記,
-      中間那段再取區間內最長的那個 wait(等 app 起來的時間)。
-    中間那段只有「等待 app」那一步,所以在條子上就是 1/12(室內)或 1/10(室外)。
-    實測室內 → 0~6 / 6~7 / 7~12;室外 → 0~3 / 3~4 / 4~10。
 
-    推不出來(之後方案改了結構)就回單一段,前端會退回原本的單色進度條。
+def stages(steps: list[dict], secs: list[float] | None = None) -> list[dict]:
+    """進度條要分成的三段:app 部署前 / 部署中 / 部署後。
+
+    切點從方案的步驟推出來,不寫死(方案改過好幾次:室內 12 → 14 步、室外 10 → 13 步):
+      部署前 = 開頭到第一個 install 之前
+      部署中 = install 到第二個階段標記之前(安裝、啟動、enable、等 app 起來,全部算這段)
+      部署後 = 第二個階段標記到最後(第二趟、比較、停用、解除安裝)
+    以前「部署中」只取最長的那個 wait,方案多了「啟動後再等 5 秒」「enable」之後,
+    那幾步被算到部署後去了。
+
+    from / to 是步驟索引([from, to) 半開);start / end 是在整條上的位置(0~1),
+    每一步一樣寬,所以就是步數比例。
+    推不出來(之後方案又改了結構)就回單一段,前端會退回單色進度條。
     """
     n = len(steps)
     if not n:
         return []
+    secs = secs or [default_step_secs(st) for st in steps]
+    total = sum(secs) or 1.0
+
+    def at(i: int) -> float:
+        return sum(secs[:i]) / total
+
     xapp = [i for i, st in enumerate(steps) if st.get("type") == "xapp_action"]
     install = next((i for i in xapp if steps[i].get("action") == "install"), xapp[0] if xapp else None)
     phase_at = [i for i, st in enumerate(steps) if st.get("type") == "phase"]
     second = phase_at[1] if len(phase_at) >= 2 else None
     if install is None or second is None or not 0 < install < second < n:
-        return [{"from": 0, "to": n, "kind": "all"}]
-    # 中間那段只取「等待 app」那一步 —— 安裝、啟動都是幾秒的 API 呼叫,
-    # 把它們一起算進去的話那一段會佔掉 25~40% 的條子,看起來不成比例。
-    # 取 install 與第二個 phase 標記之間最長的那個 wait(室內 20 秒、室外 10 秒)。
-    waits = [i for i in range(install, second) if steps[i].get("type") == "wait"]
-    mid = max(waits, key=lambda i: float(steps[i].get("seconds") or 0)) if waits else install
+        return [{"from": 0, "to": n, "kind": "all", "start": 0.0, "end": 1.0}]
     return [
-        {"from": 0, "to": mid, "kind": "before"},
-        {"from": mid, "to": mid + 1, "kind": "deploy"},
-        {"from": mid + 1, "to": n, "kind": "after"},
+        {"from": 0, "to": install, "kind": "before", "start": 0.0, "end": at(install)},
+        {"from": install, "to": second, "kind": "deploy", "start": at(install), "end": at(second)},
+        {"from": second, "to": n, "kind": "after", "start": at(second), "end": 1.0},
     ]
 
 
-def process(steps: list[dict], results: list[dict], status: str, cursor: int | None = None) -> dict:
-    """整個驗測流程的進度:共幾步、完成幾步、現在在哪一步。
+def process(
+    steps: list[dict],
+    results: list[dict],
+    status: str,
+    cursor: int | None = None,
+    secs: list[float] | None = None,
+    drive_started: tuple[float | None, float | None] = (None, None),
+    now: float | None = None,
+) -> dict:
+    """整個驗測流程的進度:共幾步、完成幾步、現在在哪一步,以及完成比例(= 完成幾步 ÷ 總步數)。
 
-    steps 與 results 是一對一、照順序對應的(實測 /validation-runs:12 步對 12 筆)。
+    steps 與 results 是一對一、照順序對應的(實測 /validation-runs:14 步對 14 筆)。
     cursor 是執行中 pipeline 的游標(目前在跑 steps[cursor]),有就以它為準。
+    secs:每一步大概要花幾秒(見 default_step_secs / views._step_secs)。
+    drive_started:兩趟各自第一筆樣本的時間(epoch 秒)。正在沿路線移動時,那一步用
+    「已經走了幾秒 ÷ 這一步平常要幾秒」補上做了多少,百分比才不會在同一個數字停一兩分鐘
+    再一口氣跳上去。(不用樣本算出來的行駛進度:第一趟還在跑時它沒有分母,一律是 100%。)
+
+    fraction = 依時間加權的完成比例(0~1),牆上的百分比與進度條用它;
+    total / done / current 仍是步驟數(標籤、小助理用)。
     """
     total = len(steps)
+    secs = secs if secs and len(secs) == total else [default_step_secs(st) for st in steps]
+    weight = sum(secs) or 1.0
+    segs = stages(steps, secs)
+    # 兩趟「沿測試路線移動」在整條上的位置(0~1):回放時前端用它把樣本時間對到條子上
+    drives = []
+    for i, st in enumerate(steps):
+        if st.get("type") == "ue_control" and st.get("collect") is not False:
+            drives.append([sum(secs[:i]) / weight, sum(secs[: i + 1]) / weight])
+
+    def fraction(done_steps: int, partial: float = 0.0) -> float:
+        done_steps = max(0, min(done_steps, total))
+        cur = secs[done_steps] * partial if done_steps < total else 0.0
+        return min(1.0, (sum(secs[:done_steps]) + cur) / weight)
+
     failed_at = next((i for i, r in enumerate(results) if _step_failed(r)), None)
     if status in {"done"} and failed_at is None:
         return {
@@ -361,7 +402,9 @@ def process(steps: list[dict], results: list[dict], status: str, cursor: int | N
             "current": None,
             "label": "已完成",
             "failed": False,
-            "stages": stages(steps),
+            "stages": segs,
+            "drives": drives,
+            "fraction": 1.0,
         }
     if failed_at is not None or status in {"error", "aborted"}:
         at = failed_at if failed_at is not None else min(len(results), max(total - 1, 0))
@@ -373,7 +416,9 @@ def process(steps: list[dict], results: list[dict], status: str, cursor: int | N
             "current": at,
             "label": f"{name}{word}".strip(),
             "failed": True,
-            "stages": stages(steps),
+            "stages": segs,
+            "drives": drives,
+            "fraction": fraction(at),
         }
 
     if cursor is not None:
@@ -384,11 +429,16 @@ def process(steps: list[dict], results: list[dict], status: str, cursor: int | N
         current = len(results)
     current = max(0, min(current, total - 1)) if total else 0
     label = step_label(steps[current]) if total else ""
+
+    # 進度跟著步驟走:這一步做完才往前一格,不依時間在步驟中間往前推(依現場要求)
+    partial = 0.0
     return {
         "total": total,
         "done": current,
         "current": current,
         "label": label,
         "failed": False,
-        "stages": stages(steps),
+        "stages": segs,
+        "drives": drives,
+        "fraction": fraction(current, partial),
     }

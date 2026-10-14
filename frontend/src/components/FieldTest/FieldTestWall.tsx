@@ -34,7 +34,10 @@ import {
   PROGRESS_COLOR,
   STAGE_COLOR,
   STAGE_LABEL,
-  currentStage,
+  currentStageKind,
+  processFraction,
+  replayFraction,
+  stageSpans,
   emptyMission,
   meanGainPct,
   runTime,
@@ -43,6 +46,7 @@ import {
   type Reading,
 } from "@/lib/fieldView";
 import { pickRateUnit } from "@/lib/formatRate";
+import { cn } from "@/lib/cn";
 import { frameAt, liveInReplay, replayCameraFor, replayMaster } from "@/lib/fieldCameras";
 import { firstGeo, makeGeoProjector, projectMission } from "@/lib/geoProjection";
 import type {
@@ -81,7 +85,7 @@ const VEHICLE_ICON: Record<FieldScenarioId, LucideIcon> = { outdoor: Plane, indo
 
 export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
   const sc = FIELD_SCENARIOS[scenario];
-  const { mission } = useFieldTestMission(scenario);
+  const { mission, settled: missionSettled } = useFieldTestMission(scenario);
   // 即時值另外抓:牆上永遠要是現在的數字,跟有沒有在跑驗測無關
   const { live } = useFieldTestLive(scenario);
   // 還沒有驗測資料(或平台連不上)也要畫出完整版面 —— 欄位名稱、平面圖、路徑都在,
@@ -90,19 +94,25 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
   const { streamUrl } = useFieldTestCamera(scenario);
   // 顯示歷史紀錄時車載那格改播回放 —— 即時串流對跑完的驗測沒有意義,
   // 而且載具多半也不在線,那一格會整片空白。
-  const { replay } = useFieldTestReplay(scenario);
   // 骨架要固定同一個物件:平台斷線時(很常見)每次 render 都生新的,會讓 3D 地圖不停重畫
   const empty = useMemo(() => emptyMission(sc, scenario), [sc, scenario]);
   const base = mission ?? empty;
+  const { replay, settled } = useFieldTestReplay(scenario, base.runId);
   const data: FieldMission = {
     ...base,
-    cameras: base.cameras.map((src, i) => (i === base.cameras.length - 1 ? (streamUrl ?? src) : src)),
+    // 第一次狀態查詢回來之前(還不知道是即時還是回放)不開即時串流:不然開頁時
+    // 固定攝影機會先連上、確定是回放後又關掉,白佔上游每支只有 3 個的名額,
+    // 也跟狀態查詢搶連線(實測一開頁就先開了 3 路)。這段只有零點幾秒,轉圈即可。
+    // 查詢失敗(平台不通)也算有結果 —— 照舊播即時,不要整面卡在轉圈。
+    cameras: missionSettled
+      ? base.cameras.map((src, i) => (i === base.cameras.length - 1 ? (streamUrl ?? src) : src))
+      : base.cameras.map(() => null),
   };
   // 只有「平台指定要看這一筆歷史」時才回放(mission.pinned)。
   // 驗測跑完不會自己開始重播 —— 條子停在 100%、數值停在最後一筆,等被切換才進回放。
   //
-  // 另外要比對 runId:回放索引 30 秒才重抓一次,切換歷史紀錄的頭幾十秒 replay 裡
-  // 還是上一筆的畫面,不擋的話那一格會播錯的影像。
+  // 另外要比對 runId:切換歷史紀錄的那一瞬間 replay 裡可能還是上一筆的索引,
+  // 不擋的話那一格會播錯的影像。
   const running = base.runs.some((r) => r.status === "running");
   const freshReplay = !!replay && !!base.runId && replay.runId === base.runId;
   const replaying = !!base.pinned && !running;
@@ -119,6 +129,7 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
       replayCams={replayCams}
       replayPeriodS={replay?.periodS ?? null}
       replaying={replaying}
+      replayReady={settled}
     />
   ) : (
     <CameraGridLayout
@@ -129,6 +140,7 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
       replayCams={replayCams}
       replayPeriodS={replay?.periodS ?? null}
       replaying={replaying}
+      replayReady={settled}
     />
   );
 }
@@ -143,6 +155,7 @@ function LiveResultsLayout({
   replayCams,
   replayPeriodS,
   replaying,
+  replayReady,
 }: {
   scenario: FieldScenarioId;
   sc: Extract<FieldScenario, { layout: "live-results" }>;
@@ -153,6 +166,8 @@ function LiveResultsLayout({
   replayPeriodS: number | null;
   /** 牆面正在播歷史回放 —— 沒有回放影像的那幾格不要改播即時 */
   replaying: boolean;
+  /** 這一次的回放索引有結論了沒(見 useFieldTestReplay 的 settled) */
+  replayReady: boolean;
 }) {
   const run = mission.runs[mission.currentRun];
 
@@ -163,7 +178,13 @@ function LiveResultsLayout({
   // 同室內:只有被指定看歷史時才回放,跑完是停在最後的狀態。
   // 有鏡頭存了影格就跟著影格走,沒有才用樣本自己的時間軸
   const master = replayMaster(replayCams);
-  const cursor = useReplayCursor(master?.frames ?? null, replayPeriodS, mission.runs, !!mission.pinned && !running);
+  const cursor = useReplayCursor(
+    master?.frames ?? null,
+    replayPeriodS,
+    mission.runs,
+    // 索引還沒回來之前不要先拿樣本播 —— 等它確定「沒有影格」才改用樣本的時間軸
+    !!mission.pinned && !running && replayReady,
+  );
   const rs = cursor.sample;
   // 只放這一筆真的有值的欄位:spread 一個 undefined 會把 mission.vehicle 原本的值蓋掉
   const replayVehicle = useMemo(() => {
@@ -203,16 +224,8 @@ function LiveResultsLayout({
   }, [mission, rs?.wall, replayVehicle, sc.route.length]);
   // 回放進度:游標的絕對時間落在所有樣本 wall 首尾之間的位置(理由見 MissionProgress)
   const replayPercent = useMemo(() => {
-    const cut = rs?.wall;
-    if (cut == null) return null;
-    const walls = mission.runs
-      .flatMap((r) => (r.samples ?? []).map((x) => x.wall))
-      .filter((w): w is number => w != null);
-    if (walls.length < 2) return null;
-    const a = Math.min(...walls);
-    const b = Math.max(...walls);
-    if (b <= a) return null;
-    return Math.round(Math.min(1, Math.max(0, (cut - a) / (b - a))) * 100);
+    const f = replayFraction(mission.process, mission.runs, rs?.wall);
+    return f === null ? null : Math.round(f * 100);
   }, [mission, rs?.wall]);
   const baseLink = live?.link ?? run?.link ?? null;
   const replayLink =
@@ -225,6 +238,8 @@ function LiveResultsLayout({
           dlKbps: rs.dlKbps ?? null,
           ulKbps: rs.ulKbps ?? null,
           rttMs: rs.rttMs ?? null,
+          // 樣本有 PCI 就用當下那一筆(看得出換手);舊紀錄沒有就沿用最後一筆
+          pci: rs.pci ?? baseLink.pci,
         }
       : null;
 
@@ -308,7 +323,7 @@ function LiveResultsLayout({
       <section className="dut-wall-band field-card">
         <div className="field-card-head field-card-head--meta">
           {/* 不放「啟用前 / 啟用後」圖例 —— 跟室內一致(依版面規劃圖) */}
-          <HeadRow title="測試狀態總覽" mission={mission} />
+          <HeadRow title="測試狀態總覽" mission={mission} gainLabel={`${OUTDOOR_UL_LABEL}提升`} />
         </div>
 
         <div className="field-status-body field-status-body--results">
@@ -319,7 +334,7 @@ function LiveResultsLayout({
               mission={playMission}
               single
               percent={replayPercent}
-              stage={currentStage(mission.process, replayPercent)}
+              stage={currentStageKind(mission.process, replayPercent)}
             />
             {/* 有場景就畫 3D(建築依高度立起來、無人機放在實際高度);
                 拿不到場景時退回 2D,只畫 GPS 軌跡 */}
@@ -333,10 +348,10 @@ function LiveResultsLayout({
           {/* 室外情境要呈現的是:在具備干擾的環境中,UAV 移動時傳輸穩不穩定。
               干擾範圍會隨環境變動,畫面上不標固定的干擾區,只呈現兩趟的吞吐量起伏與平均。
               場域內只觀察這台 UAV;上下兩張圖的間距跨 y = 2160 */}
-          {/* 跟室內同一組圖:上格平均上行、下格平均下行 */}
+          {/* 跟室內同一組圖:上格平均上行(室外叫「平均吞吐」)、下格平均下行 */}
           <Sub icon={Signal} title="測試數據" aside={<PhaseLegend />}>
             <div className="field-split">
-              <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[0]} series={allRuns} />
+              <ThroughputCompare runs={playMission.runs} spec={OUTDOOR_UL_CHART} series={allRuns} />
               <ThroughputCompare runs={playMission.runs} spec={RATE_CHARTS[1]} series={allRuns} />
             </div>
           </Sub>
@@ -356,6 +371,7 @@ function CameraGridLayout({
   replayCams,
   replayPeriodS,
   replaying,
+  replayReady,
 }: {
   scenario: FieldScenarioId;
   sc: Extract<FieldScenario, { layout: "camera-grid" }>;
@@ -366,6 +382,8 @@ function CameraGridLayout({
   replayPeriodS: number | null;
   /** 牆面正在播歷史回放 —— 沒有回放影像的那幾格不要改播即時 */
   replaying: boolean;
+  /** 這一次的回放索引有結論了沒(見 useFieldTestReplay 的 settled) */
+  replayReady: boolean;
 }) {
   const run = mission.runs[mission.currentRun];
 
@@ -374,7 +392,13 @@ function CameraGridLayout({
   // 下面所有 ?? 就會退回原本的即時 / 最後一筆行為。
   // 時鐘跟著錄得最完整的那支鏡頭(有車載就用車載);一支都沒有就用樣本的時間軸
   const master = replayMaster(replayCams);
-  const cursor = useReplayCursor(master?.frames ?? null, replayPeriodS, mission.runs, replaying);
+  const cursor = useReplayCursor(
+    master?.frames ?? null,
+    replayPeriodS,
+    mission.runs,
+    // 影像索引還沒回來就先不播:以前會先用樣本自己播完一整輪,影像才接上
+    replaying && replayReady,
+  );
   const rs = cursor.sample;
   // 回放當下那一筆的載具狀態 —— 沒有回放時是 null,不影響即時模式。
   // 只放「這一筆真的有值」的欄位:spread 一個 undefined 會把底下 mission.vehicle
@@ -428,9 +452,8 @@ function CameraGridLayout({
     };
   }, [mission, rs?.wall, replayVehicle, sc.route.length]);
 
-  // 回放時的「測試進度」—— single 模式的進度條原本讀 mission.process(驗測方案的
-  // 步驟進度),歷史紀錄一律是 12/12 = 100%,而且 playMission 沒有截它。回放要的是
-  // 「播到整段驗測的哪裡」,所以用游標的絕對時間在首尾樣本之間的比例算。
+  // 回放時的「測試進度」—— 歷史紀錄的 process 一律是 100%,回放要的是「播到整段驗測的哪裡」,
+  // 所以用游標的絕對時間換算到條子上(分段對到兩趟的位置,見 lib/fieldView 的 replayFraction)。
   const replayPercent = useMemo(() => {
     const cut = rs?.wall;
     if (cut == null) return null;
@@ -459,6 +482,8 @@ function CameraGridLayout({
           dlKbps: rs.dlKbps ?? null,
           ulKbps: rs.ulKbps ?? null,
           rttMs: rs.rttMs ?? null,
+          // 樣本有 PCI 就用當下那一筆(看得出換手);舊紀錄沒有就沿用最後一筆
+          pci: rs.pci ?? baseLink.pci,
         }
       : null;
 
@@ -520,7 +545,7 @@ function CameraGridLayout({
               mission={playMission}
               single
               percent={replayPercent}
-              stage={currentStage(mission.process, replayPercent)}
+              stage={currentStageKind(mission.process, replayPercent)}
             />
             <RouteMap
               mission={playMission}
@@ -555,7 +580,16 @@ function CameraGridLayout({
  * 大卡標題(置中)+ 下面一列測試資訊:測試環境對齊路徑小卡、測試項目對齊測試數據小卡,
  * 兩者都靠左 —— 欄寬與下面的小卡一致(見 globals.css .field-meta-row)。
  */
-function HeadRow({ title, mission }: { title: string; mission: FieldMission }) {
+function HeadRow({
+  title,
+  mission,
+  gainLabel,
+}: {
+  title: string;
+  mission: FieldMission;
+  /** 提升值前面的字樣(預設「平均吞吐提升」,室內外都是;依現場要求從「平均上行提升」改名) */
+  gainLabel?: string;
+}) {
   const at = runTime(mission);
   return (
     <>
@@ -576,10 +610,10 @@ function HeadRow({ title, mission }: { title: string; mission: FieldMission }) {
         </span>
         <span className="field-meta-item flex min-w-0 items-baseline gap-6">
           <span className="field-meta-key flex-none">測試項目</span>
-          <span className="field-meta-val min-w-0 truncate">
-            {mission.testcase.name}
-            {/* 跟項目名稱隔約兩個字的距離(2em),同一個字級 */}
-            {meanGainText(mission) && <span className="ml-[2em]">{meanGainText(mission)}</span>}
+          <span className="field-meta-val flex min-w-0 items-baseline">
+            <span className="min-w-0 truncate">{mission.testcase.name}</span>
+            {/* 「平均吞吐提升」靠這一格的右緣(依前端回饋),數值放大、上色凸顯 */}
+            <MeanGain mission={mission} label={gainLabel} />
           </span>
         </span>
       </div>
@@ -628,16 +662,27 @@ function ReplayTile({
 }
 
 /**
- * 測試項目名稱後面接的幾個字:「平均上行提升 +x%」(跟項目名稱同一段文字、同一個字級,不另外排版)。
+ * 測試項目那一格右緣的「平均吞吐提升 +x%」(數據是上行速率):文字跟項目同一個字級,數值加粗、上色
+ * (提升是綠、下降是紅)。
  *
  * 只在驗測結束、或看歷史回放時出現(有驗測在跑時兩趟還沒比完);兩趟都要有資料。
  * 回放時用整次驗測的最終結果,不跟著回放游標變。算法跟右邊「測試數據」圖表一樣。
  */
-function meanGainText(mission: FieldMission): string | null {
+function MeanGain({ mission, label = "平均吞吐提升" }: { mission: FieldMission; label?: string }) {
   if (mission.runs.some((r) => r.status === "running")) return null;
   const ul = meanGainPct(mission.runs, "ulKbps");
   if (ul === null) return null;
-  return `平均上行提升 ${ul > 0.05 ? "+" : ""}${ul.toFixed(1)}%`;
+  const up = ul > 0.05;
+  const down = ul < -0.05;
+  return (
+    <span className="ml-auto flex flex-none items-baseline gap-[0.4em] pl-[1em]">
+      {label}
+      <span className={cn("field-gain-value", up ? "text-mint" : down ? "text-danger" : "text-white")}>
+        {up ? "+" : ""}
+        {ul.toFixed(1)}%
+      </span>
+    </span>
+  );
 }
 
 /**
@@ -677,8 +722,9 @@ function VideoTile({
         ) : replaying ? (
           /* 牆面在播歷史,但平台沒有存這支鏡頭在這個時段的影格。
              一般不改播即時 —— 畫面會變成「過去的數據配現在的影像」,看的人會以為驗測正在進行,
-             所以轉圈、標「回放」。例外(室外固定攝影機)改播即時,標籤一樣是「回放」 */
-          <LiveVideo src={liveInReplay ? src : null} badge="replay" />
+             所以轉圈、標「回放」 */
+          // 例外(室外固定攝影機)沒有回放功能,一律播即時、標「LIVE」
+          <LiveVideo src={liveInReplay ? src : null} badge={liveInReplay ? "live" : "replay"} />
         ) : (
           <LiveVideo src={src} />
         )}
@@ -727,7 +773,7 @@ function MetricGrid({ items }: { items: Reading[] }) {
        標籤與數值上下各空出約 45 實際px,看起來鬆散。現在多出來的高度統一留在
        卡片下緣,兩列之間只隔 gap-y-8。標題列不受影響。 */
     // 欄距 gap-x-2(24):室外「垂直速度 m/s」要 510,數值欄加寬到 1728 之後每欄約 517 才放得下
-    <div className="grid min-h-0 flex-1 grid-cols-3 content-start gap-x-2 gap-y-8">
+    <div className="field-metric-grid grid min-h-0 flex-1 grid-cols-3 content-start gap-x-2 gap-y-8">
       {items.map(({ label, unit, value, tone = "text-white", size = "field-metric-value" }) => (
         <div key={label} className="flex min-w-0 flex-col gap-2">
           <span className="field-metric-label truncate whitespace-nowrap text-white/55">
@@ -841,7 +887,7 @@ function MissionProgress({
   single?: boolean;
   /** 回放時由外面指定進度(見 replayPercent);即時模式傳 null 就走原本的算法 */
   percent?: number | null;
-  /** 現在走到三段的哪一段(見 currentStage)—— 緊接在百分比後面 */
+  /** 現在走到三段的哪一段(before / deploy / after,見 currentStageKind)—— 那一段的文字亮起來 */
   stage?: string;
 }) {
   const run = mission.runs[mission.currentRun];
@@ -852,14 +898,14 @@ function MissionProgress({
     // 整個驗測流程的進度(已完成的步驟 ÷ 方案總步數),不是行駛進度。
     // 回放時這個值沒有意義(歷史紀錄一律是已完成 = 100%),改吃外面給的比例。
     const p = mission.process;
-    const percent = override ?? (p && p.total ? Math.round((p.done / p.total) * 100) : null);
-    // 條子分三段:第一趟 / xApp 安裝部署 / 第二趟。切點由後端從方案的步驟推出來
-    // (見 transform.stages),所以室內 12 步、室外 10 步各自切在對的地方。
-    // 段寬按步數比例分,每一段各自依 done 填;中間那段用不同顏色標出來。
-    // 回放時沒有 done,用 percent 反推一個等效的步數。
-    const total = p?.total ?? 0;
-    const doneSteps = override !== null && total ? (override / 100) * total : (p?.done ?? 0);
-    const segs = p?.stages?.length ? p.stages : null;
+    // 完成比例依每一步的實測耗時加權(後端 transform.process 的 fraction),不是「完成幾步 ÷ 總步數」——
+    // 沿路線移動一步要一兩百秒、xApp 的 API 呼叫一步不到一秒,按步數算百分比會忽快忽慢。
+    const frac = override !== null ? override / 100 : processFraction(p);
+    const percent = frac === null ? null : Math.round(frac * 100);
+    // 條子分三段:app 部署前 / 部署中 / 部署後。切點與段寬都由後端從方案的步驟與耗時推出來
+    // (見 transform.stages),方案改了步數也會自動對上。中間那段用不同顏色標出來。
+    const f = frac ?? 0;
+    const segs = stageSpans(p);
     return (
       <div className="field-map-head">
         <span className="flex-none text-sm text-white/60">測試進度</span>
@@ -867,26 +913,27 @@ function MissionProgress({
         <span className="field-progress-pct flex-none text-[2.75rem] font-semibold leading-[1.1] text-white">
           {percent === null ? "—" : `${percent}%`}
         </span>
-        {/* 階段緊接在百分比後面 —— 原本放在小卡標題列的右端,離進度條太遠,
-            看的人要在兩個地方之間來回對 */}
-        {stage && <span className="field-progress-stage flex-none">{stage}</span>}
+        {/* 三段的文字都標在各自那一段下面,目前這段亮、其他暗(依現場要求)——
+            以前只在百分比後面寫目前這段,看不出整個流程還剩哪幾段 */}
         <div className="field-progress-track field-progress-track--single">
           {/* 規範 09:軌道 rgba(255,255,255,0.15) */}
           {segs ? (
             segs.map((seg) => {
-              const span = Math.max(1, seg.to - seg.from);
-              const filled = Math.min(1, Math.max(0, (doneSteps - seg.from) / span)) * 100;
+              const span = Math.max(1e-6, seg.end - seg.start);
+              const filled = Math.min(1, Math.max(0, (f - seg.start) / span)) * 100;
               return (
-                <div
-                  key={seg.kind + seg.from}
-                  className="field-progress-seg"
-                  style={{ flexGrow: span }}
-                  title={STAGE_LABEL[seg.kind]}
-                >
-                  <div
-                    className="field-progress-fill"
-                    style={{ width: `${filled}%`, background: STAGE_COLOR[seg.kind] }}
-                  />
+                <div key={seg.kind} className="field-progress-col" style={{ flexGrow: span }}>
+                  <div className="field-progress-seg" title={STAGE_LABEL[seg.kind]}>
+                    <div
+                      className="field-progress-fill"
+                      style={{ width: `${filled}%`, background: STAGE_COLOR[seg.kind] }}
+                    />
+                  </div>
+                  {STAGE_LABEL[seg.kind] && (
+                    <span className={cn("field-progress-label", seg.kind === stage && "field-progress-label--on")}>
+                      {STAGE_LABEL[seg.kind]}
+                    </span>
+                  )}
                 </div>
               );
             })
@@ -938,6 +985,9 @@ const RATE_CHARTS: [TrendSpec, TrendSpec] = [
   { label: "平均上行", unit: "kbps", metric: "ulKbps", digits: 1, kind: "rate" },
   { label: "平均下行", unit: "kbps", metric: "dlKbps", digits: 0, kind: "rate" },
 ];
+/** 室外的上行圖改叫「平均吞吐」(依現場要求;室內維持「平均上行」)。數據本身一樣是上行速率 */
+const OUTDOOR_UL_LABEL = "平均吞吐";
+const OUTDOOR_UL_CHART: TrendSpec = { ...RATE_CHARTS[0], label: OUTDOOR_UL_LABEL };
 
 /** 圖表字級與筆畫都以牆面 3× 畫布計:2px 線 = 6、1px 格線 = 3 */
 const AXIS_TICK = { fontSize: 72, fill: "rgba(255,255,255,0.6)" };
@@ -964,9 +1014,18 @@ function YAxisTick(props: {
       fill={AXIS_TICK.fill}
       fontSize={AXIS_TICK.fontSize}
     >
-      {payload?.value}
+      {yTickLabel(payload?.value)}
     </text>
   );
+}
+
+/**
+ * 縱軸刻度最多到小數點後兩位。Recharts 挑的刻度換過單位(÷1000)後會是 0.30000000000000004、
+ * 1.2345 這種,原樣印出來會整串掛在牆上。用 Number 轉回去,1.50 → 1.5、2.00 → 2,不補多餘的 0。
+ */
+function yTickLabel(value: number | string | undefined) {
+  const n = Number(value);
+  return Number.isFinite(n) ? String(Number(n.toFixed(2))) : value;
 }
 
 /** 橫軸刻度的間隔(秒)。固定值 —— 刻度上的數字永遠是它的整數倍,不由資料算出來 */

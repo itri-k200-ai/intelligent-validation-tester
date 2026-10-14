@@ -105,7 +105,8 @@ export function signalReadings(link: LinkQuality | null): Reading[] {
     { label: "SINR", unit: "dB", value: link?.sinrDb?.toFixed(1) ?? null },
     { label: "RSRP", unit: "dBm", value: link?.rsrpDbm?.toFixed(1) ?? null },
     { label: "RSRQ", unit: "dB", value: link?.rsrqDb?.toFixed(1) ?? null },
-    { label: "RTT", unit: "ms", value: link?.rttMs?.toFixed(1) ?? null },
+    // 原本是 RTT;依現場回饋改顯示服務細胞的 PCI(整數、沒有單位)
+    { label: "PCI", value: link?.pci != null ? String(Math.round(link.pci)) : null },
     { label: "DL", ...rate(link?.dlKbps) },
     { label: "UL", ...rate(link?.ulKbps) },
   ];
@@ -157,13 +158,83 @@ export function currentStage(
   p: FieldProcess | null | undefined,
   percent: number | null,
 ): string | undefined {
-  if (!p?.stages?.length || !p.total) return undefined;
-  const at =
-    percent !== null
-      ? Math.min(p.total - 1, Math.floor((percent / 100) * p.total))
-      : (p.current ?? p.done ?? 0);
-  const seg = p.stages.find((x) => at >= x.from && at < x.to) ?? p.stages[p.stages.length - 1];
-  return STAGE_LABEL[seg.kind] || undefined;
+  const kind = currentStageKind(p, percent);
+  return (kind && STAGE_LABEL[kind]) || undefined;
+}
+
+/** 同 currentStage,但回傳是哪一段(before / deploy / after)—— 進度條下的三段文字要靠它決定亮哪一個 */
+export function currentStageKind(
+  p: FieldProcess | null | undefined,
+  percent: number | null,
+): string | undefined {
+  const spans = stageSpans(p);
+  const f = percent !== null ? percent / 100 : processFraction(p);
+  if (!spans || f === null) return undefined;
+  return (spans.find((x) => f >= x.start && f < x.end) ?? spans[spans.length - 1]).kind;
+}
+
+/**
+ * 整個驗測流程完成了多少(0~1)。後端有依時間加權的 fraction 就用它;
+ * 舊格式(沒有 fraction)退回「完成幾步 ÷ 總步數」。
+ */
+export function processFraction(p: FieldProcess | null | undefined): number | null {
+  if (!p) return null;
+  if (typeof p.fraction === "number") return p.fraction;
+  return p.total ? p.done / p.total : null;
+}
+
+/** 進度條的幾段在整條上的起訖(0~1)。後端有給 start / end 就照時間比例,沒有就照步數 */
+export function stageSpans(
+  p: FieldProcess | null | undefined,
+): { kind: string; start: number; end: number }[] | null {
+  if (!p?.stages?.length) return null;
+  return p.stages.map((x) => ({
+    kind: x.kind,
+    start: x.start ?? (p.total ? x.from / p.total : 0),
+    end: x.end ?? (p.total ? x.to / p.total : 1),
+  }));
+}
+
+/**
+ * 回放播到的時刻 wall,換算成進度條上的位置(0~1)。
+ *
+ * 進度條按時間加權(兩趟移動佔大半、中間部署只佔一小段),所以不能拿「第一筆到最後一筆
+ * 樣本」整段直接線性換算。改成分段對:第一趟的樣本 → 第一趟那一段,第二趟 → 第二趟那一段,
+ * 兩趟之間的空檔 → 中間(部署)那段;最後一筆樣本對到 100%,回放播完條子就是滿的。
+ * 後端沒給 drives(舊格式)時退回整段線性換算。
+ */
+export function replayFraction(
+  p: FieldProcess | null | undefined,
+  runs: FieldRun[],
+  wall: number | null | undefined,
+): number | null {
+  if (wall == null) return null;
+  const spans = runs.map((r) => {
+    const w = (r.samples ?? []).map((x) => x.wall).filter((x): x is number => x != null);
+    return w.length ? ([Math.min(...w), Math.max(...w)] as const) : null;
+  });
+  const all = spans.flatMap((s) => (s ? [s[0], s[1]] : []));
+  if (all.length < 2) return null;
+  const a = Math.min(...all);
+  const b = Math.max(...all);
+  if (b <= a) return null;
+  const drives = p?.drives;
+  const anchors: [number, number][] = [];
+  spans.forEach((s, i) => {
+    const d = drives?.[i];
+    if (!s || !d) return;
+    anchors.push([s[0], d[0]], [s[1], d[1]]);
+  });
+  if (anchors.length < 2) return Math.min(1, Math.max(0, (wall - a) / (b - a)));
+  // 最後一筆樣本 = 100%
+  anchors[anchors.length - 1] = [anchors[anchors.length - 1][0], 1];
+  if (wall <= anchors[0][0]) return anchors[0][1];
+  for (let k = 1; k < anchors.length; k++) {
+    const [t0, f0] = anchors[k - 1];
+    const [t1, f1] = anchors[k];
+    if (wall <= t1) return t1 > t0 ? f0 + ((wall - t0) / (t1 - t0)) * (f1 - f0) : f1;
+  }
+  return 1;
 }
 
 /** 沒資料時的骨架:兩趟都 pending、沒有樣本,其餘取設定檔(影像照樣要播) */

@@ -37,5 +37,6 @@ export function useFieldTestMission(scenario: FieldScenarioId) {
     refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
   });
-  return { mission: query.data ?? null };
+  // settled = 第一次查詢已經有結果(成功或失敗)—— 在那之前還不知道牆上是即時還是回放
+  return { mission: query.data ?? null, settled: !query.isPending };
 }

@@ -1,8 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Maximize2, Pause, Play, Volume2 } from "lucide-react";
 
 import { FieldHlsVideo } from "./FieldHlsVideo";
+import { cameraStreamOrigin } from "@/lib/fieldCameras";
+import { readMjpeg, type Frame } from "@/lib/mjpegStream";
+
 import { HlsPlayer } from "./HlsPlayer";
 
 /**
@@ -26,14 +29,16 @@ function isMjpeg(src: string) {
 }
 
 /**
- * MJPEG 一格:直接用 <img> 吃 multipart 串流,不進 hls.js。
- * 元件卸載瀏覽器就會斷線 —— 上游同時只允許 3 路,不看要真的移除元素。
+ * MJPEG 一格:後端代理的 multipart 串流,自己用 fetch 讀(lib/mjpegStream)、一張張換進 <img>。
+ * 元件卸載就 abort —— 上游同時只允許 3 路,不看要真的斷線。
  *
- * 載不起來就退回佔位畫面:固定攝影機是陸續接上來的,平台還沒登記的名稱會回 404,
- * 不接 onError 的話那一格會變成瀏覽器的破圖。
+ * 不再直接 <img src=串流>:Chrome 的 <img> 遇到串流結束 / 卡住 / 一張都沒來就斷,
+ * 完全不會觸發事件,那一格就永遠停住、不會重連(「有時候即時影像都不出現」就是這個)。
+ * 現在只要 STALL_MS 沒來新的一張、串流結束或出錯,就斷掉重連;間隔從 1 秒起跳、
+ * 每次加倍、最多 RETRY_MAX_MS,一收到畫面就歸零。
  */
-/** 載不起來之後隔多久再試一次(毫秒)。牆是長時間掛著的,設備修好要能自己復原。 */
-const MJPEG_RETRY_MS = 15_000;
+const STALL_MS = 10_000;
+const RETRY_MAX_MS = 15_000;
 
 /** 右上角那顆標籤要標「LIVE」還是「回放」—— 回放時那幾格在轉圈,標 LIVE 會騙人 */
 export type VideoBadge = "live" | "replay";
@@ -47,6 +52,107 @@ function Badge({ kind }: { kind: VideoBadge }) {
   );
 }
 
+/** 讀 MJPEG 串流,回傳目前這一張的 blob 網址(還沒有畫面就是 null)。斷了自己重連。 */
+function useMjpegFrame(url: string | null) {
+  const [frame, setFrame] = useState<string | null>(null);
+  useEffect(() => {
+    setFrame(null);
+    if (!url) return;
+    let alive = true;
+    let ctrl: AbortController | null = null;
+    let retryTimer = 0;
+    let stallTimer = 0;
+    let delay = 1000;
+    // 最近兩張的網址:畫面上那張 + 正要換上去的那張
+    const shown: string[] = [];
+
+    const show = (jpg: Frame) => {
+      const next = URL.createObjectURL(new Blob([jpg], { type: "image/jpeg" }));
+      // 換下來的就放掉,不然 5 fps 掛一整天記憶體會一直漲。留兩張:<img> 可能還沒換上新的那張,
+      // 這時把它正顯示的那張收掉會閃一下破圖
+      shown.push(next);
+      while (shown.length > 2) URL.revokeObjectURL(shown.shift()!);
+      setFrame(next);
+    };
+    const armStall = () => {
+      window.clearTimeout(stallTimer);
+      stallTimer = window.setTimeout(() => ctrl?.abort(), STALL_MS);
+    };
+    const connect = () => {
+      ctrl = new AbortController();
+      armStall();
+      readMjpeg(url, ctrl.signal, (jpg) => {
+        delay = 1000;
+        armStall();
+        show(jpg);
+      })
+        .catch(() => undefined)
+        .finally(() => {
+          window.clearTimeout(stallTimer);
+          if (!alive) return;
+          ctrl?.abort();
+          retryTimer = window.setTimeout(connect, delay);
+          delay = Math.min(delay * 2, RETRY_MAX_MS);
+        });
+    };
+    connect();
+    return () => {
+      alive = false;
+      window.clearTimeout(retryTimer);
+      window.clearTimeout(stallTimer);
+      ctrl?.abort();
+      shown.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [url]);
+  return frame;
+}
+
+/** 串流要走的網址:相對路徑換到攝影機專用埠(探到之前是 null,先不開串流) */
+function useCameraUrl(src: string) {
+  // 串流走攝影機專用埠(連得到才換,見 lib/fieldCameras 的 cameraStreamOrigin)。
+  // 探到之前先不開串流,不然會先在 38080 上連一次、再換埠重連
+  const [origin, setOrigin] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    cameraStreamOrigin().then((o) => alive && setOrigin(o));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return origin === null ? null : src.startsWith("/") ? `${origin}${src}` : src;
+}
+
+/**
+ * 給牆面以外的頁面(/field)用的 MJPEG 一格:播法跟牆上一樣(自己讀串流、斷了重連),
+ * 只是轉圈與標籤的樣子由外面給(牆面的樣式是照 11520 寬的畫布放大的)。
+ */
+export function FieldMjpegVideo({
+  src,
+  alt,
+  badge,
+  spinner,
+}: {
+  src: string;
+  alt: string;
+  badge: ReactNode;
+  spinner: ReactNode;
+}) {
+  const frame = useMjpegFrame(useCameraUrl(src));
+  return (
+    <div className="relative h-full w-full overflow-hidden bg-black">
+      {frame ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="h-full w-full object-cover" src={frame} alt={alt} />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center" role="status" aria-label="等待影像">
+          {spinner}
+        </div>
+      )}
+      {badge}
+    </div>
+  );
+}
+
 function MjpegVideo({
   src,
   emptyText,
@@ -56,44 +162,14 @@ function MjpegVideo({
   emptyText: string;
   badge: VideoBadge;
 }) {
-  const [failed, setFailed] = useState(false);
-  const [ready, setReady] = useState(false);
-  /** 重試次數 —— 一併當成網址上的參數,瀏覽器才會真的重新請求而不是吃快取 */
-  const [attempt, setAttempt] = useState(0);
-  const url = attempt ? `${src}${src.includes("?") ? "&" : "?"}r=${attempt}` : src;
+  const frame = useMjpegFrame(useCameraUrl(src));
 
-  // 換了來源(或重試)就重新等 —— 驗測一開跑會從回放切成即時,那時還沒有畫面
-  useEffect(() => {
-    setFailed(false);
-    setReady(false);
-  }, [url]);
-
-  // 失敗之後定時重試。沒有這段的話,固定攝影機的 src 是常數、永遠不會變,
-  // 那一格就會一直轉圈到頁面重整為止 —— 設備修好也回不來(實際踩過)。
-  useEffect(() => {
-    if (!failed) return;
-    const t = window.setTimeout(() => setAttempt((a) => a + 1), MJPEG_RETRY_MS);
-    return () => window.clearTimeout(t);
-  }, [failed]);
-
-  if (failed) return <LiveVideo src={null} emptyText={emptyText} badge={badge} />;
+  // 還沒有畫面(探埠中、連線中、重連中):轉圈。驅動之後載具還要走到起點,
+  // 這段空白不標示會看起來像壞了
+  if (!frame) return <LiveVideo src={null} emptyText={emptyText} badge={badge} />;
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <img
-        className="h-full w-full object-cover"
-        src={url}
-        alt="即時影像"
-        onLoad={() => setReady(true)}
-        onError={() => setFailed(true)}
-      />
-      {/* 第一格畫面進來之前先轉圈 —— MJPEG 的 <img> 在收到第一格前是整片空白,
-          驅動之後載具還要走到起點,這段空白不標示會看起來像壞了。
-          onLoad 在第一格到達時就會觸發。 */}
-      {!ready && (
-        <div className="video-spin-overlay video-spin-overlay--dim" role="status" aria-label={emptyText}>
-          <span className="video-spinner" />
-        </div>
-      )}
+      <img className="h-full w-full object-cover" src={frame} alt="即時影像" />
       <Badge kind={badge} />
     </div>
   );

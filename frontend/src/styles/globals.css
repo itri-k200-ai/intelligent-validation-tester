@@ -2228,6 +2228,11 @@ html.wall-mode .war-room-cat-items {
   line-height: 1.35;
   color: var(--c-text-secondary);
 }
+/* 待測物的描述:一行最多約 18 個字就換行(依現場要求;測試設備等其他格不受影響) */
+html.wall-mode .war-room-cat-list--dut .war-room-cat-items {
+  flex: 0 1 auto;
+  max-width: 18.5em;
+}
 
 /* ── 測試方法:名稱 → 說明 → 示意圖(左右翻頁)→ 頁碼點 ─────────────
    版式對齊參考圖:那格大半是示意圖,說明文字比一般內文亮一階拉層次。
@@ -3126,6 +3131,20 @@ html.wall-mode .field-sub {
    多出來的高度留在列的下緣。 */
 html.wall-mode .field-live-stack > .field-sub {
   align-self: start;
+  /* 跟旁邊的攝影機小卡一樣高(標題列 + 1488 寬的 16:9 畫面 837),上下緣對齊(依前端回饋)。
+     不用列高 1032:攝影機那格只佔 957,拉到 1032 反而會比攝影機長一截 */
+  height: calc(52px * var(--wall) + 837px);
+}
+/* 卡片拉高之後,兩列數值平均分布在卡片裡,不要全擠在上面、下面空一大塊 */
+html.wall-mode .field-live-stack > .field-sub .field-metric-grid {
+  align-content: space-evenly;
+}
+/* 「平均上行提升」的數值:比項目名稱大一點、加粗 */
+html.wall-mode .field-gain-value {
+  /* 1.25em 時室內的「IM xApp 效能測試」會被擠成「效能…」;1.1em 加粗加色已經夠顯眼 */
+  font-size: 1.1em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 html.wall-mode .field-sub-head {
   flex: none;
@@ -3323,6 +3342,33 @@ html.wall-mode .field-scenario-icon {
   min-width: 0;
   flex-basis: 0;
 }
+/* 每一段 = 條子 + 底下的階段文字(三段都標,目前這段亮、其他暗,見 MissionProgress) */
+.field-progress-track--single > .field-progress-col {
+  min-width: 0;
+  flex-basis: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.field-progress-label {
+  /* 中間「部署中」那段很窄(只佔一兩步),文字要能超出段寬、置中在那段底下,
+     不然會被截成「app …」。兩旁的段很寬,文字置中後不會互相疊到 */
+  align-self: center;
+  width: max-content;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.38);
+  transition: color 0.2s;
+}
+.field-progress-label--on {
+  color: #ffffff;
+  font-weight: 600;
+}
+html.wall-mode .field-progress-label {
+  font-size: calc(24px * var(--wall));
+  line-height: 1.2;
+}
+html[data-field-theme="light"] .field-progress-label { color: rgba(15, 31, 56, 0.4); }
+html[data-field-theme="light"] .field-progress-label--on { color: rgb(15, 31, 56); }
 /* 測試數據的兩趟顏色對照(標題列右端) */
 html.wall-mode .field-phase-legend {
   display: inline-flex;

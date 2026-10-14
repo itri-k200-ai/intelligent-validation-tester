@@ -26,43 +26,7 @@ import type { FieldScenarioId } from "@/types/fieldTest";
  * 驅動會讓無人機 / AMR 真的動起來,所以一定先跳確認視窗;該情境已經有驗測在跑時不給按。
  */
 export function FieldDrivePanel({ scenario, running }: { scenario: FieldScenarioId; running: boolean }) {
-  const catalog = useAdapterCatalog();
-  const trigger = useTriggerTest();
-  const cases = casesFor(catalog.data ?? [], scenario);
-  const vehicle = scenario === "outdoor" ? "無人機" : "AMR";
-
-  const [confirm, setConfirm] = useState<AdapterTestcase | null>(null);
-  /** 這一頁剛剛送出的驅動(依情境分開記,切換分頁不會混在一起) */
-  const [sent, setSent] = useState<Partial<Record<FieldScenarioId, Sent>>>({});
-  const mine = sent[scenario];
-  const status = useRunningStatus(mine?.runningId ? [mine.runningId] : []);
-  const st = (status.data ?? []).find((s) => s.runningId === mine?.runningId);
-
-  const start = (tc: AdapterTestcase) => {
-    setConfirm(null);
-    trigger.mutate(tc.testcaseId, {
-      onSuccess: (rows) => {
-        const row = rows.find((r) => r.testcaseId === tc.testcaseId) ?? rows[0];
-        setSent((m) => ({
-          ...m,
-          [scenario]: row?.runningId
-            ? { name: caseName(tc), runningId: row.runningId, message: row.message }
-            : { name: caseName(tc), runningId: null, error: row?.message || "adapter 沒有回驗測編號" },
-        }));
-      },
-      onError: (err) => {
-        const e = err as { response?: { data?: { message?: string; detail?: string } }; message?: string };
-        setSent((m) => ({
-          ...m,
-          [scenario]: {
-            name: caseName(tc),
-            runningId: null,
-            error: e.response?.data?.message || e.response?.data?.detail || e.message || "送出失敗",
-          },
-        }));
-      },
-    });
-  };
+  const { catalog, trigger, cases, confirm, setConfirm, mine, st, start } = useFieldDrive(scenario);
 
   return (
     <section className="rounded-section border border-mint/30 bg-navy-500/70 p-4">
@@ -144,44 +108,184 @@ export function FieldDrivePanel({ scenario, running }: { scenario: FieldScenario
         </div>
       )}
 
-      <Dialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>開始驗測?</DialogTitle>
-            <DialogDescription>{confirm ? caseName(confirm) : ""}</DialogDescription>
-          </DialogHeader>
-          {confirm?.testcaseDescription_zh && (
-            <p className="text-sm text-white/75">{confirm.testcaseDescription_zh}</p>
-          )}
-          <div className="mt-3 flex items-start gap-2 rounded-item bg-warning/10 px-3 py-2 text-sm text-warning">
-            <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
-            按下開始後,{vehicle}會實際移動。請先確認場域安全、周圍沒有人員或障礙物。
-          </div>
-          <div className="mt-4 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setConfirm(null)}
-              className="rounded-full border border-white/15 px-4 py-1.5 text-sm text-white/80 hover:bg-white/10"
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              onClick={() => confirm && start(confirm)}
-              className="inline-flex items-center gap-1.5 rounded-full bg-mint px-4 py-1.5 text-sm font-semibold text-dark-text hover:brightness-110"
-            >
-              <Play className="h-4 w-4" /> 開始驗測
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <DriveConfirmDialog confirm={confirm} onCancel={() => setConfirm(null)} onStart={start} />
     </section>
+  );
+}
+
+
+/**
+ * /field 測試資訊列右側的「開始驗測」按鈕 —— 同一套驅動(useFieldDrive),只是做成一顆按鈕。
+ *
+ * 一個情境目前剛好一個測試案例(室內「單一 AMR 移動」、室外「室外場域驗測」),直接驅動它。
+ * 對不到、或對到好幾個(說不清楚要跑哪個)就不給按,寧可不按也不要跑錯 —— 要選的話去 /field/control。
+ */
+export function FieldDriveButton({
+  scenario,
+  running,
+  className,
+}: {
+  scenario: FieldScenarioId;
+  running: boolean;
+  className?: string;
+}) {
+  const { catalog, trigger, cases, confirm, setConfirm, mine, st, start } = useFieldDrive(scenario);
+  const tc = cases.length === 1 ? cases[0] : null;
+  const disabled = running || trigger.isPending || !tc;
+  const why = catalog.isError
+    ? "連不上 adapter,暫時無法驅動"
+    : catalog.isLoading
+      ? "載入測試項目中"
+      : !tc
+        ? cases.length
+          ? "這個情境有多個測試案例,請到驗測控制頁選擇"
+          : "測試目錄裡沒有這個情境的案例"
+        : running
+          ? "驗測進行中"
+          : `驅動「${caseName(tc)}」`;
+
+  return (
+    <div className={cn("flex flex-wrap items-center justify-end gap-x-3 gap-y-1", className)}>
+      {mine && (
+        <span className={cn("text-xs", mine.error ? "text-danger" : "text-mint")} role="status">
+          {mine.error
+            ? `驅動失敗:${mine.error}`
+            : st
+              ? `已送出 · ${st.status} ${Math.round(st.progress ?? 0)}%`
+              : "已送出 · 等待平台開始"}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={() => tc && setConfirm(tc)}
+        disabled={disabled}
+        title={why}
+        className={cn(
+          "inline-flex flex-none items-center justify-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors",
+          disabled ? "cursor-not-allowed bg-white/10 text-white/40" : "bg-mint text-dark-text hover:brightness-110",
+        )}
+      >
+        {trigger.isPending ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" /> 送出中…
+          </>
+        ) : running ? (
+          "驗測進行中"
+        ) : (
+          <>
+            <Play className="h-4 w-4" /> 開始驗測
+          </>
+        )}
+      </button>
+      <DriveConfirmDialog confirm={confirm} onCancel={() => setConfirm(null)} onStart={start} />
+    </div>
+  );
+}
+
+/**
+ * 驅動一次驗測的共用邏輯(控制頁的「驅動測試」區塊與 /field 測試資訊列的按鈕共用)。
+ * 只回傳狀態與動作,畫面由各自的元件決定;按下去一定先經過 DriveConfirmDialog。
+ */
+function useFieldDrive(scenario: FieldScenarioId) {
+  const catalog = useAdapterCatalog();
+  const trigger = useTriggerTest();
+  const cases = casesFor(catalog.data ?? [], scenario);
+
+  const [confirm, setConfirm] = useState<AdapterTestcase | null>(null);
+  /** 這一頁剛剛送出的驅動(依情境分開記,切換分頁不會混在一起) */
+  const [sent, setSent] = useState<Partial<Record<FieldScenarioId, Sent>>>({});
+  const mine = sent[scenario];
+  const status = useRunningStatus(mine?.runningId ? [mine.runningId] : []);
+  const st = (status.data ?? []).find((s) => s.runningId === mine?.runningId);
+
+  const start = (tc: AdapterTestcase) => {
+    setConfirm(null);
+    trigger.mutate(tc.testcaseId, {
+      onSuccess: (rows) => {
+        const row = rows.find((r) => r.testcaseId === tc.testcaseId) ?? rows[0];
+        setSent((m) => ({
+          ...m,
+          [scenario]: row?.runningId
+            ? { name: caseName(tc), runningId: row.runningId, message: row.message }
+            : { name: caseName(tc), runningId: null, error: row?.message || "adapter 沒有回驗測編號" },
+        }));
+      },
+      onError: (err) => {
+        const e = err as { response?: { data?: { message?: string; detail?: string } }; message?: string };
+        setSent((m) => ({
+          ...m,
+          [scenario]: {
+            name: caseName(tc),
+            runningId: null,
+            error: e.response?.data?.message || e.response?.data?.detail || e.message || "送出失敗",
+          },
+        }));
+      },
+    });
+  };
+
+  return { catalog, trigger, cases, confirm, setConfirm, mine, st, start };
+}
+
+/**
+ * 驅動前的確認視窗 —— 載具會真的動,一定要再按一次「開始驗測」才送出。
+ *
+ * 要跑哪個案例、哪台載具,都看打開視窗當下記住的那個案例(confirm),不看頁面目前的情境:
+ * /field 會跟著「最後一次操作」自動切換室內 / 室外,視窗開著時頁面可能已經換了,
+ * 但按下去跑的、視窗上寫的,一定是當初點的那一個。
+ */
+function DriveConfirmDialog({
+  confirm,
+  onCancel,
+  onStart,
+}: {
+  confirm: AdapterTestcase | null;
+  onCancel: () => void;
+  onStart: (tc: AdapterTestcase) => void;
+}) {
+  const vehicle = confirm && KEYWORDS.outdoor.test(caseText(confirm)) ? "無人機" : "AMR";
+  return (
+    <Dialog open={!!confirm} onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>開始驗測?</DialogTitle>
+          <DialogDescription>{confirm ? caseName(confirm) : ""}</DialogDescription>
+        </DialogHeader>
+        {confirm?.testcaseDescription_zh && (
+          <p className="text-sm text-white/75">{confirm.testcaseDescription_zh}</p>
+        )}
+        <div className="mt-3 flex items-start gap-2 rounded-item bg-warning/10 px-3 py-2 text-sm text-warning">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
+          按下開始後,{vehicle}會實際移動。請先確認場域安全、周圍沒有人員或障礙物。
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-full border border-white/15 px-4 py-1.5 text-sm text-white/80 hover:bg-white/10"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={() => confirm && onStart(confirm)}
+            className="inline-flex items-center gap-1.5 rounded-full bg-mint px-4 py-1.5 text-sm font-semibold text-dark-text hover:brightness-110"
+          >
+            <Play className="h-4 w-4" /> 開始驗測
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 type Sent = { name: string; runningId: string | null; message?: string; error?: string };
 
 const caseName = (tc: AdapterTestcase) => tc.testcaseName_zh || tc.testcaseName_en || tc.testcaseId;
+
+/** 案例本身的名稱與說明(分室內 / 室外、確認視窗判斷載具都看這個) */
+const caseText = (tc: AdapterTestcase) =>
+  [tc.testcaseName_zh, tc.testcaseName_en, tc.testcaseDescription_zh].filter(Boolean).join(" ");
 
 /** 依名稱 / 說明裡的關鍵字把案例分到室內或室外(見元件說明) */
 const KEYWORDS: Record<FieldScenarioId, RegExp> = {
@@ -194,15 +298,7 @@ function casesFor(catalog: AdapterDut[], scenario: FieldScenarioId): AdapterTest
   return catalog.flatMap((dut) =>
     dut.scenarioList.flatMap((sc) =>
       sc.testcaseList.filter((tc) => {
-        const text = [
-          dut.dutName_zh,
-          dut.dutName_en,
-          sc.scenarioName_zh,
-          sc.scenarioName_en,
-          tc.testcaseName_zh,
-          tc.testcaseName_en,
-          tc.testcaseDescription_zh,
-        ]
+        const text = [dut.dutName_zh, dut.dutName_en, sc.scenarioName_zh, sc.scenarioName_en, caseText(tc)]
           .filter(Boolean)
           .join(" ");
         // 兩邊關鍵字都有的(說不清楚是哪一個場域)就不放,寧可不出現也不要按錯

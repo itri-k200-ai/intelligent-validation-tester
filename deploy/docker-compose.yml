@@ -153,6 +153,8 @@ services:
       - "${IVT_NGINX_PORT:-8080}:80"
       # HTTPS(語音輸入需要),自簽憑證
       - "${IVT_NGINX_TLS_PORT:-38443}:443"
+      # 攝影機串流專用(只轉送 /api/field-tests/camera/,見 nginx.conf.template 的 8081 段)
+      - "${IVT_NGINX_CAMERA_PORT:-38081}:8081"
     depends_on: [frontend, backend-web, backend-ws, mediamtx]
 
 volumes:

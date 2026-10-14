@@ -7,17 +7,18 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from urllib.parse import quote
 
 import httpx
 from django.conf import settings
-from django.http import StreamingHttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import client, history, transform
+from . import client, history, jpeg, transform
 from .targets import ctrl_path, target
 
 logger = logging.getLogger(__name__)
@@ -143,16 +144,21 @@ class MissionView(WallReadView):
         except client.PerfTesterError as exc:
             return _error(exc)
 
-        # 即時遙測是附帶的:拿不到就只回驗測數據,不要整包失敗
+        # 即時遙測是附帶的:拿不到就只回驗測數據,不要整包失敗。
+        # 驗測跑完了就不問 —— 跑完的(包括被指定看的歷史)用不到車子現在的狀態,
+        # 下面會改用最後一筆樣本;而載具離線時這一問要等滿 2 秒逾時,牆面開頁 / 切換歷史
+        # 時判斷「即時還是回放」就被拖慢 2 秒(實測 /missions 0.25 秒 ↔ 2.3 秒跳)。
         live: dict = {}
         robot = targets = None
-        try:
-            live = (
-                client.get(ctrl_path(scenario, "/live"), timeout=OPTIONAL_TELEMETRY_TIMEOUT_S) or {}
-            ).get("live") or {}
-            robot, targets = _vehicle_extras(scenario)
-        except client.PerfTesterError as exc:
-            logger.info("即時遙測拿不到(%s),只回驗測數據", exc.detail)
+        if status_payload.get("status") not in {"done", "error", "aborted"}:
+            try:
+                live = (
+                    client.get(ctrl_path(scenario, "/live"), timeout=OPTIONAL_TELEMETRY_TIMEOUT_S)
+                    or {}
+                ).get("live") or {}
+                robot, targets = _vehicle_extras(scenario)
+            except client.PerfTesterError as exc:
+                logger.info("即時遙測拿不到(%s),只回驗測數據", exc.detail)
 
         # 顯示歷史紀錄時 /live 沒有意義(而且載具多半也不在線),上面那段會拿到空的。
         # 改用這次驗測最後一筆樣本的 ue —— 訊號(SINR/RSRP/RSRQ/DL/UL)與位置、yaw
@@ -200,6 +206,8 @@ class MissionView(WallReadView):
                     run_id,
                     status_payload,
                     conf.get("plan_id") if not request.query_params.get("run_id") else None,
+                    weights_plan=conf.get("plan_id"),
+                    drive_started=_drive_started(runs),
                 ),
             }
         )
@@ -476,7 +484,71 @@ def _plan_env_id(plan_id: str) -> str | None:
 _process_cache: dict[str, dict] = {}
 
 
-def _process(run_id: str, status_payload: dict, plan_id: str | None) -> dict | None:
+def _drive_started(runs: list[dict]) -> tuple[float | None, float | None]:
+    """兩趟各自第一筆樣本的時間(epoch 秒);那一趟還沒開始就是 None(見 transform.process)。"""
+    out: list[float | None] = []
+    for run in runs[:2]:
+        walls = [s.get("wall") for s in run.get("samples") or [] if isinstance(s.get("wall"), (int, float))]
+        out.append(min(walls) if walls else None)
+    while len(out) < 2:
+        out.append(None)
+    return out[0], out[1]
+
+
+# 同一個方案每一步實測的耗時(秒),依方案 + 步數快取 —— 方案改了步數就自動重抓
+_STEP_SECS_TTL_S = 600.0
+_step_secs_cache: dict[tuple[str, int], tuple[float, list[float] | None]] = {}
+
+
+def _step_secs(plan_id: str | None, steps: list[dict]) -> list[float] | None:
+    """進度條每一步的權重 —— 現在一律每步一樣(進度跟著階段走,依現場要求),回 None 用預設值。
+
+    下面依實測耗時加權的寫法先留著(_step_secs_by_time),之後真的要按時間算再換回來。
+    """
+    return None
+
+
+def _step_secs_by_time(plan_id: str | None, steps: list[dict]) -> list[float] | None:
+    """每一步大概要花幾秒:同一個方案最近幾次跑完的實測(results[].t)取中位數。
+
+    進度條的百分比與段寬都按它分(見 transform.process / stages)。拿不到歷史、或歷史的步數
+    跟現在的方案對不上(方案改過)就回 None,改用依步驟類型的預設值。
+    """
+    if not plan_id or not steps:
+        return None
+    key = (plan_id, len(steps))
+    hit = _step_secs_cache.get(key)
+    if hit and time.monotonic() - hit[0] < _STEP_SECS_TTL_S:
+        return hit[1]
+    secs: list[float] | None = None
+    try:
+        done = [r for r in _runs_of_plan(_validations(), plan_id) if r.get("status") == "done"]
+        done.sort(key=lambda r: r.get("created") or 0, reverse=True)
+        samples: list[list[float]] = []
+        for r in done[:5]:
+            rec = client.get(f"/validation-runs/{_rid(r)}") or {}
+            ts = [x.get("t") for x in rec.get("results") or []]
+            if len(rec.get("steps") or []) == len(steps) and len(ts) == len(steps) and all(
+                isinstance(t, (int, float)) for t in ts
+            ):
+                samples.append([float(t) for t in ts])
+            if len(samples) >= 3:
+                break
+        if samples:
+            secs = [max(0.2, sorted(col)[len(col) // 2]) for col in zip(*samples)]
+    except client.PerfTesterError as exc:
+        logger.info("拿不到方案 %s 的步驟耗時(%s),進度改用預設權重", plan_id, exc.detail)
+    _step_secs_cache[key] = (time.monotonic(), secs)
+    return secs
+
+
+def _process(
+    run_id: str,
+    status_payload: dict,
+    plan_id: str | None,
+    weights_plan: str | None = None,
+    drive_started: tuple[float | None, float | None] = (None, None),
+) -> dict | None:
     """整個驗測流程的進度(共幾步、完成幾步、現在在哪一步)。
 
     來源依序:
@@ -503,6 +575,9 @@ def _process(run_id: str, status_payload: dict, plan_id: str | None) -> dict | N
                     pipe.get("results") or [],
                     status,
                     cursor if isinstance(cursor, int) else None,
+                    secs=_step_secs(weights_plan, steps),
+                    drive_started=drive_started,
+                    now=time.time(),
                 )
         except client.PerfTesterError:
             pass
@@ -510,7 +585,14 @@ def _process(run_id: str, status_payload: dict, plan_id: str | None) -> dict | N
     try:
         rec = client.get(f"/validation-runs/{run_id}") or {}
         if rec.get("steps"):
-            result = transform.process(rec["steps"], rec.get("results") or [], status)
+            result = transform.process(
+                rec["steps"],
+                rec.get("results") or [],
+                status,
+                secs=_step_secs(weights_plan, rec["steps"]),
+                drive_started=drive_started,
+                now=time.time(),
+            )
             if finished:
                 _process_cache[run_id] = result
             return result
@@ -530,7 +612,7 @@ def _process(run_id: str, status_payload: dict, plan_id: str | None) -> dict | N
         None,
     )
     fake_results = [{"ok": True}] * ((marker + 1) if marker is not None else 0)
-    return transform.process(steps, fake_results, status)
+    return transform.process(steps, fake_results, status, secs=_step_secs(weights_plan, steps))
 
 
 def _runs_of_plan(runs: list[dict], plan_id: str) -> list[dict]:
@@ -805,7 +887,7 @@ class ReplayView(WallReadView):
 class ReplayFrameView(WallReadView):
     """GET /api/field-tests/replay/<scenario>/<cam>/<i>.jpg —— 回放的單張畫面。
 
-    前端連不到場域網段,所以圖片也要經這裡代理。單張 JPEG(實測約 120 KB),
+    前端連不到場域網段,所以圖片也要經這裡代理。單張 JPEG(原圖約 160 KB,重壓後約 20 KB),
     不是長連線 —— 與 CameraStreamView 不同,這裡可以讓瀏覽器快取:同一次驗測
     的同一張畫面不會變。
     """
@@ -823,10 +905,29 @@ class ReplayFrameView(WallReadView):
             )
         except client.PerfTesterError as exc:
             return _error(exc)
-        resp = StreamingHttpResponse(chunks, content_type=content_type)
+        # 單張不大,讀完重壓再送(見 jpeg.py:原圖 ~160 KB → ~20 KB)
+        body = b"".join(chunks)
+        if content_type.startswith("image/jpeg"):
+            body = jpeg.recompress(body)
+        resp = HttpResponse(body, content_type=content_type)
         # 歷史畫面不會再變,讓瀏覽器留著,播放時不用每輪重抓
         resp["Cache-Control"] = "public, max-age=86400"
         return resp
+
+
+def _camera_response(content_type: str, chunks):
+    """即時影像(MJPEG 串流 / 單張快照)重壓後送出(原因見 jpeg.py)。"""
+    if content_type.startswith("multipart/"):
+        resp = StreamingHttpResponse(jpeg.mjpeg(chunks), content_type=jpeg.MJPEG_CONTENT_TYPE)
+        # 給 nginx 的提示,免得被 buffer 住
+        resp["X-Accel-Buffering"] = "no"
+    elif content_type.startswith("image/jpeg"):
+        resp = HttpResponse(jpeg.recompress(b"".join(chunks)), content_type=content_type)
+    else:
+        resp = StreamingHttpResponse(chunks, content_type=content_type)
+        resp["X-Accel-Buffering"] = "no"
+    resp["Cache-Control"] = "no-store"
+    return resp
 
 
 class CameraStreamView(WallReadView):
@@ -846,17 +947,65 @@ class CameraStreamView(WallReadView):
             content_type, chunks = client.stream(ctrl_path(scenario, path))
         except client.PerfTesterError as exc:
             return _error(exc)
-        resp = StreamingHttpResponse(chunks, content_type=content_type)
-        resp["Cache-Control"] = "no-store"
-        # 給 nginx 的提示,免得被 buffer 住
-        resp["X-Accel-Buffering"] = "no"
-        return resp
+        return _camera_response(content_type, chunks)
+
+
+# UAV 沒有單張快照的端點:從 MJPEG 串流取第一張就關掉。
+# 一般 / 手機版每 2 秒抓一張、每個人各自抓,所以取到的那張大家共用一小段時間,
+# 不要每個請求都去開一次串流(上游同時只允許 3 路,開串流本身也要零點幾秒到 2 秒)。
+_GRAB_TTL_S = 1.5
+_grab_cache: dict[str, tuple[float, bytes]] = {}
+_grab_lock = threading.Lock()
+
+
+def _grab_frame(scenario: str, path: str) -> bytes | None:
+    # 別人正在取(載具不通時可能要等到逾時):最多等 8 秒,不要每個請求都排隊卡住一條執行緒
+    if not _grab_lock.acquire(timeout=8):
+        return None
+    try:
+        hit = _grab_cache.get(scenario)
+        if hit and time.monotonic() - hit[0] < _GRAB_TTL_S:
+            return hit[1]
+        content_type, chunks = client.stream(ctrl_path(scenario, path))
+        try:
+            if content_type.startswith("image/jpeg"):
+                jpg = b"".join(chunks)
+            else:
+                jpg = next(jpeg.frames(chunks), None)
+        finally:
+            chunks.close()
+        if jpg:
+            jpg = jpeg.recompress(jpg)
+            _grab_cache[scenario] = (time.monotonic(), jpg)
+        return jpg
+    finally:
+        _grab_lock.release()
 
 
 class CameraSnapshotView(CameraStreamView):
-    """GET /api/field-tests/camera/<scenario>/snapshot —— 單張 JPEG(只有 AMR 有)。"""
+    """GET /api/field-tests/camera/<scenario>/snapshot —— 單張 JPEG。
+
+    AMR 上游有現成的 /camera/snapshot;UAV 沒有,改從它的 MJPEG 取一張(見 _grab_frame)。
+    以前 UAV 這支一律 404,/field 室外的機載那格就永遠轉圈。
+    """
 
     kind = "snapshot"
+
+    def get(self, request, scenario: str):
+        if _camera_path(scenario, "snapshot"):
+            return super().get(request, scenario)
+        stream_path = _camera_path(scenario, "stream")
+        if not stream_path:
+            return Response({"detail": f"{scenario} 沒有這種影像"}, status=404)
+        try:
+            jpg = _grab_frame(scenario, stream_path)
+        except client.PerfTesterError as exc:
+            return _error(exc)
+        if not jpg:
+            return Response({"detail": "載具影像沒有送出畫面"}, status=503)
+        resp = HttpResponse(jpg, content_type="image/jpeg")
+        resp["Cache-Control"] = "no-store"
+        return resp
 
 
 class CameraByNameStreamView(WallReadView):
@@ -879,10 +1028,7 @@ class CameraByNameStreamView(WallReadView):
             )
         except client.PerfTesterError as exc:
             return _error(exc)
-        resp = StreamingHttpResponse(chunks, content_type=content_type)
-        resp["Cache-Control"] = "no-store"
-        resp["X-Accel-Buffering"] = "no"
-        return resp
+        return _camera_response(content_type, chunks)
 
 
 class CameraByNameSnapshotView(CameraByNameStreamView):

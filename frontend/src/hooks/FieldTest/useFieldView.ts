@@ -9,7 +9,14 @@ import { useFieldTestReplay } from "@/hooks/FieldTest/useFieldTestReplay";
 import { useFieldTestScene } from "@/hooks/FieldTest/useFieldTestScene";
 import { useReplayCursor } from "@/hooks/FieldTest/useReplayCursor";
 import { replayMaster } from "@/lib/fieldCameras";
-import { PHASE, currentStage, emptyMission } from "@/lib/fieldView";
+import {
+  PHASE,
+  currentStage,
+  currentStageKind,
+  emptyMission,
+  processFraction,
+  replayFraction,
+} from "@/lib/fieldView";
 import { firstGeo, makeGeoProjector, projectMission } from "@/lib/geoProjection";
 import type { FieldMission, FieldVehicleStatus, FieldScenarioId, LinkQuality } from "@/types/fieldTest";
 
@@ -24,19 +31,19 @@ import type { FieldMission, FieldVehicleStatus, FieldScenarioId, LinkQuality } f
  */
 export function useFieldView(scenario: FieldScenarioId) {
   const sc = FIELD_SCENARIOS[scenario];
-  const { mission } = useFieldTestMission(scenario);
+  const { mission, settled: missionSettled } = useFieldTestMission(scenario);
   // service 的回傳型別沒列 geo(後端有給,室外才有)—— 照中牆的寫法以 FieldLive 看待
   const live = useFieldTestLive(scenario).live as FieldLive | null;
-  const { replay } = useFieldTestReplay(scenario);
   const { scene } = useFieldTestScene(scenario);
 
   // 骨架固定同一個物件(理由同中牆:不然 3D 地圖每次 render 都重畫)
   const empty = useMemo(() => emptyMission(sc, scenario), [sc, scenario]);
   const base: FieldMission = mission ?? empty;
+  const { replay, settled } = useFieldTestReplay(scenario, base.runId);
 
   const running = base.runs.some((r) => r.status === "running");
   const replaying = !!base.pinned && !running;
-  // 回放索引 30 秒才重抓一次,切換歷史的頭幾十秒還是上一筆 —— 比對 runId 擋掉
+  // 切換歷史的那一瞬間 replay 可能還是上一筆 —— 比對 runId 擋掉
   const freshReplay = !!replay && !!base.runId && replay.runId === base.runId;
   // 每一支有存影格的鏡頭(畫面依各格對應的名稱自己挑,見 lib/fieldCameras)
   const replayCams = useMemo(
@@ -45,7 +52,13 @@ export function useFieldView(scenario: FieldScenarioId) {
   );
   // 時鐘跟著錄得最完整的那支(有車載用車載);一支都沒有就用樣本的時間軸
   const master = replayMaster(replayCams);
-  const cursor = useReplayCursor(master?.frames ?? null, replay?.periodS ?? null, base.runs, replaying);
+  const cursor = useReplayCursor(
+    master?.frames ?? null,
+    replay?.periodS ?? null,
+    base.runs,
+    // 影像索引還沒回來就先不播(理由同中牆)
+    replaying && settled,
+  );
   const rs = replaying ? cursor.sample : null;
 
   // 只放這一筆真的有值的欄位:spread 一個 undefined 會把原本的值蓋掉
@@ -88,21 +101,14 @@ export function useFieldView(scenario: FieldScenarioId) {
 
   // 回放進度:游標的絕對時間落在所有樣本首尾之間的位置
   const replayPercent = useMemo(() => {
-    const cut = rs?.wall;
-    if (cut == null) return null;
-    const walls = base.runs
-      .flatMap((r) => (r.samples ?? []).map((x) => x.wall))
-      .filter((w): w is number => w != null);
-    if (walls.length < 2) return null;
-    const a = Math.min(...walls);
-    const b = Math.max(...walls);
-    if (b <= a) return null;
-    return Math.round(Math.min(1, Math.max(0, (cut - a) / (b - a))) * 100);
+    const f = replayFraction(base.process, base.runs, rs?.wall);
+    return f === null ? null : Math.round(f * 100);
   }, [base, rs?.wall]);
 
   const p = base.process;
-  const percent =
-    replayPercent ?? (p && p.total ? Math.round((p.done / p.total) * 100) : null);
+  // 依時間加權的完成比例(見 lib/fieldView 的 processFraction)
+  const doneFrac = processFraction(p);
+  const percent = replayPercent ?? (doneFrac === null ? null : Math.round(doneFrac * 100));
 
   const run = base.runs[base.currentRun];
   const baseLink: LinkQuality | null = live?.link ?? run?.link ?? null;
@@ -116,6 +122,7 @@ export function useFieldView(scenario: FieldScenarioId) {
           dlKbps: rs.dlKbps ?? null,
           ulKbps: rs.ulKbps ?? null,
           rttMs: rs.rttMs ?? null,
+          pci: rs.pci ?? baseLink.pci,
         }
       : baseLink;
 
@@ -159,12 +166,16 @@ export function useFieldView(scenario: FieldScenarioId) {
     play,
     mapMission,
     running,
+    /** 第一次狀態查詢有結果了沒 —— 之前不開即時串流(理由同中牆:先開再關會白佔上游名額) */
+    missionSettled,
     replaying,
     replayCams,
     /** 目前播到的絕對時間;各格用它找自己那支鏡頭最接近的一張 */
     replayWall: cursor.wall,
     percent,
     stage: currentStage(p, replayPercent),
+    /** 同上,但是哪一段(before / deploy / after)—— 進度條下三段文字亮哪一個 */
+    stageKind: currentStageKind(p, replayPercent),
     vehicle: { ...base.vehicle, ...live?.vehicle, ...(replayVehicle ?? {}) } as FieldVehicleStatus,
     link,
     position,

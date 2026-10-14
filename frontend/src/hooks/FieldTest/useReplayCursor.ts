@@ -17,6 +17,11 @@ import type { FieldRun, FieldSample } from "@/types/fieldTest";
  *
  * 播到底從頭再來 —— 牆是長時間掛著的,停在最後一格看起來像當掉。
  */
+/** 回放每次換格最短的間隔(毫秒),見 stepMs */
+/** 回放一律用這個倍率播(現場回饋原速太慢;不給選,牆上不放按鈕) */
+export const REPLAY_SPEED = 4;
+const MIN_TICK_MS = 250;
+
 export function useReplayCursor(
   frames: ReplayFrame[] | null,
   periodS: number | null,
@@ -43,8 +48,13 @@ export function useReplayCursor(
 
   const total = steps.length;
   const [at, setAt] = useState(0);
-  // periodS 是上游錄影的間隔;沒給就用 0.7 秒(實測值)。太快會看不清,設下限。
-  const stepMs = Math.max(200, Math.round((periodS ?? 0.7) * 1000));
+  // periodS 是上游錄影的間隔;沒給就用 0.7 秒(實測值)。再乘上 REPLAY_SPEED。
+  // 一格最快 MIN_TICK_MS:倍率高到比這還快時改成「每次跳好幾格」—— 不然 8× 等於
+  // 每秒要換十幾張圖、四支鏡頭一起抓,慢一點的網路根本載不完,反而一直停在舊畫面。
+  const speed = REPLAY_SPEED;
+  const baseMs = Math.max(200, Math.round((periodS ?? 0.7) * 1000));
+  const stride = Math.max(1, Math.ceil((MIN_TICK_MS * speed) / baseMs));
+  const stepMs = Math.round((baseMs * stride) / speed);
 
   useEffect(() => {
     setAt(0);
@@ -53,11 +63,11 @@ export function useReplayCursor(
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     if (total <= 1) return;
-    timer.current = setInterval(() => setAt((i) => (i + 1) % total), stepMs);
+    timer.current = setInterval(() => setAt((i) => (i + stride) % total), stepMs);
     return () => {
       if (timer.current) clearInterval(timer.current);
     };
-  }, [total, stepMs]);
+  }, [total, stepMs, stride]);
 
   const sample: FieldSample | null = useMemo(() => {
     const wall = steps[at]?.wall;

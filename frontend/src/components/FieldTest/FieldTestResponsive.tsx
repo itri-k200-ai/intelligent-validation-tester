@@ -12,22 +12,27 @@ import {
 } from "recharts";
 
 import { FieldAssistant } from "@/components/FieldTest/FieldAssistant";
+import { FieldDriveButton } from "@/components/FieldTest/FieldDrivePanel";
 import { FieldReportDialog } from "@/components/FieldTest/FieldReportDialog";
 import { ReplayPlayer } from "@/components/FieldTest/ReplayPlayer";
 import { RouteMap } from "@/components/FieldTest/RouteMap";
 import { SceneMap3D } from "@/components/FieldTest/SceneMap3D";
 import { FieldHlsVideo } from "@/components/Site/FieldHlsVideo";
-import { SnapshotVideo, VideoBadge } from "@/components/Site/SnapshotVideo";
+import { FieldMjpegVideo } from "@/components/Site/LiveVideo";
+import { VideoBadge } from "@/components/Site/SnapshotVideo";
 import type { TrendSpec } from "@/config/fieldScenarios";
+import { useFieldTestCamera } from "@/hooks/FieldTest/useFieldTestCamera";
 import { useFieldTheme } from "@/hooks/FieldTest/useFieldTheme";
 import { useFieldView } from "@/hooks/FieldTest/useFieldView";
-import { frameAt, liveInReplay, replayCameraFor, snapshotSources } from "@/lib/fieldCameras";
+import { cameraSources, frameAt, liveInReplay, replayCameraFor } from "@/lib/fieldCameras";
 import {
   PHASE,
   PROGRESS_COLOR,
   STAGE_COLOR,
   STAGE_LABEL,
+  processFraction,
   runTime,
+  stageSpans,
   signalReadings,
   vehicleReadings,
   type Reading,
@@ -48,6 +53,9 @@ import type { FieldMission, FieldRun, FieldSample, FieldScenarioId, Optimization
 // 情境(室內 / 室外)與中牆同一套規則:跟著「最後一次操作」自動切換,
 // 使用者自己點了分頁就以點的為準,直到下一次操作(見 FieldTestScenarioContainer)。
 
+/** 右下角「場域測試小助理」要不要顯示 —— 先隱藏(依現場要求) */
+const SHOW_ASSISTANT = false;
+
 const VEHICLE_ICON: Record<FieldScenarioId, LucideIcon> = { outdoor: Plane, indoor: Bot };
 const TABS: { id: FieldScenarioId; label: string }[] = [
   { id: "outdoor", label: "室外" },
@@ -57,10 +65,16 @@ const TABS: { id: FieldScenarioId; label: string }[] = [
 export function FieldTestResponsive({
   title = "智慧網路場域測試",
   controls,
+  canDrive = true,
 }: {
   title?: string;
   /** 操作區塊(驗測控制頁 /field/control 用);檢視頁 /field 不給,維持只能看 */
   controls?: (p: { scenario: FieldScenarioId; running: boolean }) => ReactNode;
+  /**
+   * 測試資訊列右邊要不要放「開始驗測」。來賓看的純監控頁(/field/view)傳 false ——
+   * 那一頁只能看,不能讓來賓自己驅動載具。
+   */
+  canDrive?: boolean;
 } = {}) {
   const scenario = useFieldScenarioStore((s) => s.scenario);
   const pickScenario = useFieldScenarioStore((s) => s.pickScenario);
@@ -71,15 +85,20 @@ export function FieldTestResponsive({
   const status = statusLabel(v.running, v.replaying, v.hasData);
   const { theme, toggle } = useFieldTheme();
 
-  return (
-    <div className="mx-auto flex max-w-[1600px] flex-col gap-4 pb-24">
-      {/* ── 標題列:情境分頁 + 狀態 ── */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-medium tracking-tight text-white md:text-2xl">{title}</h1>
-          <StatusChip running={v.running} replaying={v.replaying} hasData={v.hasData} />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+  const fit = !controls;
+  const wide = useMediaQuery("(min-width: 1024px)");
+  // 手機 / 平板橫放時影像分頁兩格並排,直放時上下疊
+  const landscape = useMediaQuery("(orientation: landscape)");
+  const [tab, setTab] = useState<MobileTab>("route");
+
+  // ── 共用的區塊(捲動版 / 一頁版都用同一份)──
+  const header = (
+    <div className="flex flex-none flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-3">
+        <h1 className="text-xl font-medium tracking-tight text-white md:text-2xl">{title}</h1>
+        <StatusChip running={v.running} replaying={v.replaying} hasData={v.hasData} />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
         <div role="tablist" aria-label="測試情境" className="flex rounded-full bg-white/5 p-1">
           {TABS.map((t) => (
             <button
@@ -107,83 +126,237 @@ export function FieldTestResponsive({
         >
           {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
-        </div>
       </div>
+    </div>
+  );
 
-      {/* ── 測試資訊 ── */}
-      <dl className="grid grid-cols-1 gap-x-6 gap-y-2 rounded-section border border-white/10 bg-navy-500/60 px-4 py-3 text-sm sm:grid-cols-3">
+  // 右側的「開始驗測」只在檢視頁 /field 放;控制頁 /field/control 已經有完整的驅動區塊,
+  // 來賓用的純監控頁 /field/view 則完全不放(canDrive = false)
+  const meta = (
+    <div
+      className={cn(
+        "flex flex-none rounded-section border border-white/10 bg-navy-500/60 text-sm",
+        // 一頁版:按鈕一律放在同一列右邊(手機上少佔一整列高度)
+        fit ? "flex-row items-center gap-2 px-3 py-2 lg:gap-3 lg:px-4 lg:py-3" : "flex-col gap-3 px-4 py-3 md:flex-row md:items-center",
+      )}
+    >
+      <dl className={cn("grid min-w-0 flex-1 grid-cols-1 gap-x-6 sm:grid-cols-3", fit ? "gap-y-1" : "gap-y-2")}>
         <Meta k="測試環境" v={mission.testcase.environment} />
         <Meta k="測試項目" v={mission.testcase.name} />
         <Meta k={at?.label ?? "驗測時間"} v={at?.at ?? "—"} />
       </dl>
-
-      {controls?.({ scenario, running: v.running })}
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* ── 右欄(手機排在前面):進度 + 路徑 + 測試數據 ── */}
-        <div className="flex min-w-0 flex-col gap-4 lg:order-2 lg:col-span-7">
-          <Panel icon={Route} title={sc.routeTitle}>
-            <Progress mission={mission} percent={v.percent} stage={v.stage} />
-            <div className="field-keep-dark field-map-surface mt-3 flex h-56 flex-col sm:h-80 lg:h-[420px]">
-              {scenario === "outdoor" && v.scene ? (
-                <SceneMap3D scene={v.scene} tracks={v.sceneTracks} uav={v.sceneUav} pixelRatio={dpr} />
-              ) : (
-                <RouteMap
-                  mission={scenario === "outdoor" ? v.mapMission : v.play}
-                  floorPlan={sc.floorPlan}
-                  backdrop={sc.backdrop}
-                  livePosition={v.position}
-                  realFrame={scenario === "outdoor" && v.realFrame}
-                />
-              )}
-            </div>
-          </Panel>
-
-          <Panel icon={Signal} title="測試數據" aside={<PhaseLegend />}>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-              {RATE_CHARTS.map((spec) => (
-                <CompareChart key={spec.metric} spec={spec} runs={v.play.runs} />
-              ))}
-            </div>
-          </Panel>
-        </div>
-
-        {/* ── 左欄:數值 + 影像(桌機影像在上,手機數值在上 —— 影像最佔流量也最不急)── */}
-        <div className="flex min-w-0 flex-col gap-4 lg:order-1 lg:col-span-5">
-          {/* 桌機(lg 以上)上下疊:並排時每張卡只剩約 280px,經緯度(4 位小數)會被截成「24.77…」;
-              左欄本來就比右欄短,疊起來不會多佔高度。平板(md)寬度夠,維持並排 */}
-          <div className="order-1 grid grid-cols-1 gap-4 md:grid-cols-2 lg:order-2 lg:grid-cols-1">
-            <Panel icon={VEHICLE_ICON[scenario]} title={sc.live.vehicleTitle}>
-              <Metrics items={vehicleReadings(scenario, v.vehicle, v.position, v.geo)} />
-            </Panel>
-            <Panel icon={Signal} title={sc.live.signalTitle}>
-              <Metrics items={signalReadings(v.link)} />
-            </Panel>
-          </div>
-
-          <Panel className="order-2 lg:order-1" icon={Video} title="影像">
-            <Cameras scenario={scenario} labels={sc.cameras} view={v} />
-          </Panel>
-        </div>
-      </div>
-
-      <FieldAssistant
-        ctx={{
-          scenarioLabel: scenario === "outdoor" ? "室外" : "室內",
-          testName: mission.testcase.name,
-          environment: mission.testcase.environment,
-          status,
-          percent: v.percent,
-          stage: v.stage,
-          link: v.link,
-          vehicle: v.vehicle,
-          position: v.position,
-          geo: v.geo,
-          runs: v.play.runs,
-        }}
-      />
+      {!controls && canDrive && <FieldDriveButton scenario={scenario} running={v.running} className="flex-none" />}
     </div>
   );
+
+  // 手機 / 平板:階段文字平均分三欄 —— 某一段很短時(室外的「部署前」),對齊段寬的文字會跟隔壁疊在一起
+  const progress = <Progress mission={mission} percent={v.percent} stage={v.stageKind} evenLabels={fit && !wide} />;
+
+  const map =
+    scenario === "outdoor" && v.scene ? (
+      <SceneMap3D scene={v.scene} tracks={v.sceneTracks} uav={v.sceneUav} pixelRatio={dpr} />
+    ) : (
+      <RouteMap
+        mission={scenario === "outdoor" ? v.mapMission : v.play}
+        floorPlan={sc.floorPlan}
+        backdrop={sc.backdrop}
+        livePosition={v.position}
+        realFrame={scenario === "outdoor" && v.realFrame}
+      />
+    );
+
+  const vehiclePanel = (compact: boolean) => (
+    <Panel icon={VEHICLE_ICON[scenario]} title={sc.live.vehicleTitle} className={cn("flex-none", compact && "!p-3")}>
+      <Metrics compact={compact} items={vehicleReadings(scenario, v.vehicle, v.position, v.geo)} />
+    </Panel>
+  );
+  const signalPanel = (compact: boolean) => (
+    <Panel icon={Signal} title={sc.live.signalTitle} className={cn("flex-none", compact && "!p-3")}>
+      <Metrics compact={compact} items={signalReadings(v.link)} />
+    </Panel>
+  );
+  const statusPanels = (compact: boolean) => (
+    <>
+      {vehiclePanel(compact)}
+      {signalPanel(compact)}
+    </>
+  );
+
+  // 小助理先隱藏(依現場要求,/field、/field/view、/field/control 都不顯示);要恢復把 SHOW_ASSISTANT 改回 true
+  const assistant = SHOW_ASSISTANT && (
+    <FieldAssistant
+      ctx={{
+        scenarioLabel: scenario === "outdoor" ? "室外" : "室內",
+        testName: mission.testcase.name,
+        environment: mission.testcase.environment,
+        status,
+        percent: v.percent,
+        stage: v.stage,
+        link: v.link,
+        vehicle: v.vehicle,
+        position: v.position,
+        geo: v.geo,
+        runs: v.play.runs,
+      }}
+      raised={fit && !wide}
+    />
+  );
+
+  // ── 控制頁(/field/control):維持原本可捲動的版面,驅動區塊需要空間 ──
+  if (!fit)
+    return (
+      <div className="mx-auto flex max-w-[1600px] flex-col gap-4 pb-24">
+        {header}
+        {meta}
+        {controls?.({ scenario, running: v.running })}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          <div className="flex min-w-0 flex-col gap-4 lg:order-2 lg:col-span-7">
+            <Panel icon={Route} title={sc.routeTitle}>
+              {progress}
+              <div className="field-keep-dark field-map-surface mt-3 flex h-56 flex-col sm:h-80 lg:h-[420px]">{map}</div>
+            </Panel>
+            <Panel icon={Signal} title="測試數據" aside={<PhaseLegend />}>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                {RATE_CHARTS.map((spec) => (
+                  <CompareChart key={spec.metric} spec={spec} runs={v.play.runs} />
+                ))}
+              </div>
+            </Panel>
+          </div>
+          <div className="flex min-w-0 flex-col gap-4 lg:order-1 lg:col-span-5">
+            <div className="order-1 grid grid-cols-1 gap-4 md:grid-cols-2 lg:order-2 lg:grid-cols-1">
+              {statusPanels(false)}
+            </div>
+            <Panel className="order-2 lg:order-1" icon={Video} title="影像">
+              <Cameras scenario={scenario} labels={sc.cameras} view={v} />
+            </Panel>
+          </div>
+        </div>
+        {assistant}
+      </div>
+    );
+
+  // ── 檢視頁(/field):一頁剛好填滿畫面,不用捲(依現場要求:16:9、4:3、手機直式都一樣)──
+  //   桌機(≥1024 寬):左欄 影像(撐滿)+ 兩張數值;右欄 路徑(含進度,約 3/5)+ 測試數據(約 2/5)
+  //   手機 / 平板:上面固定標題、測試資訊、進度;中間是目前分頁;最下面「路徑 / 影像 / 數據」分頁列。
+  //     只掛目前那一頁 —— 影像分頁沒打開就不開串流,不白佔上游名額
+  // 高度 = 視窗高 - FieldAuthGate 的上下內距(手機 1rem×2、md 以上 1.5rem×2);用 dvh,手機網址列收合時不會被切掉
+  return (
+    <div className="mx-auto flex h-[calc(100dvh-2rem)] max-w-[1600px] flex-col gap-3 md:h-[calc(100dvh-3rem)] lg:gap-4">
+      {header}
+      {meta}
+      {wide ? (
+        <div className="grid min-h-0 flex-1 grid-cols-12 gap-4">
+          <div className="col-span-5 flex min-h-0 min-w-0 flex-col gap-4">
+            <Panel fill className="min-h-[160px] flex-1" icon={Video} title="影像">
+              {/* 室外只有兩格:左欄是直長的,上下疊才接近 16:9(並排會被拉成直長條、裁掉大半畫面) */}
+              <Cameras fill stack scenario={scenario} labels={sc.cameras} view={v} />
+            </Panel>
+            {statusPanels(true)}
+          </div>
+          <div className="col-span-7 flex min-h-0 min-w-0 flex-col gap-4">
+            <Panel fill className="flex-[3]" icon={Route} title={sc.routeTitle}>
+              {progress}
+              <div className="field-keep-dark field-map-surface mt-2 flex min-h-0 flex-1 flex-col">{map}</div>
+            </Panel>
+            <Panel fill className="flex-[2]" icon={Signal} title="測試數據" aside={<PhaseLegend />}>
+              <div className="grid min-h-0 flex-1 grid-cols-2 gap-5">
+                {RATE_CHARTS.map((spec) => (
+                  <CompareChart fill key={spec.metric} spec={spec} runs={v.play.runs} />
+                ))}
+              </div>
+            </Panel>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex-none rounded-section border border-white/10 bg-navy-500/60 px-3 py-2">{progress}</div>
+          {/* 分頁內容吃掉剩下的高度。極矮的螢幕(手機橫放等)真的放不下時,只有這一塊自己捲,整頁不會捲 */}
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+            {/* 路徑:地圖 + 行駛狀態(位置、方向、速度跟地圖一起看);通訊品質放到「數據」 */}
+            {tab === "route" && (
+              <>
+                <Panel fill className="min-h-[160px] flex-1" icon={Route} title={sc.routeTitle}>
+                  <div className="field-keep-dark field-map-surface flex min-h-0 flex-1 flex-col">{map}</div>
+                </Panel>
+                {vehiclePanel(true)}
+              </>
+            )}
+            {/* 影像:每格維持 16:9、整個畫面都看得到,直放一格一列,放不下就讓這一塊往下捲
+                (依現場回饋:撐滿高度時格子被壓成別的比例,畫面兩側 / 上下被裁掉,東西看不到) */}
+            {tab === "video" && (
+              <Panel className="flex-none" icon={Video} title="影像">
+                <Cameras single={!landscape} scenario={scenario} labels={sc.cameras} view={v} />
+              </Panel>
+            )}
+            {tab === "data" && signalPanel(true)}
+            {/* 數據:圖表固定高度(不撐滿),放不下就讓這一塊往下捲 —— 撐滿時兩張圖被壓得很扁,
+                標題列的「啟用前 → 啟用後」換行後還會跟圖疊在一起(依現場回饋) */}
+            {tab === "data" && (
+              <Panel className="flex-none" icon={Signal} title="測試數據" aside={<PhaseLegend />}>
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  {RATE_CHARTS.map((spec) => (
+                    <CompareChart key={spec.metric} spec={spec} runs={v.play.runs} />
+                  ))}
+                </div>
+              </Panel>
+            )}
+          </div>
+          <MobileTabBar tab={tab} onPick={setTab} />
+        </>
+      )}
+      {assistant}
+    </div>
+  );
+}
+
+type MobileTab = "route" | "video" | "data";
+const MOBILE_TABS: { id: MobileTab; label: string; icon: LucideIcon }[] = [
+  { id: "route", label: "路徑", icon: Route },
+  { id: "video", label: "影像", icon: Video },
+  { id: "data", label: "數據", icon: Signal },
+];
+
+/** 手機 / 平板最下面的分頁列(一頁版用) */
+function MobileTabBar({ tab, onPick }: { tab: MobileTab; onPick: (t: MobileTab) => void }) {
+  return (
+    <nav
+      role="tablist"
+      aria-label="內容"
+      className="grid flex-none grid-cols-3 gap-1 rounded-section border border-white/10 bg-navy-500/80 p-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]"
+    >
+      {MOBILE_TABS.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          aria-selected={tab === id}
+          onClick={() => onPick(id)}
+          className={cn(
+            "flex items-center justify-center gap-1.5 rounded-item py-2 text-sm transition-colors",
+            // 沒選到的也用全白(原本 70% 白在深底上對比不夠);選到的是薄荷底 + 深色字
+            tab === id ? "bg-mint font-semibold text-dark-text" : "text-white hover:bg-white/10",
+          )}
+        >
+          <Icon className="h-4 w-4" strokeWidth={1.75} />
+          {label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+/** 媒體查詢:第一次 render 先當作不符合(伺服器端沒有視窗),掛上之後照實際尺寸、跟著視窗變 */
+function useMediaQuery(query: string) {
+  const [match, setMatch] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setMatch(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, [query]);
+  return match;
 }
 
 // ── 小元件 ───────────────────────────────────────────────────────────
@@ -222,30 +395,39 @@ function Panel({
   title,
   aside,
   className,
+  fill = false,
   children,
 }: {
   icon: LucideIcon;
   title: string;
   aside?: ReactNode;
   className?: string;
+  /** 撐滿外層給的高度(一頁不捲的版面用):內容區吃掉標題以外的全部高度 */
+  fill?: boolean;
   children: ReactNode;
 }) {
   return (
-    <section className={cn("min-w-0 rounded-section border border-white/10 bg-navy-500/60 p-4", className)}>
-      <div className="mb-3 flex items-center gap-2">
+    <section
+      className={cn(
+        "min-w-0 rounded-section border border-white/10 bg-navy-500/60",
+        fill ? "flex min-h-0 flex-col p-3 lg:p-4" : "p-4",
+        className,
+      )}
+    >
+      <div className={cn("flex flex-none items-center gap-2", fill ? "mb-2" : "mb-3")}>
         <Icon className="h-5 w-5 flex-none text-teal" strokeWidth={1.75} />
         <h2 className="flex-none text-base font-semibold text-white">{title}</h2>
         {aside && <div className="ml-auto min-w-0">{aside}</div>}
       </div>
-      {children}
+      {fill ? <div className="flex min-h-0 flex-1 flex-col">{children}</div> : children}
     </section>
   );
 }
 
 /** 3 欄 × 2 列的數值:標籤(含單位)在上、數值在下 */
-function Metrics({ items }: { items: Reading[] }) {
+function Metrics({ items, compact = false }: { items: Reading[]; compact?: boolean }) {
   return (
-    <div className="grid grid-cols-3 gap-x-3 gap-y-4">
+    <div className={cn("grid grid-cols-3 gap-x-3", compact ? "gap-y-2" : "gap-y-4")}>
       {items.map(({ label, unit, value, tone = "text-white" }) => (
         <div key={label} className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-xs text-white/55">
@@ -254,7 +436,8 @@ function Metrics({ items }: { items: Reading[] }) {
           </span>
           <span
             className={cn(
-              "truncate text-lg font-semibold tabular-nums leading-tight sm:text-xl",
+              "truncate font-semibold tabular-nums leading-tight",
+              compact ? "text-base xl:text-lg" : "text-lg sm:text-xl",
               value === null ? "text-white/40" : tone,
             )}
           >
@@ -267,11 +450,22 @@ function Metrics({ items }: { items: Reading[] }) {
 }
 
 /** 測試進度:三段條(app 部署前 / 中 / 後),規則同中牆的 MissionProgress(single) */
-function Progress({ mission, percent, stage }: { mission: FieldMission; percent: number | null; stage?: string }) {
+function Progress({
+  mission,
+  percent,
+  stage,
+  evenLabels = false,
+}: {
+  mission: FieldMission;
+  percent: number | null;
+  stage?: string;
+  /** 階段文字不對齊各段,改成平均分三欄放在條子下面(窄螢幕用,見呼叫端) */
+  evenLabels?: boolean;
+}) {
   const p = mission.process;
-  const total = p?.total ?? 0;
-  const doneSteps = percent !== null && total ? (percent / 100) * total : (p?.done ?? 0);
-  const segs = p?.stages?.length ? p.stages : null;
+  // 段寬與填色都照時間比例(同中牆,見 lib/fieldView 的 stageSpans / processFraction)
+  const f = percent !== null ? percent / 100 : (processFraction(p) ?? 0);
+  const segs = stageSpans(p);
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <span className="text-sm text-white/60">測試進度</span>
@@ -279,28 +473,55 @@ function Progress({ mission, percent, stage }: { mission: FieldMission; percent:
       <span className="w-[4.5rem] text-2xl font-semibold tabular-nums text-white">
         {percent === null ? "—" : `${percent}%`}
       </span>
-      {stage && <span className="text-sm text-white/75">{stage}</span>}
-      <div className="flex h-2.5 w-full gap-1 sm:w-auto sm:min-w-[160px] sm:flex-1">
+      <div className={cn("w-full sm:w-auto sm:min-w-[160px] sm:flex-1", evenLabels && segs && "flex flex-col gap-1")}>
+      <div className="flex w-full gap-1">
         {segs ? (
           segs.map((seg) => {
-            const span = Math.max(1, seg.to - seg.from);
-            const filled = Math.min(1, Math.max(0, (doneSteps - seg.from) / span)) * 100;
+            const span = Math.max(1e-6, seg.end - seg.start);
+            const filled = Math.min(1, Math.max(0, (f - seg.start) / span)) * 100;
             return (
-              <div
-                key={seg.kind + seg.from}
-                className="h-full overflow-hidden rounded-full bg-white/15"
-                style={{ flexGrow: span, flexBasis: 0 }}
-                title={STAGE_LABEL[seg.kind]}
-              >
-                <div className="h-full rounded-full" style={{ width: `${filled}%`, background: STAGE_COLOR[seg.kind] }} />
+              // 三段的文字都標在各自那一段下面,目前這段亮、其他暗(同中牆)
+              <div key={seg.kind} className="flex min-w-0 flex-col gap-1" style={{ flexGrow: span, flexBasis: 0 }}>
+                <div className="h-2.5 overflow-hidden rounded-full bg-white/15" title={STAGE_LABEL[seg.kind]}>
+                  <div className="h-full rounded-full" style={{ width: `${filled}%`, background: STAGE_COLOR[seg.kind] }} />
+                </div>
+                {!evenLabels && STAGE_LABEL[seg.kind] && (
+                  <span
+                    className={cn(
+                      // 中間那段很窄:文字超出段寬、置中在底下,不要被截成「app …」
+                      "w-max self-center whitespace-nowrap text-xs",
+                      seg.kind === stage ? "font-semibold text-white" : "text-white/45",
+                    )}
+                  >
+                    {STAGE_LABEL[seg.kind]}
+                  </span>
+                )}
               </div>
             );
           })
         ) : (
-          <div className="h-full flex-1 overflow-hidden rounded-full bg-white/15">
+          <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/15">
             <div className="h-full rounded-full" style={{ width: `${percent ?? 0}%`, background: PROGRESS_COLOR }} />
           </div>
         )}
+      </div>
+      {evenLabels && segs && (
+        <div className="grid grid-cols-3 gap-1">
+          {segs
+            .filter((seg) => STAGE_LABEL[seg.kind])
+            .map((seg) => (
+              <span
+                key={seg.kind}
+                className={cn(
+                  "truncate text-center text-xs",
+                  seg.kind === stage ? "font-semibold text-white" : "text-white/45",
+                )}
+              >
+                {STAGE_LABEL[seg.kind]}
+              </span>
+            ))}
+        </div>
+      )}
       </div>
     </div>
   );
@@ -325,31 +546,65 @@ function Cameras({
   scenario,
   labels,
   view,
+  fill = false,
+  stack = false,
+  single = false,
 }: {
   scenario: FieldScenarioId;
   labels: readonly string[];
   view: ReturnType<typeof useFieldView>;
+  /** 撐滿外層高度:格子不再固定 16:9,依可用空間分(畫面 object-cover 裁切) */
+  fill?: boolean;
+  /** 只有兩格時上下疊(手機直式),不左右並排 */
+  stack?: boolean;
+  /** 一格一列(手機直式看影像):每格都是整個螢幕寬、16:9 */
+  single?: boolean;
 }) {
-  const srcs = snapshotSources(scenario);
+  // 跟中牆同一套來源與播法(依現場要求;以前是每 2 秒抓一張快照,只有 0.5 fps 看起來很卡):
+  // 固定攝影機開 MJPEG 串流、52 館屋頂播 HLS,車載先查狀態、名額沒滿才開(見 useFieldTestCamera)。
+  // ⚠ 每支攝影機上游同時只給 3 路,每多一個人開 /field 就少一路給電視牆。
+  const { streamUrl } = useFieldTestCamera(scenario);
+  const srcs = view.missionSettled
+    ? cameraSources(scenario).map((src, i, all) => (i === all.length - 1 ? streamUrl : src))
+    : cameraSources(scenario).map(() => null);
   return (
-    // 室內 4 路:手機也排 2×2,一路一列要滑很久;室外 2 路:手機一路一列,看得清楚
-    <div className={cn("grid gap-3", labels.length > 2 ? "grid-cols-2" : "grid-cols-1 min-[420px]:grid-cols-2")}>
+    // 室內 4 路:一律 2×2;室外 2 路:並排,手機直式改上下疊
+    <div
+      className={cn(
+        "grid gap-3",
+        fill && "min-h-0 flex-1",
+        single
+          ? "grid-cols-1"
+          : labels.length > 2
+          ? cn("grid-cols-2", fill && "grid-rows-2")
+          : fill
+            ? stack
+              ? "grid-cols-1 grid-rows-2"
+              : "grid-cols-2 grid-rows-1"
+            : "grid-cols-1 min-[420px]:grid-cols-2",
+      )}
+    >
       {labels.map((label, i) => {
         // 回放:這一格對應的鏡頭,在目前播到的時刻該顯示的那一張(規則同中牆)
         const cam = view.replaying ? replayCameraFor(scenario, i, view.replayCams) : null;
         const at = cam ? frameAt(cam, view.replayWall) : null;
         return (
-          <figure key={label} className="min-w-0">
-            <div className="field-keep-dark relative aspect-video overflow-hidden rounded-item">
+          <figure key={label} className={cn("min-w-0", fill && "flex min-h-0 flex-col")}>
+            <div
+              className={cn(
+                "field-keep-dark relative overflow-hidden rounded-item",
+                fill ? "min-h-0 flex-1" : "aspect-video",
+              )}
+            >
               {cam && at !== null ? (
                 <div className="field-rwd-replay h-full w-full">
                   <ReplayPlayer scenario={scenario} camera={cam} at={at} />
                 </div>
               ) : view.replaying && liveInReplay(scenario, i) && srcs[i]?.endsWith(".m3u8") ? (
-                // 室外固定攝影機:回放時沒有影格就播即時,標籤照樣是「回放」(規則同中牆)
+                // 室外固定攝影機沒有回放功能:回放時也播即時、標「LIVE」(規則同中牆)
                 <FieldHlsVideo
                   src={srcs[i]!}
-                  badge={<VideoBadge kind="replay" />}
+                  badge={<VideoBadge kind="live" />}
                   spinner={<span className="video-spinner !h-8 !w-8 !border-[3px]" />}
                 />
               ) : view.replaying ? (
@@ -365,7 +620,7 @@ function Cameras({
                   spinner={<span className="video-spinner !h-8 !w-8 !border-[3px]" />}
                 />
               ) : (
-                <SnapshotVideo src={srcs[i] ?? null} alt={label} />
+                <FieldLiveTile src={srcs[i] ?? null} alt={label} />
               )}
             </div>
             <figcaption className="mt-1.5 truncate text-xs text-white/70">{label}</figcaption>
@@ -374,6 +629,19 @@ function Cameras({
       })}
     </div>
   );
+}
+
+/** 即時一格:有串流就播(MJPEG),還沒有來源(車載名額滿 / 載具不通)就轉圈 */
+function FieldLiveTile({ src, alt }: { src: string | null; alt: string }) {
+  const spinner = <span className="video-spinner !h-8 !w-8 !border-[3px]" />;
+  if (!src)
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-black" role="status" aria-label="等待影像">
+        {spinner}
+        <VideoBadge kind="live" />
+      </div>
+    );
+  return <FieldMjpegVideo src={src} alt={alt} badge={<VideoBadge kind="live" />} spinner={spinner} />;
 }
 
 // ── 測試數據 ─────────────────────────────────────────────────────────
@@ -391,7 +659,7 @@ function sampleSecond(pt: FieldSample | undefined): number | null {
   return pt.elapsedS ?? pt.wall ?? null;
 }
 
-function CompareChart({ spec, runs }: { spec: TrendSpec; runs: FieldRun[] }) {
+function CompareChart({ spec, runs, fill = false }: { spec: TrendSpec; runs: FieldRun[]; fill?: boolean }) {
   // 每一趟各算自己的平均(同中牆:第一趟跑完就固定,不會跟著第二趟變)
   const mean = (phase: OptimizationPhase) => {
     const vals = (runs.find((r) => r.phase === phase)?.samples ?? [])
@@ -426,8 +694,8 @@ function CompareChart({ spec, runs }: { spec: TrendSpec; runs: FieldRun[] }) {
   for (let t = 0; t <= axisMax; t += X_TICK_S) xTicks.push(t);
 
   return (
-    <div className="min-w-0">
-      <div className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <div className={cn("min-w-0", fill && "flex min-h-0 flex-col")}>
+      <div className={cn("flex flex-wrap items-baseline gap-x-2 gap-y-1", fill ? "mb-1" : "mb-2")}>
         <span className="text-sm text-white/60">{spec.label}</span>
         {/* 第一趟還在跑時不標數值(同中牆:標出來只會是「12.4 → —」) */}
         {after !== null && (
@@ -453,7 +721,7 @@ function CompareChart({ spec, runs }: { spec: TrendSpec; runs: FieldRun[] }) {
       </div>
       {/* 縱軸單位獨立一行放在圖上方:疊在圖裡會跟最上面那個刻度擠在一起 */}
       <div className="text-[11px] text-white/45">{unit.unit}</div>
-      <div className="h-44 sm:h-52">
+      <div className={fill ? "min-h-[80px] flex-1" : "h-44 sm:h-52"}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
             <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />

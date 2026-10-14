@@ -65,6 +65,8 @@ export type FieldSample = {
   dlKbps?: number | null;
   ulKbps?: number | null;
   rttMs?: number | null;
+  /** 服務細胞的 PCI(回放時通訊品質卡顯示這一筆的值) */
+  pci?: number | null;
   /** 以下只有 UAV 有:上游每一筆樣本就帶著,歷史回放才重現得出來 */
   speedMps?: number | null;
   verticalSpeedMps?: number | null;
@@ -146,9 +148,14 @@ export type FieldProcess = {
     from: number;
     to: number;
     kind: "before" | "deploy" | "after" | "all";
-    /** 這一段大概要花多久(秒)—— 條子的段寬按它分,不按步數(見後端 _step_secs) */
-    weight?: number;
+    /** 這一段在整條上的起訖(0~1),依每一步的實測耗時加權 —— 段寬按它畫,不按步數 */
+    start?: number;
+    end?: number;
   }[];
+  /** 依時間加權的完成比例(0~1),百分比與條子都用它(見後端 transform.process) */
+  fraction?: number;
+  /** 兩趟「沿測試路線移動」在整條上的起訖(0~1)—— 回放時把樣本時間對到條子上 */
+  drives?: [number, number][];
 };
 
 export type FieldMission = {

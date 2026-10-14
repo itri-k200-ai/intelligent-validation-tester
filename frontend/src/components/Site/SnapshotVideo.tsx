@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 /** 正常時多久抓一張(毫秒) */
 const SNAPSHOT_MS = 2000;
@@ -20,11 +20,20 @@ export function SnapshotVideo({
   src,
   badge = "live",
   alt,
+  badgeNode,
+  spinner,
+  intervalMs = SNAPSHOT_MS,
+  retryMs = RETRY_MS,
 }: {
   src: string | null;
   /** 右上角標「LIVE」還是「回放」 */
   badge?: "live" | "replay";
   alt: string;
+  /** 自訂標籤 / 轉圈(中牆被嵌入時用牆面尺寸的樣式,見 LiveVideo) */
+  badgeNode?: ReactNode;
+  spinner?: ReactNode;
+  intervalMs?: number;
+  retryMs?: number;
 }) {
   const [url, setUrl] = useState<string | null>(null);
 
@@ -40,7 +49,8 @@ export function SnapshotVideo({
       if (alive) timer = window.setTimeout(load, ms);
     };
     async function load() {
-      if (document.visibilityState === "hidden") return next(SNAPSHOT_MS);
+      if (document.visibilityState === "hidden") return next(intervalMs);
+      const started = performance.now();
       ctrl = new AbortController();
       try {
         const res = await fetch(src!, { signal: ctrl.signal, cache: "no-store" });
@@ -51,14 +61,15 @@ export function SnapshotVideo({
         if (current) URL.revokeObjectURL(current);
         current = obj;
         setUrl(obj);
-        next(SNAPSHOT_MS);
+        // 間隔從「這次開始抓」算起,不是抓完才開始等 —— 不然實際每張要「間隔 + 抓圖時間」
+        next(Math.max(0, intervalMs - (performance.now() - started)));
       } catch {
         // 抓不到就回到轉圈(不要一直停在很久以前的那張,會被當成即時)
         if (!alive) return;
         if (current) URL.revokeObjectURL(current);
         current = null;
         setUrl(null);
-        next(RETRY_MS);
+        next(retryMs);
       }
     }
     load();
@@ -68,7 +79,7 @@ export function SnapshotVideo({
       ctrl?.abort();
       if (current) URL.revokeObjectURL(current);
     };
-  }, [src]);
+  }, [src, intervalMs, retryMs]);
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-black">
@@ -77,10 +88,10 @@ export function SnapshotVideo({
         <img className="h-full w-full object-cover" src={url} alt={alt} />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center" role="status" aria-label="等待影像">
-          <span className="video-spinner !h-8 !w-8 !border-[3px]" />
+          {spinner ?? <span className="video-spinner !h-8 !w-8 !border-[3px]" />}
         </div>
       )}
-      <VideoBadge kind={badge} />
+      {badgeNode ?? <VideoBadge kind={badge} />}
     </div>
   );
 }

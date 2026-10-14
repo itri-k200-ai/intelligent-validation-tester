@@ -1,5 +1,6 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
+import { useRef } from "react";
 
 import { apiClient } from "@/services/api/client";
 import type { FieldScenarioId } from "@/types/fieldTest";
@@ -35,18 +36,27 @@ export function useFieldTestCamera(scenario: FieldScenarioId) {
       const { data } = await apiClient.get<CameraStatus>(`/field-tests/camera/${scenario}/`, { signal });
       return data;
     },
-    refetchInterval: 30000,
+    // 名額滿、或查不到(平台 502 / 503、載具剛斷線)的時候 5 秒問一次:恢復就能馬上接上
+    // (以前一律 30 秒,一次查失敗就要轉圈半分鐘)
+    refetchInterval: (q) => (q.state.status === "error" || isFull(q.state.data) ? 5000 : 30000),
     retry: false,
     enabled: !USE_MOCK,
   });
   const status = query.data;
-  const full =
-    typeof status?.viewers === "number" &&
-    typeof status?.config?.max_viewers === "number" &&
-    status.viewers >= status.config.max_viewers;
+  // 這一頁是不是已經在播了:在播的話,viewers 裡就有自己這一路
+  const streaming = useRef(false);
+  // ⚠ 名額「滿了」只擋還沒開始播的頁面。以前在播的頁面也照算,而 viewers 包含自己 ——
+  //   第 3 個人一開,每一頁都看到「3 / 3 滿了」,全部把自己的串流關掉;下一輪名額又空出來、
+  //   再連上、又滿 …… 畫面就「有畫面、轉圈、有畫面」一直跳(實際踩過)。
+  const full = !streaming.current && isFull(status);
+  const streamUrl = status && !full ? (status.stream_url ?? null) : null;
+  streaming.current = !!streamUrl;
   return {
-    streamUrl: status && !full ? (status.stream_url ?? null) : null,
+    streamUrl,
     streaming: !!status?.streaming,
     full,
   };
 }
+
+const isFull = (s?: CameraStatus) =>
+  typeof s?.viewers === "number" && typeof s?.config?.max_viewers === "number" && s.viewers >= s.config.max_viewers;
