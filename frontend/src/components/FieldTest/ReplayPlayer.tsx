@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { ReplayCamera } from "@/hooks/FieldTest/useFieldTestReplay";
 import { REPLAY_SPEED } from "@/hooks/FieldTest/useReplayCursor";
+import { replayFrameUrl } from "@/lib/fieldCameras";
 import type { FieldScenarioId } from "@/types/fieldTest";
 
 /** 目前這張之後先載入幾張 —— 播到時已經在快取裡,不會出現空白 */
@@ -41,10 +42,10 @@ export function ReplayPlayer({
   // 快轉時一次會往前跳好幾格,預載也要跟著拉長,不然播到時還沒載到
   const lookahead = LOOKAHEAD * REPLAY_SPEED;
 
-  const urls = useMemo(() => {
-    const q = camera.runId ? `?run_id=${encodeURIComponent(camera.runId)}` : "";
-    return frames.map((f) => `/api/field-tests/replay/${scenario}/${camera.key}/${f.i}.jpg${q}`);
-  }, [frames, scenario, camera.key, camera.runId]);
+  const urls = useMemo(
+    () => frames.map((f) => replayFrameUrl(scenario, camera, f.i)),
+    [frames, scenario, camera],
+  );
 
   // 已經掛上 / 已經載完的序號。換了鏡頭或換了一次驗測就重來
   const [mounted, setMounted] = useState<Set<number>>(() => new Set());

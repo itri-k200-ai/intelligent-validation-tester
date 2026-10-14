@@ -1,6 +1,7 @@
 "use client";
 import { Bot, Plane, Route, Signal, Video, type LucideIcon } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   CartesianGrid,
   Line,
@@ -26,6 +27,7 @@ import { useFieldTestCamera } from "@/hooks/FieldTest/useFieldTestCamera";
 import { useFieldTestLive, type FieldLive } from "@/hooks/FieldTest/useFieldTestLive";
 import { useFieldTestMission } from "@/hooks/FieldTest/useFieldTestMission";
 import { useFieldTestReplay, type ReplayCamera } from "@/hooks/FieldTest/useFieldTestReplay";
+import { useReplayPreload } from "@/hooks/FieldTest/useReplayPreload";
 import { useReplayCursor } from "@/hooks/FieldTest/useReplayCursor";
 import { useFieldTestScene } from "@/hooks/FieldTest/useFieldTestScene";
 import {
@@ -118,9 +120,14 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
   const replaying = !!base.pinned && !running;
   // 平台有存影格的每一支鏡頭(以前只拿第一支 = 車載,固定攝影機回放時就一直轉圈;
   // 平台後來也替 camera1~3 存了,見 lib/fieldCameras 的 replayCameraFor)
-  const replayCams = replaying && freshReplay ? (replay?.cameras ?? NO_CAMS) : NO_CAMS;
+  const allReplayCams = replaying && freshReplay ? (replay?.cameras ?? NO_CAMS) : NO_CAMS;
+  // 回放前先把每支鏡頭的第一張載好再開始播(數據與影像一起走,不要數據先跑);
+  // 等的這段時間整面蓋一層載入畫面(WallLoading)
+  const framesReady = useReplayPreload(scenario, allReplayCams);
+  const replayCams = framesReady ? allReplayCams : NO_CAMS;
+  const loading = !missionSettled || (replaying && (!settled || !framesReady));
 
-  return sc.layout === "live-results" ? (
+  const layout = sc.layout === "live-results" ? (
     <LiveResultsLayout
       scenario={scenario}
       sc={sc}
@@ -129,7 +136,7 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
       replayCams={replayCams}
       replayPeriodS={replay?.periodS ?? null}
       replaying={replaying}
-      replayReady={settled}
+      replayReady={settled && framesReady}
     />
   ) : (
     <CameraGridLayout
@@ -140,8 +147,36 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
       replayCams={replayCams}
       replayPeriodS={replay?.periodS ?? null}
       replaying={replaying}
-      replayReady={settled}
+      replayReady={settled && framesReady}
     />
+  );
+  return (
+    <>
+      {layout}
+      {loading && <WallLoading />}
+    </>
+  );
+}
+
+/**
+ * 整面中牆的載入畫面:剛開頁還不知道是即時還是回放、或回放的資料與第一批影格還在載入時蓋上去。
+ * 稍微延遲才淡入(見 globals.css .field-wall-loading),載入很快時不會閃一下。
+ */
+function WallLoading() {
+  // 掛在 <body> 上(portal):牆面內容是放大 3 倍再縮小的畫布,放在畫布裡的 fixed 會跟著畫布跑,
+  // 轉圈就不在螢幕正中間。body 沒有縮放,這一層剛好蓋滿這個瀏覽器視窗(一台電視就是一個視窗)。
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  useEffect(() => setHost(document.body), []);
+  if (!host) return null;
+  return createPortal(
+    <div className="field-wall-loading" role="status" aria-live="polite">
+      {/* 長方形外框裡:左邊轉圈、右邊文字(依現場要求) */}
+      <div className="field-wall-loading-box">
+        <span className="field-wall-loading-spinner" />
+        <span className="field-wall-loading-text">Loading Dashboard</span>
+      </div>
+    </div>,
+    host,
   );
 }
 

@@ -3610,3 +3610,77 @@ html[data-field-theme="light"] .recharts-cartesian-grid line { stroke: rgb(15 31
 html[data-field-theme="light"] .recharts-cartesian-axis-line { stroke: rgb(15 31 56 / .25); }
 html[data-field-theme="light"] .recharts-default-tooltip { background-color: #FFFFFF !important; border-color: rgb(15 31 56 / .15) !important; color: rgb(15 31 56) !important; }
 html[data-field-theme="light"] .recharts-tooltip-label, html[data-field-theme="light"] .recharts-tooltip-item { color: rgb(15 31 56) !important; }
+
+/* ── 中牆的載入畫面(FieldTestWall 的 WallLoading)────────────────────
+   剛開頁、或回放的資料與第一批影格還在載入時,整面蓋一層、正中間轉圈。
+   延遲 0.3 秒才淡入:載入很快時不會閃一下。 */
+.field-wall-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: rgba(6, 14, 30, 0.78);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  animation: field-wall-loading-in 0.35s ease-out 0.3s forwards;
+}
+.field-wall-loading-box {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 32px 56px;
+  border: 2px solid rgba(128, 255, 232, 0.45);
+  border-radius: 20px;
+  background: rgba(10, 23, 47, 0.85);
+  box-shadow: 0 0 40px rgba(128, 255, 232, 0.12);
+}
+.field-wall-loading-spinner {
+  flex: none;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 8px solid rgba(255, 255, 255, 0.14);
+  border-top-color: #80ffe8;
+  animation: video-spin 1s linear infinite;
+}
+.field-wall-loading-text {
+  white-space: nowrap;
+  font-size: 40px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.8);
+}
+/* 牆面模式:<body> 本身就是 11520×6480 的畫布(WallModeApplier 用 transform 縮放、裁切),
+   body 有 transform 時 fixed 也是相對 body 定位 —— 所以這裡直接蓋在中牆那一塊
+   (畫布座標 0,0 起、11520×3240,見 config/wallRegion 的 center),尺寸乘 --wall。
+   以前用 inset: 0 等於蓋滿整張畫布,轉圈落在畫布正中間,在中牆上看起來就偏下、而且很小。 */
+html.wall-mode .field-wall-loading {
+  position: absolute;
+  inset: auto;
+  left: 0;
+  top: 0;
+  width: 11520px;
+  height: 3240px;
+  gap: calc(28px * var(--wall));
+}
+html.wall-mode .field-wall-loading-box {
+  gap: calc(32px * var(--wall));
+  padding: calc(32px * var(--wall)) calc(56px * var(--wall));
+  border-width: calc(2px * var(--wall));
+  border-radius: calc(20px * var(--wall));
+}
+html.wall-mode .field-wall-loading-spinner {
+  width: calc(80px * var(--wall));
+  height: calc(80px * var(--wall));
+  border-width: calc(8px * var(--wall));
+}
+html.wall-mode .field-wall-loading-text {
+  font-size: calc(40px * var(--wall));
+}
+@keyframes field-wall-loading-in {
+  to { opacity: 1; }
+}

@@ -88,6 +88,12 @@ export function replayCameraFor(
  * 回放的時鐘要跟哪一支鏡頭走:有車載就用車載(它從頭錄到尾),否則用張數最多的。
  * 都沒有就回 null,由樣本的時間軸來播(見 useReplayCursor 的 fromSamples)。
  */
+/** 回放某一格的圖片網址(ReplayPlayer 與預載共用同一個,瀏覽器快取才對得上) */
+export function replayFrameUrl(scenario: FieldScenarioId, camera: ReplayCamera, index: number): string {
+  const q = camera.runId ? `?run_id=${encodeURIComponent(camera.runId)}` : "";
+  return `/api/field-tests/replay/${scenario}/${camera.key}/${index}.jpg${q}`;
+}
+
 export function replayMaster(cameras: ReplayCamera[]): ReplayCamera | null {
   return (
     cameras.find((c) => c.key === "onboard") ??
