@@ -134,14 +134,15 @@ export const STAGE_COLOR: Record<string, string> = {
   after: PROGRESS_COLOR,
   all: PROGRESS_COLOR,
 };
-/* 三段的名稱。刻意用同一組詞 ——「app 部署」前 / 中 / 後,三個連著念就知道
+/* 三段的名稱。刻意用同一組詞 ——「app 啟動」前 / 中 / 後,三個連著念就知道
    整個驗測在做什麼:先跑一趟、裝上 app 等它起來、再跑一趟比較。
    上游的階段標記室內叫「優化前/後」、室外叫「部署前/後」,兩邊不一致,
    所以牆上不沿用它們的字,統一成這一組。 */
 export const STAGE_LABEL: Record<string, string> = {
-  before: "app 部署前",
-  deploy: "app 部署中",
-  after: "app 部署後",
+  // 依現場要求從「部署前 / 中 / 後」改成「啟動前 / 中 / 後」
+  before: "app 啟動前",
+  deploy: "app 啟動中",
+  after: "app 啟動後",
   all: "",
 };
 

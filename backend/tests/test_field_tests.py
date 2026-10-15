@@ -1266,3 +1266,34 @@ def test_uav_snapshot_takes_the_first_frame_of_its_mjpeg(monkeypatch):
     assert first.status_code == 200 and first["Content-Type"] == "image/jpeg"
     assert first.content[:2] == b"\xff\xd8" and second.content == first.content
     assert len(opened) == 1 and opened[0].endswith("/camera/mjpeg") and closed == opened
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_field_pages_ignore_history_pins(monkeypatch):
+    """/field 系列(?follow=latest)不理會平台指定的歷史:沒在跑就停在最新一筆、pinned 一律 false;
+    中牆(不帶參數)照舊跟著指定走。"""
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(_history_runs()))
+    APIClient().post("/api/field-tests/history/", ["old"], format="json")
+    wall = APIClient().get("/api/field-tests/missions/indoor/").json()
+    field = APIClient().get("/api/field-tests/missions/indoor/?follow=latest").json()
+    assert (wall["runId"], wall["pinned"]) == ("old", True)
+    assert (field["runId"], field["pinned"]) == ("new", False)
+
+
+@override_settings(FIELD_TEST_TARGETS=TARGETS)
+def test_field_pages_show_the_running_test_even_when_a_history_is_pinned_later(monkeypatch):
+    """驗測在跑時被指定看歷史:中牆跳去歷史,/field 仍顯示在跑的那筆(即時)。"""
+    extra = dict(_history_runs())
+    extra["/ext/validations"] = {
+        "validations": [
+            {"run_id": "live1", "meta": {"environment_id": "env-indoor"}, "status": "running", "created": 400},
+            *_history_runs()["/ext/validations"]["validations"],
+        ]
+    }
+    extra["/ext/validations/live1"] = {"status": "running", "phase": "優化前", "phases": {"優化前": 2}}
+    extra["/ext/validations/live1/samples"] = {"next_seq": 3, "samples": _samples(2, 0)}
+    monkeypatch.setattr(perf_client, "get", _fake_ctrl_get(extra))
+    APIClient().get("/api/field-tests/missions/indoor/")
+    APIClient().post("/api/field-tests/history/", ["old"], format="json")
+    assert APIClient().get("/api/field-tests/missions/indoor/").json()["runId"] == "old"
+    assert APIClient().get("/api/field-tests/missions/indoor/?follow=latest").json()["runId"] == "live1"

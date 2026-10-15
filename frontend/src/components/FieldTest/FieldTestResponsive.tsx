@@ -1,6 +1,6 @@
 "use client";
 import { Bot, Moon, Plane, Route, Signal, Sun, Video, type LucideIcon } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   CartesianGrid,
   Line,
@@ -52,6 +52,11 @@ import type { FieldMission, FieldRun, FieldSample, FieldScenarioId, Optimization
 //
 // 情境(室內 / 室外)不自動跳轉,完全照使用者點的分頁(依現場要求;中牆才會跟著「最後一次操作」跳)。
 
+/** 桌機一頁版:影像最多佔左欄高度的這個比例,超過就把格子縮小(留空間給數值與測試數據) */
+const VIDEO_SHARE = 0.45;
+/** 測試數據卡最少要留的高度(px)—— 影像格縮小時以它為底線,頁面才不會超出視窗 */
+const DATA_MIN_PX = 160;
+
 /** 右下角「場域測試小助理」要不要顯示 —— 先隱藏(依現場要求) */
 const SHOW_ASSISTANT = false;
 
@@ -85,6 +90,9 @@ export function FieldTestResponsive({
   const { theme, toggle } = useFieldTheme();
 
   const fit = !controls;
+  // 桌機一頁版的左欄 —— 影像格的大小依它的高度算(見 Cameras 的 sized)
+  const leftCol = useRef<HTMLDivElement>(null);
+  const statusRow = useRef<HTMLDivElement>(null);
   const wide = useMediaQuery("(min-width: 1024px)");
   // 手機 / 平板橫放時影像分頁兩格並排,直放時上下疊
   const landscape = useMediaQuery("(orientation: landscape)");
@@ -215,7 +223,7 @@ export function FieldTestResponsive({
               <div className="field-keep-dark field-map-surface mt-3 flex h-56 flex-col sm:h-80 lg:h-[420px]">{map}</div>
             </Panel>
             <Panel icon={Signal} title="測試數據" aside={<PhaseLegend />}>
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+              <div className="grid grid-cols-1 gap-5">
                 {RATE_CHARTS.map((spec) => (
                   <CompareChart key={spec.metric} spec={spec} runs={v.play.runs} />
                 ))}
@@ -245,27 +253,33 @@ export function FieldTestResponsive({
       {header}
       {meta}
       {wide ? (
+        // 左欄:影像(只佔需要的高度)→ 兩張數值卡並排 → 測試數據(吃掉剩下的高度);
+        // 右欄整欄都是測試路徑(依現場要求:影像框不要留一大塊空,路徑圖放大)
         <div className="grid min-h-0 flex-1 grid-cols-12 gap-4">
-          <div className="col-span-5 flex min-h-0 min-w-0 flex-col gap-4">
-            <Panel fill className="min-h-[160px] flex-1" icon={Video} title="影像">
-              {/* 室外只有兩格:左欄是直長的,上下疊才接近 16:9(並排會被拉成直長條、裁掉大半畫面) */}
-              <Cameras fill stack scenario={scenario} labels={sc.cameras} view={v} />
+          <div ref={leftCol} className="col-span-5 flex min-h-0 min-w-0 flex-col gap-4">
+            <Panel className="flex-none !p-3 lg:!p-4" icon={Video} title="影像">
+              <Cameras
+                sized={{ budget: leftCol, share: VIDEO_SHARE, reserve: statusRow, reserveExtra: DATA_MIN_PX + 32 }}
+                scenario={scenario}
+                labels={sc.cameras}
+                view={v}
+              />
             </Panel>
-            {/* 行駛狀態、通訊品質左右並排(依現場回饋):上下疊會吃掉一大段高度,矮的筆電螢幕上
-                影像就被壓得很扁。並排後每張卡變窄,數值改一列 2 個(見 Metrics 的 narrow) */}
-            <div className="grid flex-none grid-cols-2 gap-4">{statusPanels(true, true)}</div>
-          </div>
-          <div className="col-span-7 flex min-h-0 min-w-0 flex-col gap-4">
-            <Panel fill className="flex-[3]" icon={Route} title={sc.routeTitle}>
-              {progress}
-              <div className="field-keep-dark field-map-surface mt-2 flex min-h-0 flex-1 flex-col">{map}</div>
-            </Panel>
-            <Panel fill className="flex-[2]" icon={Signal} title="測試數據" aside={<PhaseLegend />}>
-              <div className="grid min-h-0 flex-1 grid-cols-2 gap-5">
+            {/* 行駛狀態、通訊品質左右並排:上下疊會吃掉一大段高度。並排後每張卡變窄,
+                數值改一列 2 個(見 Metrics 的 narrow) */}
+            <div ref={statusRow} className="grid flex-none grid-cols-2 gap-4">{statusPanels(true, true)}</div>
+            <Panel fill className="min-h-[160px] flex-1" icon={Signal} title="測試數據" aside={<PhaseLegend />}>
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-4">
                 {RATE_CHARTS.map((spec) => (
                   <CompareChart fill key={spec.metric} spec={spec} runs={v.play.runs} />
                 ))}
               </div>
+            </Panel>
+          </div>
+          <div className="col-span-7 flex min-h-0 min-w-0 flex-col">
+            <Panel fill className="flex-1" icon={Route} title={sc.routeTitle}>
+              {progress}
+              <div className="field-keep-dark field-map-surface mt-2 flex min-h-0 flex-1 flex-col">{map}</div>
             </Panel>
           </div>
         </div>
@@ -295,7 +309,7 @@ export function FieldTestResponsive({
                 標題列的「啟用前 → 啟用後」換行後還會跟圖疊在一起(依現場回饋) */}
             {tab === "data" && (
               <Panel className="flex-none" icon={Signal} title="測試數據" aside={<PhaseLegend />}>
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-5">
                   {RATE_CHARTS.map((spec) => (
                     <CompareChart key={spec.metric} spec={spec} runs={v.play.runs} />
                   ))}
@@ -465,7 +479,7 @@ function Metrics({
   );
 }
 
-/** 測試進度:三段條(app 部署前 / 中 / 後),規則同中牆的 MissionProgress(single) */
+/** 測試進度:三段條(app 啟動前 / 中 / 後),規則同中牆的 MissionProgress(single) */
 function Progress({
   mission,
   percent,
@@ -565,6 +579,7 @@ function Cameras({
   fill = false,
   stack = false,
   single = false,
+  sized,
 }: {
   scenario: FieldScenarioId;
   labels: readonly string[];
@@ -575,6 +590,11 @@ function Cameras({
   stack?: boolean;
   /** 一格一列(手機直式看影像):每格都是整個螢幕寬、16:9 */
   single?: boolean;
+  /**
+   * 依欄寬算格子大小、框只包住影像本身(不撐滿、不留空),但高度最多佔 budget 的 share ——
+   * 桌機一頁版左欄用(見 useSizedGrid)
+   */
+  sized?: SizedBudget;
 }) {
   // 跟中牆同一套來源與播法(依現場要求;以前是每 2 秒抓一張快照,只有 0.5 fps 看起來很卡):
   // 固定攝影機開 MJPEG 串流、52 館屋頂播 HLS,車載先查狀態、名額沒滿才開(見 useFieldTestCamera)。
@@ -583,34 +603,7 @@ function Cameras({
   const srcs = view.missionSettled
     ? cameraSources(scenario).map((src, i, all) => (i === all.length - 1 ? streamUrl : src))
     : cameraSources(scenario).map(() => null);
-  const best = useBestCols(labels.length, fill && !single);
-  return (
-    // 撐滿版面時:排法依可用空間自己選(見 useBestCols);不撐滿時室內 2×2、室外並排或上下疊
-    <div
-      ref={best.ref}
-      style={
-        fill && best.cols
-          ? {
-              gridTemplateColumns: `repeat(${best.cols}, minmax(0, 1fr))`,
-              gridTemplateRows: `repeat(${Math.ceil(labels.length / best.cols)}, minmax(0, 1fr))`,
-            }
-          : undefined
-      }
-      className={cn(
-        "grid gap-3",
-        fill && "min-h-0 flex-1",
-        single
-          ? "grid-cols-1"
-          : labels.length > 2
-          ? cn("grid-cols-2", fill && "grid-rows-2")
-          : fill
-            ? stack
-              ? "grid-cols-1 grid-rows-2"
-              : "grid-cols-2 grid-rows-1"
-            : "grid-cols-1 min-[420px]:grid-cols-2",
-      )}
-    >
-      {labels.map((label, i) => {
+  const renderTile = (label: string, i: number, fill: boolean) => {
         // 回放:這一格對應的鏡頭,在目前播到的時刻該顯示的那一張(規則同中牆)
         const cam = view.replaying ? replayCameraFor(scenario, i, view.replayCams) : null;
         const at = cam ? frameAt(cam, view.replayWall) : null;
@@ -663,7 +656,46 @@ function Cameras({
             {caption}
           </figure>
         );
-      })}
+  };
+  const best = useBestCols(labels.length, fill && !single);
+  const fit = useSizedGrid(labels.length, sized);
+  if (sized)
+    return (
+      <div
+        ref={fit.ref}
+        className="grid justify-center gap-3"
+        style={fit.cols ? { gridTemplateColumns: `repeat(${fit.cols}, ${fit.tile}px)` } : { visibility: "hidden" }}
+      >
+        {labels.map((label, i) => renderTile(label, i, false))}
+      </div>
+    );
+  return (
+    // 撐滿版面時:排法依可用空間自己選(見 useBestCols);不撐滿時室內 2×2、室外並排或上下疊
+    <div
+      ref={best.ref}
+      style={
+        fill && best.cols
+          ? {
+              gridTemplateColumns: `repeat(${best.cols}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${Math.ceil(labels.length / best.cols)}, minmax(0, 1fr))`,
+            }
+          : undefined
+      }
+      className={cn(
+        "grid gap-3",
+        fill && "min-h-0 flex-1",
+        single
+          ? "grid-cols-1"
+          : labels.length > 2
+          ? cn("grid-cols-2", fill && "grid-rows-2")
+          : fill
+            ? stack
+              ? "grid-cols-1 grid-rows-2"
+              : "grid-cols-2 grid-rows-1"
+            : "grid-cols-1 min-[420px]:grid-cols-2",
+      )}
+    >
+      {labels.map((label, i) => renderTile(label, i, fill))}
     </div>
   );
 }
@@ -705,6 +737,60 @@ function useBestCols(n: number, enabled: boolean) {
   return { ref, cols };
 }
 
+/**
+ * 依可用寬度排影像格,但整組高度不超過 budget 元素高度的 share:
+ * 試每一種欄數,算出 16:9 格子在「寬度放得下」與「高度不超過上限」下最大能多大,挑最大的。
+ * 回傳欄數與每格寬度(px);框的高度就是格子本身,不會留一大塊空(以前撐滿固定高度)。
+ */
+type SizedBudget = {
+  /** 以哪個元素的高度為準(左欄) */
+  budget: RefObject<HTMLElement | null>;
+  /** 最多佔它的幾成 */
+  share: number;
+  /** 同一欄裡其他固定高度的元素(數值卡那一列)—— 扣掉它與 reserveExtra 之後才是影像能用的上限 */
+  reserve?: RefObject<HTMLElement | null>;
+  reserveExtra?: number;
+};
+
+function useSizedGrid(n: number, sized?: SizedBudget) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<{ cols: number; tile: number } | null>(null);
+  const share = sized?.share ?? 0;
+  const budget = sized?.budget;
+  const reserve = sized?.reserve;
+  const reserveExtra = sized?.reserveExtra ?? 0;
+  useEffect(() => {
+    const el = ref.current;
+    const box = budget?.current;
+    if (!el || !box || n < 1) return;
+    const GAP = 12; // gap-3
+    const CAPTION = 24; // 底下名稱那一行
+    const HEAD = 48; // 「影像」標題列 + 卡片內距
+    const measure = () => {
+      const W = el.getBoundingClientRect().width;
+      const total = box.getBoundingClientRect().height;
+      const others = (reserve?.current?.getBoundingClientRect().height ?? 0) + reserveExtra + 16; // 16 = 欄內間距
+      const H = Math.min(total * share, total - others) - HEAD;
+      let pick = { cols: 1, tile: 0 };
+      for (let c = 1; c <= n; c++) {
+        const r = Math.ceil(n / c);
+        const byW = (W - (c - 1) * GAP) / c;
+        const byH = (((H - (r - 1) * GAP) / r - CAPTION) * 16) / 9;
+        const tile = Math.floor(Math.max(0, Math.min(byW, byH)));
+        if (tile > pick.tile) pick = { cols: c, tile };
+      }
+      setFit(pick.tile > 0 ? pick : null);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    ro.observe(box);
+    if (reserve?.current) ro.observe(reserve.current);
+    return () => ro.disconnect();
+  }, [n, share, budget, reserve, reserveExtra]);
+  return { ref, cols: fit?.cols ?? null, tile: fit?.tile ?? 0 };
+}
+
 /** 即時一格:有串流就播(MJPEG),還沒有來源(車載名額滿 / 載具不通)就轉圈 */
 function FieldLiveTile({ src, alt }: { src: string | null; alt: string }) {
   const spinner = <span className="video-spinner !h-8 !w-8 !border-[3px]" />;
@@ -720,9 +806,8 @@ function FieldLiveTile({ src, alt }: { src: string | null; alt: string }) {
 
 // ── 測試數據 ─────────────────────────────────────────────────────────
 
-/** 同中牆:上行、下行各一張,比兩趟的平均 */
+/** /field 只放下行一張(依現場要求;中牆仍是上行、下行各一張),比兩趟的平均 */
 const RATE_CHARTS: TrendSpec[] = [
-  { label: "平均上行", unit: "kbps", metric: "ulKbps", digits: 1, kind: "rate" },
   { label: "平均下行", unit: "kbps", metric: "dlKbps", digits: 0, kind: "rate" },
 ];
 /** 橫軸刻度間隔(秒),同中牆:固定是它的整數倍 */

@@ -129,10 +129,12 @@ class MissionView(WallReadView):
     def get(self, request, scenario: str):
         run_id = request.query_params.get("run_id")
         since_seq = request.query_params.get("since_seq", "0")
+        # ?follow=latest:/field 系列,不理會平台指定的歷史(見 _latest_run_id)
+        latest_only = request.query_params.get("follow") == "latest"
         try:
             conf = target(scenario)
             if not run_id:
-                run_id = _run_id_for(scenario, conf.get("plan_id"))
+                run_id = (_latest_run_id if latest_only else _run_id_for)(scenario, conf.get("plan_id"))
             if not run_id:
                 return Response({"detail": "目前沒有可顯示的驗測紀錄"}, status=404)
 
@@ -184,7 +186,7 @@ class MissionView(WallReadView):
                 # 這一筆是「平台指定要看的歷史」還是「自動挑的最新一筆」。
                 # 牆面只在被指定時才播回放 —— 驗測跑完要停在最後的狀態,
                 # 不要自己開始重播(依前端回饋)。
-                "pinned": history.pinned(scenario) == run_id,
+                "pinned": (not latest_only) and history.pinned(scenario) == run_id,
                 # 這一次驗測的開始時間(epoch 秒)—— 牆上要標出「現在看的是哪一筆」
                 "created": status_payload.get("created"),
                 # 結束時間(epoch 秒)。平台沒有這個欄位,見 _ended_at。
@@ -457,6 +459,32 @@ def _run_id_for(scenario: str, plan_id: str | None) -> str | None:
     with_samples = [r for r in newest if r.get("n_samples") is None or r.get("n_samples")]
     pick = (complete or with_samples or newest)[0]
     return _rid(pick)
+
+
+def _latest_run_id(scenario: str, plan_id: str | None) -> str | None:
+    """/field 系列用的挑法:完全不理會平台指定的歷史(notifyHisShow)。
+
+    有驗測在跑就顯示它(即時);沒有就停在最近一次跑的那一筆,直到下一筆開跑才回到即時
+    (依現場要求:/field 只照使用者自己點的室內 / 室外,不被平台切去看歷史)。
+    「最近一次跑的」以我們看到它在跑的那一筆為準(history.mark_running);
+    後端剛重開、沒看過時,退回最新一次有資料的紀錄(挑法同 _run_id_for 的最後一段)。
+    """
+    runs = _validations()
+    if plan_id:
+        runs = _runs_of_plan(runs, plan_id)
+    if not runs:
+        return None
+    running = [r for r in runs if r.get("status") in {"running", "ready"}]
+    history.mark_running(scenario, _rid(running[0]) if running else "")
+    if running:
+        return _rid(running[0])
+    last = history.running_seen_at(scenario)
+    if last and any(_rid(r) == last[0] for r in runs):
+        return last[0]
+    newest = sorted(runs, key=lambda r: r.get("created") or 0, reverse=True)
+    complete = [r for r in newest if _has_both_passes(r)]
+    with_samples = [r for r in newest if r.get("n_samples") is None or r.get("n_samples")]
+    return _rid((complete or with_samples or newest)[0])
 
 
 _PLAN_ENV_TTL_S = 300.0

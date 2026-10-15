@@ -192,7 +192,10 @@ const MISSIONS: Record<FieldScenarioId, FieldMission> = {
 };
 
 export const mockFieldTestService = {
-  async mission(scenario: FieldScenarioId, _opts?: { sinceSeq?: number; signal?: AbortSignal }): Promise<FieldMission> {
+  async mission(
+    scenario: FieldScenarioId,
+    _opts?: { sinceSeq?: number; latestOnly?: boolean; signal?: AbortSignal },
+  ): Promise<FieldMission> {
     return MISSIONS[scenario];
   },
   /** 即時數值:mock 沒有真的輪詢來源,直接回目前那趟的值 */

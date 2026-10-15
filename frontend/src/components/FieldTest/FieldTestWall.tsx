@@ -937,7 +937,7 @@ function MissionProgress({
     // 沿路線移動一步要一兩百秒、xApp 的 API 呼叫一步不到一秒,按步數算百分比會忽快忽慢。
     const frac = override !== null ? override / 100 : processFraction(p);
     const percent = frac === null ? null : Math.round(frac * 100);
-    // 條子分三段:app 部署前 / 部署中 / 部署後。切點與段寬都由後端從方案的步驟與耗時推出來
+    // 條子分三段:app 啟動前 / 啟動中 / 啟動後。切點與段寬都由後端從方案的步驟與耗時推出來
     // (見 transform.stages),方案改了步數也會自動對上。中間那段用不同顏色標出來。
     const f = frac ?? 0;
     const segs = stageSpans(p);

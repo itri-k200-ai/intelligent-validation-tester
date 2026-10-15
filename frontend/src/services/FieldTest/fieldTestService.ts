@@ -69,10 +69,11 @@ function reachedWaypoints(route: RouteWaypoint[], pos: { x: number; y: number } 
 export const fieldTestService = {
   async mission(
     scenario: FieldScenarioId,
-    opts: { sinceSeq?: number; runId?: string; signal?: AbortSignal } = {},
+    opts: { sinceSeq?: number; runId?: string; latestOnly?: boolean; signal?: AbortSignal } = {},
   ): Promise<FieldMission> {
     const { data } = await apiClient.get<MissionPayload>(`/field-tests/missions/${scenario}/`, {
-      params: { since_seq: opts.sinceSeq, run_id: opts.runId },
+      // latestOnly:不理會平台指定的歷史,只看「在跑的 / 最近一次跑的」(/field 系列用)
+      params: { since_seq: opts.sinceSeq, run_id: opts.runId, follow: opts.latestOnly ? "latest" : undefined },
       signal: opts.signal,
     });
     const sc = FIELD_SCENARIOS[scenario];

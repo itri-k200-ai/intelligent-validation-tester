@@ -11,10 +11,14 @@ import type { FieldScenarioId } from "@/types/fieldTest";
  * /api/field-tests/missions/<scenario>(後端再接外部 Performance_tester)。
  * 有趟在跑就每 2 秒回抓一次,跑完就停 —— 牆是長時間開著的,不要空轉。
  */
-export function useFieldTestMission(scenario: FieldScenarioId) {
+/**
+ * latestOnly = true:/field 系列 —— 不理會平台指定的歷史(notifyHisShow),有驗測在跑就看即時,
+ * 跑完就停在那一筆直到下一筆開跑(依現場要求)。中牆不傳,照舊跟著「最後一次操作」。
+ */
+export function useFieldTestMission(scenario: FieldScenarioId, { latestOnly = false } = {}) {
   const query = useQuery({
-    queryKey: ["field-test", scenario, "mission"],
-    queryFn: ({ signal }) => fieldTestService.mission(scenario, { signal }),
+    queryKey: ["field-test", scenario, "mission", latestOnly ? "latest" : "wall"],
+    queryFn: ({ signal }) => fieldTestService.mission(scenario, { signal, latestOnly }),
     // 有趟在跑就 1 秒追進度(軌跡線與右邊圖表都吃這支);沒在跑 2 秒。
     // 即時數值不靠這支(見 useFieldTestLive)。
     //

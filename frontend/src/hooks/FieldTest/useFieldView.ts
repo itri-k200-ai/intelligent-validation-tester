@@ -31,7 +31,8 @@ import type { FieldMission, FieldVehicleStatus, FieldScenarioId, LinkQuality } f
  */
 export function useFieldView(scenario: FieldScenarioId) {
   const sc = FIELD_SCENARIOS[scenario];
-  const { mission, settled: missionSettled } = useFieldTestMission(scenario);
+  // /field 系列不理會平台指定的歷史:只看在跑的 / 最近一次跑的(見 useFieldTestMission)
+  const { mission, settled: missionSettled } = useFieldTestMission(scenario, { latestOnly: true });
   // service 的回傳型別沒列 geo(後端有給,室外才有)—— 照中牆的寫法以 FieldLive 看待
   const live = useFieldTestLive(scenario).live as FieldLive | null;
   const { scene } = useFieldTestScene(scenario);
