@@ -1,6 +1,5 @@
 "use client";
 import { FieldTestResponsive } from "@/components/FieldTest/FieldTestResponsive";
-import { useScenarioAutoFollow } from "@/hooks/FieldTest/useScenarioAutoFollow";
 
 /**
  * 來賓用的純監控頁(/field/view):內容、版面與 /field 完全相同,只是拿掉「開始驗測」——
@@ -10,7 +9,6 @@ import { useScenarioAutoFollow } from "@/hooks/FieldTest/useScenarioAutoFollow";
  *   知道網址的人仍然打得到。要真的擋,得在 nginx 或 adapter 那層加驗證。
  */
 export default function FieldViewPage() {
-  // 室內 / 室外跟著「最後一次操作」自動切換,規則與 /field、中牆相同
-  useScenarioAutoFollow();
+  // 室內 / 室外不自動跳轉,完全照使用者自己點的分頁(依現場要求,同 /field)
   return <FieldTestResponsive canDrive={false} />;
 }

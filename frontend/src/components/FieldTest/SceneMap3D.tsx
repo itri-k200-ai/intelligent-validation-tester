@@ -45,10 +45,23 @@ const VIEW_TURN_RAD = -Math.PI / 2;
 const BS_COLOR = "#FFC56B";
 const BS_SIZE = 10;
 
-const BASE_STATIONS: { x: number; y: number; alt: number; label: string }[] = [
-  { x: -105, y: 80, alt: 24, label: "基站 A" },
-  { x: -147, y: 49, alt: 24, label: "基站 B" },
+const BASE_STATIONS: {
+  x: number;
+  y: number;
+  alt: number;
+  label: string;
+  /** 訊號覆蓋範圍(扇形):朝哪個方位(度,正北 0、順時針)、張角(度)、半徑(公尺)、顏色 */
+  coverage: { azimuth: number; width: number; range: number; color: string };
+}[] = [
+  // 覆蓋範圍依現場提供的示意圖換算(docs/除錯截圖/df804bc3-…png):
+  //   A(畫面左邊那顆,青色)朝東南偏東、往草坪那一側張開;B(右邊那顆,黃色)朝南偏東
+  //   (依現場回饋調過:150° → 170° → 165°)。
+  // 圖上是透視過的畫面,換算時已經把「往畫面深處」的距離還原(仰角約 46°)。要微調就改這裡。
+  { x: -105, y: 80, alt: 24, label: "基站 A", coverage: { azimuth: 123, width: 84, range: 170, color: "#22E5F2" } },
+  { x: -147, y: 49, alt: 24, label: "基站 B", coverage: { azimuth: 165, width: 80, range: 170, color: "#FFD33D" } },
 ];
+/** 覆蓋範圍裡的虛線同心弧,每隔幾公尺一圈 */
+const COVERAGE_RING_M = 34;
 
 export function SceneMap3D({
   scene,
@@ -190,6 +203,7 @@ export function SceneMap3D({
       sprite.renderOrder = 9;
       world.add(sprite);
       // 不畫屋頂的底座圓環(依前端回饋)—— 圖示縮小之後,環反而比圖示還搶眼
+      world.add(coverageSector(bs));
     }
     ctx.current = { renderer, world, camera, dynamic, uav, render };
 
@@ -458,6 +472,115 @@ function placeCamera(camera: THREE.PerspectiveCamera, v: View) {
   const dir = viewDir();
   camera.position.copy(target).addScaledVector(dir, dist);
   camera.lookAt(target);
+}
+
+/**
+ * 一個基站的訊號覆蓋範圍:屋頂高度上的一片扇形(依現場示意圖)——
+ *   填色:靠近基站最亮、往外漸淡(頂點透明度,扇心 0.5 → 外緣 0.08)
+ *   外框:兩條邊 + 外緣弧線,實線
+ *   內部:每隔 COVERAGE_RING_M 一圈虛線同心弧
+ * 半透明、不寫深度、蓋在建築上面(示意圖裡建築被罩進範圍時也是染上一層色),
+ * 但畫在軌跡、無人機、基站圖示之前(renderOrder 比它們小),不會擋住它們。
+ */
+function coverageSector(bs: (typeof BASE_STATIONS)[number]): THREE.Group {
+  const { azimuth, width, range, color } = bs.coverage;
+  const group = new THREE.Group();
+  const col = new THREE.Color(color);
+  const y = bs.alt;
+  // 方位角(正北 0、順時針)→ 場景座標(x 東、z = -北)
+  const at = (deg: number, r: number) => {
+    const a = (deg * Math.PI) / 180;
+    return new THREE.Vector3(bs.x + Math.sin(a) * r, y, -(bs.y + Math.cos(a) * r));
+  };
+  const from = azimuth - width / 2;
+  const to = azimuth + width / 2;
+  const SEG = 48;
+  const arc = (r: number) => Array.from({ length: SEG + 1 }, (_, i) => at(from + ((to - from) * i) / SEG, r));
+
+  // 填色:扇心一點 + 外緣一圈,三角形扇,頂點帶 RGBA
+  const outer = arc(range);
+  const pos: number[] = [];
+  const rgba: number[] = [];
+  const apex = at(0, 0);
+  for (let i = 0; i < SEG; i++) {
+    for (const [v, a] of [
+      [apex, 0.62],
+      [outer[i], 0.06],
+      [outer[i + 1], 0.06],
+    ] as const) {
+      pos.push(v.x, v.y, v.z);
+      rgba.push(col.r, col.g, col.b, a);
+    }
+  }
+  const fillGeo = new THREE.BufferGeometry();
+  fillGeo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  fillGeo.setAttribute("color", new THREE.Float32BufferAttribute(rgba, 4));
+  const fill = new THREE.Mesh(
+    fillGeo,
+    new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      side: THREE.DoubleSide,
+    }),
+  );
+  fill.renderOrder = 0;
+  group.add(fill);
+
+  // 外框:邊 → 外緣弧 → 邊
+  const edge = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([apex, ...outer, apex]),
+    new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.9, depthTest: false }),
+  );
+  edge.renderOrder = 0;
+  group.add(edge);
+
+  // 虛線同心弧
+  for (let r = COVERAGE_RING_M; r < range - 1; r += COVERAGE_RING_M) {
+    const ring = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(arc(r)),
+      new THREE.LineDashedMaterial({
+        color: col,
+        dashSize: 4,
+        gapSize: 3,
+        transparent: true,
+        opacity: 0.85,
+        depthTest: false,
+      }),
+    );
+    ring.computeLineDistances();
+    ring.renderOrder = 0;
+    group.add(ring);
+  }
+  // 基站位置的光暈(示意圖裡扇心那團亮光):canvas 畫一個放射漸層當貼圖
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = 128;
+  const g = cv.getContext("2d");
+  if (g) {
+    const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, `rgba(${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)},0.9)`);
+    grad.addColorStop(0.35, `rgba(${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)},0.35)`);
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+  }
+  const glowTex = new THREE.CanvasTexture(cv);
+  glowTex.colorSpace = THREE.SRGBColorSpace;
+  const glow = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: glowTex,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  glow.scale.set(38, 38, 1);
+  glow.position.copy(apex);
+  glow.renderOrder = 0;
+  group.add(glow);
+  return group;
 }
 
 /** 點 (x, y) 在不在多邊形裡(射線法) */

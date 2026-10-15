@@ -1,6 +1,6 @@
 "use client";
 import { Bot, Moon, Plane, Route, Signal, Sun, Video, type LucideIcon } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   CartesianGrid,
   Line,
@@ -50,8 +50,7 @@ import type { FieldMission, FieldRun, FieldSample, FieldScenarioId, Optimization
 //   平板(md):數值兩張並排、影像兩欄
 //   桌機(lg):左欄 影像 + 數值,右欄 進度 + 路徑圖 + 測試數據
 //
-// 情境(室內 / 室外)與中牆同一套規則:跟著「最後一次操作」自動切換,
-// 使用者自己點了分頁就以點的為準,直到下一次操作(見 FieldTestScenarioContainer)。
+// 情境(室內 / 室外)不自動跳轉,完全照使用者點的分頁(依現場要求;中牆才會跟著「最後一次操作」跳)。
 
 /** 右下角「場域測試小助理」要不要顯示 —— 先隱藏(依現場要求) */
 const SHOW_ASSISTANT = false;
@@ -165,20 +164,20 @@ export function FieldTestResponsive({
       />
     );
 
-  const vehiclePanel = (compact: boolean) => (
+  const vehiclePanel = (compact: boolean, narrow = false) => (
     <Panel icon={VEHICLE_ICON[scenario]} title={sc.live.vehicleTitle} className={cn("flex-none", compact && "!p-3")}>
-      <Metrics compact={compact} items={vehicleReadings(scenario, v.vehicle, v.position, v.geo)} />
+      <Metrics compact={compact} narrow={narrow} items={vehicleReadings(scenario, v.vehicle, v.position, v.geo)} />
     </Panel>
   );
-  const signalPanel = (compact: boolean) => (
+  const signalPanel = (compact: boolean, narrow = false) => (
     <Panel icon={Signal} title={sc.live.signalTitle} className={cn("flex-none", compact && "!p-3")}>
-      <Metrics compact={compact} items={signalReadings(v.link)} />
+      <Metrics compact={compact} narrow={narrow} items={signalReadings(v.link)} />
     </Panel>
   );
-  const statusPanels = (compact: boolean) => (
+  const statusPanels = (compact: boolean, narrow = false) => (
     <>
-      {vehiclePanel(compact)}
-      {signalPanel(compact)}
+      {vehiclePanel(compact, narrow)}
+      {signalPanel(compact, narrow)}
     </>
   );
 
@@ -252,7 +251,9 @@ export function FieldTestResponsive({
               {/* 室外只有兩格:左欄是直長的,上下疊才接近 16:9(並排會被拉成直長條、裁掉大半畫面) */}
               <Cameras fill stack scenario={scenario} labels={sc.cameras} view={v} />
             </Panel>
-            {statusPanels(true)}
+            {/* 行駛狀態、通訊品質左右並排(依現場回饋):上下疊會吃掉一大段高度,矮的筆電螢幕上
+                影像就被壓得很扁。並排後每張卡變窄,數值改一列 2 個(見 Metrics 的 narrow) */}
+            <div className="grid flex-none grid-cols-2 gap-4">{statusPanels(true, true)}</div>
           </div>
           <div className="col-span-7 flex min-h-0 min-w-0 flex-col gap-4">
             <Panel fill className="flex-[3]" icon={Route} title={sc.routeTitle}>
@@ -425,9 +426,24 @@ function Panel({
 }
 
 /** 3 欄 × 2 列的數值:標籤(含單位)在上、數值在下 */
-function Metrics({ items, compact = false }: { items: Reading[]; compact?: boolean }) {
+function Metrics({
+  items,
+  compact = false,
+  narrow = false,
+}: {
+  items: Reading[];
+  compact?: boolean;
+  /** 卡片並排、變窄時:一列 2 個(螢幕夠寬才 3 個),不然經緯度、「垂直速度 m/s」會被截掉 */
+  narrow?: boolean;
+}) {
   return (
-    <div className={cn("grid grid-cols-3 gap-x-3", compact ? "gap-y-2" : "gap-y-4")}>
+    <div
+      className={cn(
+        "grid gap-x-3",
+        narrow ? "grid-cols-2 2xl:grid-cols-3" : "grid-cols-3",
+        compact ? "gap-y-2" : "gap-y-4",
+      )}
+    >
       {items.map(({ label, unit, value, tone = "text-white" }) => (
         <div key={label} className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-xs text-white/55">
@@ -567,9 +583,19 @@ function Cameras({
   const srcs = view.missionSettled
     ? cameraSources(scenario).map((src, i, all) => (i === all.length - 1 ? streamUrl : src))
     : cameraSources(scenario).map(() => null);
+  const best = useBestCols(labels.length, fill && !single);
   return (
-    // 室內 4 路:一律 2×2;室外 2 路:並排,手機直式改上下疊
+    // 撐滿版面時:排法依可用空間自己選(見 useBestCols);不撐滿時室內 2×2、室外並排或上下疊
     <div
+      ref={best.ref}
+      style={
+        fill && best.cols
+          ? {
+              gridTemplateColumns: `repeat(${best.cols}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${Math.ceil(labels.length / best.cols)}, minmax(0, 1fr))`,
+            }
+          : undefined
+      }
       className={cn(
         "grid gap-3",
         fill && "min-h-0 flex-1",
@@ -588,14 +614,8 @@ function Cameras({
         // 回放:這一格對應的鏡頭,在目前播到的時刻該顯示的那一張(規則同中牆)
         const cam = view.replaying ? replayCameraFor(scenario, i, view.replayCams) : null;
         const at = cam ? frameAt(cam, view.replayWall) : null;
-        return (
-          <figure key={label} className={cn("min-w-0", fill && "flex min-h-0 flex-col")}>
-            <div
-              className={cn(
-                "field-keep-dark relative overflow-hidden rounded-item",
-                fill ? "min-h-0 flex-1" : "aspect-video",
-              )}
-            >
+        const tile = (
+            <div className="field-keep-dark relative aspect-video w-full overflow-hidden rounded-item">
               {cam && at !== null ? (
                 <div className="field-rwd-replay h-full w-full">
                   <ReplayPlayer scenario={scenario} camera={cam} at={at} />
@@ -623,12 +643,66 @@ function Cameras({
                 <FieldLiveTile src={srcs[i] ?? null} alt={label} />
               )}
             </div>
-            <figcaption className="mt-1.5 truncate text-xs text-white/70">{label}</figcaption>
+        );
+        const caption = <figcaption className="mt-1.5 truncate text-xs text-white/70">{label}</figcaption>;
+        // 撐滿版面時:每格一律 16:9,寬度取「放得下的寬」與「放得下的高 × 16/9」較小的那個,置中 ——
+        // 以前格子直接撐成可用空間的形狀,矮螢幕(筆電)上被壓成扁長條、畫面上下被裁掉一大半(依現場回饋)。
+        // 用 container query(cqw / cqh)量這一格分到的空間;1.5rem 是底下名稱那一行。
+        if (fill)
+          return (
+            <figure key={label} className="flex min-h-0 min-w-0 items-center justify-center [container-type:size]">
+              <div className="flex flex-col" style={{ width: "min(100cqw, calc((100cqh - 1.5rem) * 16 / 9))" }}>
+                {tile}
+                {caption}
+              </div>
+            </figure>
+          );
+        return (
+          <figure key={label} className="min-w-0">
+            {tile}
+            {caption}
           </figure>
         );
       })}
     </div>
   );
+}
+
+/**
+ * 撐滿版面時影像格要排成幾欄:量出可用的寬高,算每種欄數下 16:9 的格子能有多大,挑最大的。
+ * 例:室外兩格在矮的筆電上左右並排比較大,在高的螢幕上上下疊比較大;室內四格多半是 2×2。
+ * 以前寫死(室外上下疊),1280×720 的筆電上每格只剩 174×98,左右空了一大片。
+ */
+function useBestCols(n: number, enabled: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [cols, setCols] = useState<number | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!enabled || !el || n < 1) return;
+    const GAP = 12; // gap-3
+    const CAPTION = 24; // 底下名稱那一行(1.5rem)
+    const measure = () => {
+      const { width: W, height: H } = el.getBoundingClientRect();
+      let pick = 1;
+      let size = 0;
+      for (let c = 1; c <= n; c++) {
+        const r = Math.ceil(n / c);
+        const cw = (W - (c - 1) * GAP) / c;
+        const ch = (H - (r - 1) * GAP) / r - CAPTION;
+        const w = Math.min(cw, (ch * 16) / 9);
+        if (w > size + 0.5) {
+          size = w;
+          pick = c;
+        }
+      }
+      setCols(pick);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [n, enabled]);
+  return { ref, cols };
 }
 
 /** 即時一格:有串流就播(MJPEG),還沒有來源(車載名額滿 / 載具不通)就轉圈 */
