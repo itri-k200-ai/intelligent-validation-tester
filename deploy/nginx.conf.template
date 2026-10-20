@@ -180,6 +180,11 @@ http {
             add_header         Cache-Control     no-cache;
         }
 
+        # 圖片最佳化端點:前端沒用(next.config 已關),出過遠端執行漏洞,直接不給連
+        location /_next/image {
+            return 404;
+        }
+
         location / {
             # 2026-10-19 被打進來植入挖礦程式:Next.js 15.0.3 + React 19 RC 的 Server Actions
             # 遠端執行漏洞(CVE-2025-55182),外部對首頁送特製的 POST / 就能在容器裡跑指令。

@@ -12,9 +12,9 @@ const config: NextConfig = {
   // this, Next.js strips the trailing slash and bounces it back to the
   // browser as a 308, which loops against Django's APPEND_SLASH.
   skipTrailingSlashRedirect: true,
-  images: {
-    remotePatterns: [{ protocol: "http", hostname: "localhost" }],
-  },
+  // 沒有用 next/image。關掉圖片最佳化(/_next/image):那支端點預設就開著,
+  // 而且出過遠端執行漏洞(GHSA-2xp9-vwfh-vxw4),用不到就不要留著。nginx 也擋了這個路徑
+  images: { unoptimized: true },
   async rewrites() {
     if (!isDev) return [];
     // Append "/" to the destination — Django APPEND_SLASH requires it, and
