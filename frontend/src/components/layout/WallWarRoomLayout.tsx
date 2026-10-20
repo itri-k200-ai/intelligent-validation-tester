@@ -174,7 +174,7 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
               />
               <div className="war-room-lab-icon-text">
                 <h3 className="war-room-lab-icon-title">合作夥伴</h3>
-                <p className="war-room-lab-icon-desc">{PARTNERS.join("、")}</p>
+                <p className="war-room-lab-icon-desc">國內合作夥伴：{PARTNERS.join("、")}</p>
               </div>
             </div>
             {/* 下半部:3 個高長條(各跨 2 row)。右副牆是靜態說明牆 ——
