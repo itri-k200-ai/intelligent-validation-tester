@@ -181,6 +181,13 @@ http {
         }
 
         location / {
+            # 2026-10-19 被打進來植入挖礦程式:Next.js 15.0.3 + React 19 RC 的 Server Actions
+            # 遠端執行漏洞(CVE-2025-55182),外部對首頁送特製的 POST / 就能在容器裡跑指令。
+            # 我們的前端沒有用 Server Actions,網頁只需要 GET / HEAD —— 其他方法與帶
+            # Next-Action 標頭的請求一律擋掉(/api、/ric、/hls 走上面各自的 location,不受影響)。
+            # 升級到修補版之前不要拿掉。
+            limit_except GET HEAD { deny all; }
+            if ($http_next_action) { return 403; }
             proxy_pass         http://frontend;
             proxy_http_version 1.1;
             proxy_set_header   Upgrade           $http_upgrade;

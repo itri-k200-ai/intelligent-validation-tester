@@ -120,6 +120,16 @@ services:
     # 注意:3000 常被 RICtester 那套的 front_end 佔用,同機部署要改 IVT_FRONTEND_PORT。
     # nginx 是走 compose 內網 frontend:3000,這個對外埠只供 debug。
     ports: ["127.0.0.1:${IVT_FRONTEND_PORT:-3000}:3000"]
+    # 2026-10-19 被打進來植入挖礦程式(見 nginx.conf.template 的 location /),跑滿 28 顆核心。
+    # 就算再被打進來也要讓它難做事:檔案系統唯讀(放不了執行檔)、CPU 上限、程式數上限。
+    # Next 執行時只寫 .next/cache 與 /tmp,給 tmpfs。
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+      - /root/.npm
+    cpus: 4
+    pids_limit: 200
 
   nginx:
     image: nginx:alpine
