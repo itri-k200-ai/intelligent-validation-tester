@@ -1,7 +1,7 @@
 "use client";
 import { SquareDashed } from "lucide-react";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { HudOctagon } from "@/components/ui/hud-octagon";
@@ -48,6 +48,15 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
   // 訂閱左 app(獨立 URL)的選擇廣播,灌進 wallSelectionStore。
   useWallSelection();
   const region = useWallRegion();
+  // 每個視窗只掛「自己那一面牆」的內容(?wall=center 只看得到主牆、?wall=right 只看得到右副牆,
+  // 其餘被 CSS 裁掉)。以前三面牆在每個視窗都整份掛著:右牆的視窗也在跑主牆的輪詢、回放影格
+  // (實測 6 秒 26 支 API + 152 張影格,跟中牆一模一樣),驗測進行中還會再開一份攝影機串流、
+  // 佔掉上游每支只有 3 個的名額;中牆的視窗則多算一整面右牆的版面。
+  // region 要等掛載後才知道(SSR 與第一次 render 一律是 all),所以掛載前三面都先不掛 ——
+  // 不然右牆的視窗會先掛一次主牆、開始抓資料,下一刻才拆掉。
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const show = (...regions: string[]) => mounted && (region === "all" || regions.includes(region));
 
   return (
     <div className="war-room-root">
@@ -107,7 +116,7 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
           <div className="war-room-main-bg" aria-hidden="true">
             <HudOctagon kind="radar" className="war-room-main-bg-asset" />
           </div>
-          <div className="war-room-main-content">{children}</div>
+          <div className="war-room-main-content">{show("center") && children}</div>
         </main>
       </section>
 
@@ -115,70 +124,72 @@ export function WallWarRoomLayout({ children }: { children: ReactNode }) {
       {/* 左副牆:adapter 的操作台 —— 驅動測試、挑一筆歷史丟上中牆、下載報告。
           adapter 是外部團隊操作這套系統的唯一入口,左牆就是它的前台。 */}
       <section className="war-room-left">
-        <WallLeftAdapter />
+        {show() && <WallLeftAdapter />}
       </section>
 
       {/* === 右副牆:實驗室概要 + page slots === */}
       <section className="war-room-right">
-        <div className="war-room-lab-info">
-          {/* 右副牆頂端:跨三欄的置中標題。主牆掛「智慧網路」,
-              這面牆是它的簡介,標題就寫「簡介」(依前端回饋,不重複主牆的名字)。 */}
-          <div className="war-room-lab-title">
-            <div className="war-room-lab-title-text">簡介</div>
-          </div>
-          {/* 上排:3 格,各占一個 TV 螢幕寬 */}
-          <div className="war-room-lab-top war-room-lab-top--intro">
-            <img
-              src="/images/%E6%99%BA%E6%85%A7%E7%B6%B2%E8%B7%AF%E5%AF%A6%E9%A9%97%E5%AE%A4LOGO-nobg.png"
-              alt="智慧網路 logo"
-              className="war-room-lab-intro-logo"
-            />
-            <div className="war-room-lab-intro-text">
-              <h3 className="war-room-lab-intro-title">智慧網路</h3>
-              <p className="war-room-lab-intro-desc">
-                自動化驗測平台:SMO / RIC / Core Network 介面測試、xApp / rApp 效能測試,
-                提供室內外及虛擬場域實測。
-              </p>
+        {show("right") && (
+          <div className="war-room-lab-info">
+            {/* 右副牆頂端:跨三欄的置中標題。主牆掛「智慧網路」,
+                這面牆是它的簡介,標題就寫「簡介」(依前端回饋,不重複主牆的名字)。 */}
+            <div className="war-room-lab-title">
+              <div className="war-room-lab-title-text">簡介</div>
+            </div>
+            {/* 上排:3 格,各占一個 TV 螢幕寬 */}
+            <div className="war-room-lab-top war-room-lab-top--intro">
+              <img
+                src="/images/%E6%99%BA%E6%85%A7%E7%B6%B2%E8%B7%AF%E5%AF%A6%E9%A9%97%E5%AE%A4LOGO-nobg.png"
+                alt="智慧網路 logo"
+                className="war-room-lab-intro-logo"
+              />
+              <div className="war-room-lab-intro-text">
+                <h3 className="war-room-lab-intro-title">智慧網路</h3>
+                <p className="war-room-lab-intro-desc">
+                  自動化驗測平台:SMO / RIC / Core Network 介面測試、xApp / rApp 效能測試,
+                  提供室內外及虛擬場域實測。
+                </p>
+              </div>
+            </div>
+            <div className="war-room-lab-top war-room-lab-top--icon">
+              <img
+                src="/images/icon-target.png"
+                alt=""
+                className="war-room-lab-icon"
+              />
+              <div className="war-room-lab-icon-text">
+                <h3 className="war-room-lab-icon-title">測試目標</h3>
+                <p className="war-room-lab-icon-desc">
+                  {/* 整句寫成一個字串 —— JSX 的換行會被當成空白,
+                      「自動化產出 驗測報告」中間會多出一格 */}
+                  {"依據 3GPP 標準驗測 SMO / RIC / Core Network 介面與 xApp / rApp 效能,自動化產出驗測報告,加速智慧網路技術落地。"}
+                </p>
+              </div>
+            </div>
+            <div className="war-room-lab-top war-room-lab-top--icon">
+              <img
+                src="/images/icon-partners.png"
+                alt=""
+                className="war-room-lab-icon"
+              />
+              <div className="war-room-lab-icon-text">
+                <h3 className="war-room-lab-icon-title">合作夥伴</h3>
+                <p className="war-room-lab-icon-desc">{PARTNERS.join("、")}</p>
+              </div>
+            </div>
+            {/* 下半部:3 個高長條(各跨 2 row)。右副牆是靜態說明牆 ——
+                不隨選中的 DUT 變動、也不跟左螢幕溝通,文案見 RightWingStatic。 */}
+            <div className="war-room-lab-tall war-room-lab-tall--dut">
+              <RightWingDut />
+            </div>
+            <div className="war-room-lab-tall war-room-lab-tall--equip">
+              <RightWingEquip />
+            </div>
+            <div className="war-room-lab-tall war-room-lab-tall--method">
+              <RightWingMethod />
             </div>
           </div>
-          <div className="war-room-lab-top war-room-lab-top--icon">
-            <img
-              src="/images/icon-target.png"
-              alt=""
-              className="war-room-lab-icon"
-            />
-            <div className="war-room-lab-icon-text">
-              <h3 className="war-room-lab-icon-title">測試目標</h3>
-              <p className="war-room-lab-icon-desc">
-                {/* 整句寫成一個字串 —— JSX 的換行會被當成空白,
-                    「自動化產出 驗測報告」中間會多出一格 */}
-                {"依據 3GPP 標準驗測 SMO / RIC / Core Network 介面與 xApp / rApp 效能,自動化產出驗測報告,加速智慧網路技術落地。"}
-              </p>
-            </div>
-          </div>
-          <div className="war-room-lab-top war-room-lab-top--icon">
-            <img
-              src="/images/icon-partners.png"
-              alt=""
-              className="war-room-lab-icon"
-            />
-            <div className="war-room-lab-icon-text">
-              <h3 className="war-room-lab-icon-title">合作夥伴</h3>
-              <p className="war-room-lab-icon-desc">{PARTNERS.join("、")}</p>
-            </div>
-          </div>
-          {/* 下半部:3 個高長條(各跨 2 row)。右副牆是靜態說明牆 ——
-              不隨選中的 DUT 變動、也不跟左螢幕溝通,文案見 RightWingStatic。 */}
-          <div className="war-room-lab-tall war-room-lab-tall--dut">
-            <RightWingDut />
-          </div>
-          <div className="war-room-lab-tall war-room-lab-tall--equip">
-            <RightWingEquip />
-          </div>
-          <div className="war-room-lab-tall war-room-lab-tall--method">
-            <RightWingMethod />
-          </div>
-        </div>
+        )}
       </section>
     </div>
   );

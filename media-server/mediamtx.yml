@@ -25,21 +25,26 @@ hlsSegmentCount: 7
 hlsSegmentDuration: 1s
 hlsPartDuration: 200ms
 hlsSegmentMaxSize: 50M
+# 來源一連上就開始切 HLS,不等第一個觀看者來才切 —— 配合下面 field-b52-roof 的常駐拉流,
+# 有人打開時播放清單與前幾段已經在了,不必等 muxer 從頭累積(只是重新封裝,不轉檔,很省)
+hlsAlwaysRemux: yes
 
 webrtc: no
 
 paths:
   # 場域測試:室外固定攝影機(52 館屋頂)。來源在場域網段的 MediaMTX,手機 / 院外連不到,
   # 所以由這裡向它拉一路,再經 nginx 的 /hls/ 發給所有觀看的人(牆面、/field)。
-  # 有人看才拉(sourceOnDemand),沒人看就斷,不佔場域端的頻寬。
-  # ⚠ 來源是 H.265(HEVC)4K 30fps 約 6.8 Mbps:原樣轉送、不轉檔。瀏覽器要能硬體解 H.265
+  # 隨時都在拉(依現場要求):以前是有人看才拉(sourceOnDemand),每次第一個人打開
+  # 都要等連上 RTSP、等關鍵影格、再累積 HLS 片段,要好幾秒才有畫面。
+  # 代價是這台主機與場域端之間一直有一路約 6.8 Mbps 的流量。
+  # ⚠ 來源是 H.265(HEVC)720p 30fps:原樣轉送、不轉檔。瀏覽器要能硬體解 H.265
   #   (Windows / Mac 的 Chrome、Edge 與 Safari 多半可以;Firefox 不行)。
   # 名稱以 field- 開頭:前端靠這個前綴改用牆面版的播放器(見 LiveVideo / FieldHlsVideo)。
   field-b52-roof:
-    source: rtsp://192.168.145.61:8554/B52_Roof
-    sourceOnDemand: yes
-    sourceOnDemandStartTimeout: 15s
-    sourceOnDemandCloseAfter: 15s
+    # 用場域端的 720p 那一路(B52_Roof_mid,依現場要求;原本的 B52_Roof 是 4K,
+    # 經這裡轉送每秒 8~13 Mbps,院外看很吃力)
+    source: rtsp://192.168.145.61:8554/B52_Roof_mid
+    sourceOnDemand: no
     rtspTransport: tcp
   all_others:
     source: publisher

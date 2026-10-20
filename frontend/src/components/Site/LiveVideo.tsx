@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Maximize2, Pause, Play, Volume2 } from "lucide-react";
 
 import { FieldHlsVideo } from "./FieldHlsVideo";
-import { cameraStreamOrigin } from "@/lib/fieldCameras";
+import { cameraStreamOrigin, onCameraOriginChange } from "@/lib/fieldCameras";
 import { readMjpeg, type Frame } from "@/lib/mjpegStream";
 
 import { HlsPlayer } from "./HlsPlayer";
@@ -115,8 +115,11 @@ function useCameraUrl(src: string) {
   useEffect(() => {
     let alive = true;
     cameraStreamOrigin().then((o) => alive && setOrigin(o));
+    // 先用同源開了、背景才探到更好的埠(或記住的那個不通了):換過去,串流會自己重連
+    const off = onCameraOriginChange((o) => alive && setOrigin(o));
     return () => {
       alive = false;
+      off();
     };
   }, []);
   return origin === null ? null : src.startsWith("/") ? `${origin}${src}` : src;

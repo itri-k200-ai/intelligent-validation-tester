@@ -162,7 +162,7 @@ export function FieldTestWall({ scenario }: { scenario: FieldScenarioId }) {
  * 整面中牆的載入畫面:剛開頁還不知道是即時還是回放、或回放的資料與第一批影格還在載入時蓋上去。
  * 稍微延遲才淡入(見 globals.css .field-wall-loading),載入很快時不會閃一下。
  */
-function WallLoading() {
+export function WallLoading() {
   // 掛在 <body> 上(portal):牆面內容是放大 3 倍再縮小的畫布,放在畫布裡的 fixed 會跟著畫布跑,
   // 轉圈就不在螢幕正中間。body 沒有縮放,這一層剛好蓋滿這個瀏覽器視窗(一台電視就是一個視窗)。
   const [host, setHost] = useState<HTMLElement | null>(null);
@@ -358,7 +358,13 @@ function LiveResultsLayout({
       <section className="dut-wall-band field-card">
         <div className="field-card-head field-card-head--meta">
           {/* 不放「啟用前 / 啟用後」圖例 —— 跟室內一致(依版面規劃圖) */}
-          <HeadRow title="測試狀態總覽" mission={mission} gainLabel={`${OUTDOOR_UL_LABEL}提升`} />
+          <HeadRow
+            title="測試狀態總覽"
+            mission={mission}
+            gainLabel={`${OUTDOOR_UL_LABEL}提升`}
+            // 室外的「平均吞吐提升」用下行算(依現場要求);室內維持上行
+            gainMetric="dlKbps"
+          />
         </div>
 
         <div className="field-status-body field-status-body--results">
@@ -619,11 +625,14 @@ function HeadRow({
   title,
   mission,
   gainLabel,
+  gainMetric,
 }: {
   title: string;
   mission: FieldMission;
   /** 提升值前面的字樣(預設「平均吞吐提升」,室內外都是;依現場要求從「平均上行提升」改名) */
   gainLabel?: string;
+  /** 提升值用哪個速率算(預設上行) */
+  gainMetric?: "ulKbps" | "dlKbps";
 }) {
   const at = runTime(mission);
   return (
@@ -648,7 +657,7 @@ function HeadRow({
           <span className="field-meta-val flex min-w-0 items-baseline">
             <span className="min-w-0 truncate">{mission.testcase.name}</span>
             {/* 「平均吞吐提升」靠這一格的右緣(依前端回饋),數值放大、上色凸顯 */}
-            <MeanGain mission={mission} label={gainLabel} />
+            <MeanGain mission={mission} label={gainLabel} metric={gainMetric} />
           </span>
         </span>
       </div>
@@ -697,15 +706,23 @@ function ReplayTile({
 }
 
 /**
- * 測試項目那一格右緣的「平均吞吐提升 +x%」(數據是上行速率):文字跟項目同一個字級,數值加粗、上色
+ * 測試項目那一格右緣的「平均吞吐提升 +x%」(預設用上行速率算,室外用下行,見 metric):文字跟項目同一個字級,數值加粗、上色
  * (提升是綠、下降是紅)。
  *
  * 只在驗測結束、或看歷史回放時出現(有驗測在跑時兩趟還沒比完);兩趟都要有資料。
  * 回放時用整次驗測的最終結果,不跟著回放游標變。算法跟右邊「測試數據」圖表一樣。
  */
-function MeanGain({ mission, label = "平均吞吐提升" }: { mission: FieldMission; label?: string }) {
+function MeanGain({
+  mission,
+  label = "平均吞吐提升",
+  metric = "ulKbps",
+}: {
+  mission: FieldMission;
+  label?: string;
+  metric?: "ulKbps" | "dlKbps";
+}) {
   if (mission.runs.some((r) => r.status === "running")) return null;
-  const ul = meanGainPct(mission.runs, "ulKbps");
+  const ul = meanGainPct(mission.runs, metric);
   if (ul === null) return null;
   const up = ul > 0.05;
   const down = ul < -0.05;

@@ -173,7 +173,8 @@ export function liveInReplay(scenario: FieldScenarioId, index: number): boolean 
  * 場域端的 mediamtx 允許跨網域(Access-Control-Allow-Origin: *),瀏覽器可以直接拉。
  */
 const DIRECT_HLS: Record<string, string> = {
-  "/hls/field-b52-roof/index.m3u8": "http://192.168.145.61:8888/B52_Roof/index.m3u8",
+  // 720p 那一路(B52_Roof_mid,依現場要求;B52_Roof 是 4K),與 mediamtx.yml 的 field-b52-roof 同一個來源
+  "/hls/field-b52-roof/index.m3u8": "http://192.168.145.61:8888/B52_Roof_mid/index.m3u8",
 };
 
 /**
@@ -214,8 +215,6 @@ const CAMERA_PORT: Record<string, string> = { "38080": "38081" };
  * 要換回只用 38081:把這個改成 {} 即可。
  */
 const CAMERA_HTTPS_PORT: Record<string, string> = { "38080": "38443" };
-let cameraOrigin: Promise<string> | null = null;
-
 /** 這個 origin 連不連得到(3 秒內有回就算) */
 function reachable(origin: string): Promise<boolean> {
   const ctrl = new AbortController();
@@ -226,17 +225,110 @@ function reachable(origin: string): Promise<boolean> {
     .finally(() => window.clearTimeout(timer));
 }
 
-/** 串流要接在哪個 origin 前面("" = 照舊同源)。整頁只探一次;兩個候選同時探,不會一個等一個 */
+/**
+ * 開串流前最多等探測這麼久。院內兩個埠幾十毫秒就回;院外的防火牆是把封包直接丟掉,
+ * 探測要等滿 3 秒逾時才知道不通 —— 以前就是這樣讓影像固定晚 3 秒才出來
+ * (實測院外 140.96.158.x:38443 / 38081 的 _ping 一個都沒到 nginx)。
+ * 等不到就先用同源開,探測照樣在背景跑,之後發現有更好的埠再換過去(見 onCameraOriginChange)。
+ */
+const PROBE_WAIT_MS = 300;
+/** 上次探到的結果記在這台瀏覽器:下次開頁直接用,不必再等(背景照樣重探,換了網路會自己改) */
+const ORIGIN_KEY = "ivt.field.cameraOrigin";
+
+let originReady: Promise<string> | null = null;
+let currentOrigin = "";
+const originListeners = new Set<(origin: string) => void>();
+
+function setOrigin(origin: string) {
+  if (origin === currentOrigin) return;
+  currentOrigin = origin;
+  originListeners.forEach((fn) => fn(origin));
+}
+
+/** 串流位址換了(探到更好的埠、或記住的那個已經不通)時通知;回傳取消訂閱 */
+export function onCameraOriginChange(fn: (origin: string) => void): () => void {
+  originListeners.add(fn);
+  return () => originListeners.delete(fn);
+}
+
+/**
+ * 串流要接在哪個 origin 前面("" = 照舊同源)。整頁只探一次,候選同時探。
+ * 最多等 PROBE_WAIT_MS 就交出當下最好的答案,之後有變再經 onCameraOriginChange 通知。
+ */
 export function cameraStreamOrigin(): Promise<string> {
-  if (cameraOrigin) return cameraOrigin;
+  if (originReady) return originReady;
   const { protocol, hostname, port } = window.location;
-  if (protocol !== "http:") return (cameraOrigin = Promise.resolve(""));
+  if (protocol !== "http:") return (originReady = Promise.resolve(""));
   const candidates = [
     CAMERA_HTTPS_PORT[port] && `https://${hostname}:${CAMERA_HTTPS_PORT[port]}`,
     CAMERA_PORT[port] && `http://${hostname}:${CAMERA_PORT[port]}`,
   ].filter((o): o is string => !!o);
-  cameraOrigin = Promise.all(candidates.map(reachable)).then(
-    (ok) => candidates.find((_, k) => ok[k]) ?? "",
+  if (!candidates.length) return (originReady = Promise.resolve(""));
+
+  let saved: string | null = null;
+  try {
+    saved = window.localStorage.getItem(ORIGIN_KEY);
+  } catch {
+    // 私密視窗等拿不到就算了,照常探
+  }
+  const hasSaved = saved !== null && (saved === "" || candidates.includes(saved));
+  if (hasSaved) currentOrigin = saved!;
+
+  // 每個候選:undefined = 還在探、true / false = 通不通
+  const ok: (boolean | undefined)[] = candidates.map(() => undefined);
+  let decided = hasSaved;
+  let release: (origin: string) => void = () => {};
+  const update = () => {
+    const done = ok.every((v) => v !== undefined);
+    // 依優先順序,第一個「通」且前面都已確定不通的;全部探完都不通 = 同源
+    let best: string | null = null;
+    for (let k = 0; k < candidates.length; k++) {
+      if (ok[k] === true) {
+        best = candidates[k];
+        break;
+      }
+      if (ok[k] === undefined) break;
+    }
+    if (best === null && done) best = "";
+    // 更優先的還在探就先別定(38081 不用 TLS,常比 38443 早回幾十毫秒;先用它再換
+    // 會讓每支攝影機開兩條、白佔上游名額)。等到 PROBE_WAIT_MS 到了才退而求其次
+    if (best === null) return;
+    if (!decided) {
+      decided = true;
+      currentOrigin = best;
+      release(best);
+    } else if (best !== currentOrigin && (done || priority(best) < priority(currentOrigin))) {
+      // 已經在播:只換到更優先的;全部探完才允許退回(記住的那個不通了)
+      setOrigin(best);
+    }
+    if (done) {
+      try {
+        window.localStorage.setItem(ORIGIN_KEY, currentOrigin);
+      } catch {
+        // 存不了就下次再探
+      }
+    }
+  };
+  const priority = (o: string) => (o === "" ? candidates.length : candidates.indexOf(o));
+  candidates.forEach((o, k) =>
+    void reachable(o).then((v) => {
+      ok[k] = v;
+      update();
+    }),
   );
-  return cameraOrigin;
+
+  originReady = hasSaved
+    ? Promise.resolve(currentOrigin)
+    : new Promise<string>((resolve) => {
+        release = resolve;
+        window.setTimeout(() => {
+          if (decided) return;
+          // 等不到最優先的:有通的就先用,都還沒回就先用同源;背景探到更好的再換
+          const any = ok.findIndex((v) => v === true);
+          decided = true;
+          currentOrigin = any >= 0 ? candidates[any] : "";
+          resolve(currentOrigin);
+        }, PROBE_WAIT_MS);
+      });
+  return originReady;
 }

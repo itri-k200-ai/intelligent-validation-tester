@@ -190,6 +190,8 @@ FIELD_TEST_ADAPTER_BASE = env("FIELD_TEST_ADAPTER_BASE", default="")
 # 場域攝影機的 JPEG 經過我們這裡時重壓的品質(平台原圖幾乎沒壓,見 apps/field_tests/jpeg.py)。
 # 0 = 不重壓,原樣轉送。
 FIELD_CAMERA_JPEG_QUALITY = env.int("FIELD_CAMERA_JPEG_QUALITY", default=70)
+# 平台回應的共用快取(先給舊的、背景換新的,見 apps/field_tests/cache.py)。False = 每次直接打平台
+FIELD_TEST_CACHE = env.bool("FIELD_TEST_CACHE", default=True)
 
 # 場域測試小助理(/field)串接的網管 agent —— Infrastructure Operator Co-pilot(nmagent 架構)。
 # 留空就關掉,前端會退回本地的關鍵字回覆。runner:claude / ollama(ollama 要對方有載入模型)。

@@ -1,9 +1,31 @@
 "use client";
 import { useEffect } from "react";
 
-import { useFieldTestActive } from "@/hooks/FieldTest/useFieldTestActive";
+import { useFieldTestActive, type FieldActive } from "@/hooks/FieldTest/useFieldTestActive";
 import { useFieldScenarioStore } from "@/stores/fieldScenarioStore";
 import type { FieldScenarioId } from "@/types/fieldTest";
+
+/**
+ * 「最後一次操作」比較晚的是哪一邊(還沒有任何操作紀錄就回 null)。
+ * 中牆開頁時也用它決定第一個要掛的情境(見 FieldTestScenarioContainer)。
+ */
+export function latestOperated(
+  active: FieldActive | null,
+): { id: FieldScenarioId; ago: number } | null {
+  if (!active?.scenarios) return null;
+  let best: { id: FieldScenarioId; ago: number } | null = null;
+  for (const [id, v] of Object.entries(active.scenarios)) {
+    if (!v) continue;
+    // 這個情境最後一次操作:開跑與被指定,取較晚的。
+    // 跑完的那一筆**仍然算**一次操作 —— 不然驗測一結束,這一邊的「最後一次操作」
+    // 就塌回更早的歷史指定,牆面會自己跳回另一邊去(跟「跑完就停住」相反)。
+    const at = Math.max(v.runStartedAt ?? 0, v.pinnedAt ?? 0);
+    if (!at) continue;
+    const ago = active.now - at;
+    if (!best || ago < best.ago) best = { id: id as FieldScenarioId, ago };
+  }
+  return best;
+}
 
 /**
  * 自動跳轉:哪一邊「最後一次操作」比較晚就顯示哪一邊(結果寫進 fieldScenarioStore)。
@@ -19,18 +41,7 @@ export function useScenarioAutoFollow() {
   const { active } = useFieldTestActive();
   const manualAt = useFieldScenarioStore((s) => s.manualAt);
   useEffect(() => {
-    if (!active?.scenarios) return;
-    let best: { id: FieldScenarioId; ago: number } | null = null;
-    for (const [id, v] of Object.entries(active.scenarios)) {
-      if (!v) continue;
-      // 這個情境最後一次操作:開跑與被指定,取較晚的。
-      // 跑完的那一筆**仍然算**一次操作 —— 不然驗測一結束,這一邊的「最後一次操作」
-      // 就塌回更早的歷史指定,牆面會自己跳回另一邊去(跟「跑完就停住」相反)。
-      const at = Math.max(v.runStartedAt ?? 0, v.pinnedAt ?? 0);
-      if (!at) continue;
-      const ago = active.now - at;
-      if (!best || ago < best.ago) best = { id: id as FieldScenarioId, ago };
-    }
+    const best = latestOperated(active);
     if (!best) return;
     // 現場剛按過按鈕(或手機上點了分頁)就以它為準 —— 它也是一次操作
     const manualAgo = manualAt === null ? Infinity : (performance.now() - manualAt) / 1000;

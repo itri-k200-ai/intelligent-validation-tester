@@ -57,9 +57,13 @@ services:
     #                  sync worker 被串流佔住時整個 process 都不能做別的事,
     #                  3 個 worker 有 1~2 條串流就快餓死。改成執行緒模型,
     #                  串流只佔一條 thread。
+    #   --threads 32   每一路 MJPEG 觀看者整段時間都佔一條 thread(室內一頁就 4 條)。
+    #                  8 條時,某個 worker 的 thread 被串流佔滿,分到它那裡的一般請求
+    #                  (5 ms 就能回的 selection、auth/me)就排隊 2~3 秒,牆面開頁跟著卡
+    #                  (2026-10-19 實測)。串流幾乎都在等網路,多開 thread 很便宜。
     command: >
       gunicorn config.wsgi --bind 0.0.0.0:8000
-      --worker-class gthread --workers 3 --threads 8 --timeout 0
+      --worker-class gthread --workers 3 --threads 32 --timeout 0
     env_file: ../backend/.env
     # 場域測試要打同一台主機上的 IM adapter(FIELD_TEST_ADAPTER_BASE),
     # 走 host-gateway 出去 —— 與 nginx 同一個做法,.env 就不必寫死主機 IP。

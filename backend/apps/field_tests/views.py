@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 
 import httpx
@@ -18,10 +19,13 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import client, history, jpeg, transform
+from . import cache, client, history, jpeg, transform
 from .targets import ctrl_path, target
 
 logger = logging.getLogger(__name__)
+
+# 同一個請求裡互不相依的上游呼叫同時發(見 MissionView)。每個 gunicorn worker 一個池
+_POOL = ThreadPoolExecutor(max_workers=16, thread_name_prefix="field-upstream")
 
 
 def _error(exc: client.PerfTesterError) -> Response:
@@ -76,6 +80,10 @@ def _vehicle_extras(scenario: str) -> tuple[dict | None, dict | None]:
 
     都是附帶的 —— 拿不到就讓那幾格空著,不要連訊號一起沒有。回 (robot, targets)。
     """
+    return cache.swr(f"extras:{scenario}", lambda: _vehicle_extras_now(scenario), fresh_s=1, keep_s=30)
+
+
+def _vehicle_extras_now(scenario: str) -> tuple[dict | None, dict | None]:
     robot = targets = None
     try:
         if scenario == "indoor":
@@ -87,6 +95,16 @@ def _vehicle_extras(scenario: str) -> tuple[dict | None, dict | None]:
     return robot, targets
 
 
+def _live(scenario: str, timeout: float | None = None) -> dict:
+    """載具的 /live(每秒有好幾個畫面在問同一台,共用快取;載具離線時平台要好幾秒才回)。"""
+    return cache.swr(
+        f"live:{scenario}",
+        lambda: client.get(ctrl_path(scenario, "/live"), timeout=timeout) or {},
+        fresh_s=1,
+        keep_s=30,
+    )
+
+
 class LiveView(WallReadView):
     """GET /api/field-tests/live/<scenario>/ —— 即時數值(建議 1~2 秒輪詢)。
 
@@ -96,7 +114,7 @@ class LiveView(WallReadView):
     def get(self, request, scenario: str):
         """/live 是主角(訊號、位置、yaw 都在裡面);其餘見 _vehicle_extras。"""
         try:
-            live = (client.get(ctrl_path(scenario, "/live")) or {}).get("live") or {}
+            live = _live(scenario).get("live") or {}
         except client.PerfTesterError as exc:
             return _error(exc)
 
@@ -138,11 +156,27 @@ class MissionView(WallReadView):
             if not run_id:
                 return Response({"detail": "目前沒有可顯示的驗測紀錄"}, status=404)
 
-            status_payload = client.get(f"/ext/validations/{run_id}")
-            samples_payload = client.get(
-                f"/ext/validations/{run_id}/samples",
-                params={"source": "ue", "since_seq": since_seq, "limit": 5000},
+            def fetch_samples() -> dict:
+                return client.get(
+                    f"/ext/validations/{run_id}/samples",
+                    params={"source": "ue", "since_seq": since_seq, "limit": 5000},
+                )
+
+            # 驗測狀態與樣本互不相依:同時發(以前一支等完才打下一支,平台慢時就是兩倍的時間)。
+            # 第一次載入(since_seq=0)大家要的都一樣,共用快取;之後的增量各自不同,直接打
+            status_f = _POOL.submit(
+                cache.swr,
+                f"status:{run_id}",
+                lambda: client.get(f"/ext/validations/{run_id}"),
+                fresh_s=1,
+                keep_s=86400,
             )
+            samples_f = (
+                _POOL.submit(cache.swr, f"samples:{run_id}", fetch_samples, fresh_s=1, keep_s=86400)
+                if since_seq in {"", "0"}
+                else _POOL.submit(fetch_samples)
+            )
+            status_payload = status_f.result()
         except client.PerfTesterError as exc:
             return _error(exc)
 
@@ -150,15 +184,21 @@ class MissionView(WallReadView):
         # 驗測跑完了就不問 —— 跑完的(包括被指定看的歷史)用不到車子現在的狀態,
         # 下面會改用最後一筆樣本;而載具離線時這一問要等滿 2 秒逾時,牆面開頁 / 切換歷史
         # 時判斷「即時還是回放」就被拖慢 2 秒(實測 /missions 0.25 秒 ↔ 2.3 秒跳)。
+        # 在跑的話:/live 與 /robot(/targets)也跟樣本同時抓,不排隊
         live: dict = {}
         robot = targets = None
-        if status_payload.get("status") not in {"done", "error", "aborted"}:
+        running = status_payload.get("status") not in {"done", "error", "aborted"}
+        if running:
+            live_f = _POOL.submit(_live, scenario, OPTIONAL_TELEMETRY_TIMEOUT_S)
+            extras_f = _POOL.submit(_vehicle_extras, scenario)
+        try:
+            samples_payload = samples_f.result()
+        except client.PerfTesterError as exc:
+            return _error(exc)
+        if running:
             try:
-                live = (
-                    client.get(ctrl_path(scenario, "/live"), timeout=OPTIONAL_TELEMETRY_TIMEOUT_S)
-                    or {}
-                ).get("live") or {}
-                robot, targets = _vehicle_extras(scenario)
+                live = live_f.result().get("live") or {}
+                robot, targets = extras_f.result()
             except client.PerfTesterError as exc:
                 logger.info("即時遙測拿不到(%s),只回驗測數據", exc.detail)
 
@@ -282,7 +322,8 @@ def _validations() -> list[dict]:
     GET /ext/validations 的回應形狀文件沒寫明,所以同時容忍「直接一個 list」
     與幾種常見的包裝鍵;真的對接上之後可以把這裡收斂成實際那一種。
     """
-    payload = client.get("/ext/validations")
+    # 每個畫面、每秒都要它(挑哪一筆、開跑了沒),平台回一次要 1~2 秒 —— 共用快取,先給舊的
+    payload = cache.swr("validations", lambda: client.get("/ext/validations"), fresh_s=2, keep_s=86400)
     if isinstance(payload, list):
         runs = payload
     else:
@@ -593,7 +634,9 @@ def _process(
 
     if not finished:
         try:
-            pipe = client.get(f"/pipelines/{run_id}") or {}
+            pipe = cache.swr(
+                f"pipe:{run_id}", lambda: client.get(f"/pipelines/{run_id}") or {}, fresh_s=1, keep_s=60
+            )
             pipe = pipe.get("run") or pipe.get("pipeline") or pipe
             steps = pipe.get("steps") or []
             if steps:
@@ -611,7 +654,12 @@ def _process(
             pass
 
     try:
-        rec = client.get(f"/validation-runs/{run_id}") or {}
+        rec = cache.swr(
+            f"vrun:{run_id}:{status}",
+            lambda: client.get(f"/validation-runs/{run_id}") or {},
+            fresh_s=86400 if finished else 1,
+            keep_s=86400,
+        )
         if rec.get("steps"):
             result = transform.process(
                 rec["steps"],
@@ -885,7 +933,13 @@ class ReplayView(WallReadView):
                 run_id = _run_id_for(scenario, conf.get("plan_id"))
             if not run_id:
                 return Response({"detail": "目前沒有可顯示的驗測紀錄"}, status=404)
-            payload = client.get(f"/validation-runs/{run_id}/replay")
+            # 跑完的不會再變;跑到一半的影格陸續增加 —— 幾秒更新一次就夠
+            payload = cache.swr(
+                f"replay:{run_id}",
+                lambda: client.get(f"/validation-runs/{run_id}/replay"),
+                fresh_s=5,
+                keep_s=86400,
+            )
         except client.PerfTesterError as exc:
             return _error(exc)
 
@@ -928,15 +982,23 @@ class ReplayFrameView(WallReadView):
                 run_id = _run_id_for(scenario, conf.get("plan_id"))
             if not run_id:
                 return Response({"detail": "目前沒有可顯示的驗測紀錄"}, status=404)
-            content_type, chunks = client.stream(
-                f"/validation-runs/{run_id}/replay/{cam}/{index}.jpg"
-            )
+            # 同一張影格不會變:重壓好的存在共用快取,下一個人(或同一面牆下一輪)不必再回平台
+            # (以前每一張都要回平台抓 0.7~1.3 秒,一面牆回放 4 支鏡頭就一直在敲平台)
+            key = f"frame:{run_id}:{cam}:{index}"
+            hit = cache.get_bytes(key)
+            if hit is None:
+                content_type, chunks = client.stream(
+                    f"/validation-runs/{run_id}/replay/{cam}/{index}.jpg"
+                )
+                # 單張不大,讀完重壓再送(見 jpeg.py:原圖 ~160 KB → ~20 KB)
+                body = b"".join(chunks)
+                if content_type.startswith("image/jpeg"):
+                    body = jpeg.recompress(body)
+                    cache.put_bytes(key, (content_type, body), 86400)
+            else:
+                content_type, body = hit
         except client.PerfTesterError as exc:
             return _error(exc)
-        # 單張不大,讀完重壓再送(見 jpeg.py:原圖 ~160 KB → ~20 KB)
-        body = b"".join(chunks)
-        if content_type.startswith("image/jpeg"):
-            body = jpeg.recompress(body)
         resp = HttpResponse(body, content_type=content_type)
         # 歷史畫面不會再變,讓瀏覽器留著,播放時不用每輪重抓
         resp["Cache-Control"] = "public, max-age=86400"

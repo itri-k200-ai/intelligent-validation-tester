@@ -600,9 +600,9 @@ function Cameras({
   // 固定攝影機開 MJPEG 串流、52 館屋頂播 HLS,車載先查狀態、名額沒滿才開(見 useFieldTestCamera)。
   // ⚠ 每支攝影機上游同時只給 3 路,每多一個人開 /field 就少一路給電視牆。
   const { streamUrl } = useFieldTestCamera(scenario);
-  const srcs = view.missionSettled
-    ? cameraSources(scenario).map((src, i, all) => (i === all.length - 1 ? streamUrl : src))
-    : cameraSources(scenario).map(() => null);
+  // 不等 /missions 回來就開串流:中牆要等,是因為可能要改播歷史回放(先開即時再關掉會白佔名額);
+  // /field 不跟平台指定的歷史(pinned 永遠是 false),一定播即時,等它只是讓影像晚 1 秒以上才出來
+  const srcs = cameraSources(scenario).map((src, i, all) => (i === all.length - 1 ? streamUrl : src));
   const renderTile = (label: string, i: number, fill: boolean) => {
         // 回放:這一格對應的鏡頭,在目前播到的時刻該顯示的那一張(規則同中牆)
         const cam = view.replaying ? replayCameraFor(scenario, i, view.replayCams) : null;
@@ -617,6 +617,8 @@ function Cameras({
                 // 室外固定攝影機沒有回放功能:回放時也播即時、標「LIVE」(規則同中牆)
                 <FieldHlsVideo
                   src={srcs[i]!}
+                  // /field 多半從外網看:直接走我們的轉送,不先試直連場域端
+                  preferDirect={false}
                   badge={<VideoBadge kind="live" />}
                   spinner={<span className="video-spinner !h-8 !w-8 !border-[3px]" />}
                 />
@@ -629,6 +631,8 @@ function Cameras({
               ) : srcs[i]?.endsWith(".m3u8") ? (
                 <FieldHlsVideo
                   src={srcs[i]!}
+                  // /field 多半從外網看:直接走我們的轉送,不先試直連場域端
+                  preferDirect={false}
                   badge={<VideoBadge kind="live" />}
                   spinner={<span className="video-spinner !h-8 !w-8 !border-[3px]" />}
                 />

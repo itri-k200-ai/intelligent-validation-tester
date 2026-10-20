@@ -120,7 +120,7 @@ def _detail(resp: httpx.Response) -> str:
 _STREAM_READ_TIMEOUT_S = 20.0
 
 
-def stream(path: str, chunk_size: int = 8192) -> tuple[str, Iterator[bytes]]:
+def stream(path: str) -> tuple[str, Iterator[bytes]]:
     """轉送上游的長連線內容(B6 的 MJPEG / snapshot)。
 
     回 (content_type, chunk 產生器)。呼叫端要把產生器交給 StreamingHttpResponse,
@@ -154,7 +154,10 @@ def stream(path: str, chunk_size: int = 8192) -> tuple[str, Iterator[bytes]]:
 
     def chunks() -> Iterator[bytes]:
         try:
-            yield from resp.iter_bytes(chunk_size)
+            # ⚠ 不能給 iter_bytes 指定 chunk_size:httpx 會湊滿那麼多才交出來,
+            #   每張畫面最後不滿一塊的尾巴要等下一張的資料來才送,整條固定慢一張
+            #   (5 fps = 200 ms,實測比直連攝影機慢 206 ms)。收到多少就交多少。
+            yield from resp.iter_bytes()
         except httpx.HTTPError as exc:
             # 串流中途斷掉 / 太久沒資料:安靜地結束這條,前端看到斷線會自己重連
             logger.info("串流 %s 中斷:%s", path, exc)

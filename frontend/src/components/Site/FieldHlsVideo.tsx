@@ -15,7 +15,7 @@ const DIRECT_TIMEOUT_MS = 8_000;
  * 跟 Site/HlsPlayer 的差別:那支是管理頁用的(有控制列、文字提示);這支是展示用 ——
  * 不顯示控制列、畫面填滿整格、出畫面前轉圈、斷了自己重連。
  *
- * ⚠ 室外 52 館屋頂那支是 H.265(HEVC)4K。瀏覽器不能解 H.265 時(Firefox、沒有硬體解碼的電腦),
+ * ⚠ 室外 52 館屋頂那支是 H.265(HEVC)720p。瀏覽器不能解 H.265 時(Firefox、沒有硬體解碼的電腦),
  *   hls.js 會回 manifestIncompatibleCodecsError —— 這時直接講原因,不要一直轉圈讓人以為在載入。
  */
 export function FieldHlsVideo({
@@ -23,8 +23,14 @@ export function FieldHlsVideo({
   badge,
   spinner,
   messageClassName = "text-xs",
+  preferDirect = true,
 }: {
   src: string;
+  /**
+   * 先試直連場域端(預設,電視牆用)。/field 多半是從外網看,連不到場域網段,
+   * 先試直連只是白等 —— 給 false 一開始就走我們的轉送。
+   */
+  preferDirect?: boolean;
   /** 右上角的 LIVE / 回放標籤(牆面與 /field 的樣式不同,由外面給) */
   badge?: ReactNode;
   /** 轉圈的樣子(同上) */
@@ -36,9 +42,9 @@ export function FieldHlsVideo({
   const [attempt, setAttempt] = useState(0);
   // 先直連場域端(見 lib/fieldCameras 的 directHlsFor);失敗或太久沒畫面就改走轉送,
   // 之後這一格就一直用轉送(換了來源才重新試直連)
-  const direct = directHlsFor(src);
+  const direct = preferDirect ? directHlsFor(src) : null;
   const [relay, setRelay] = useState(!direct);
-  useEffect(() => setRelay(!directHlsFor(src)), [src]);
+  useEffect(() => setRelay(!(preferDirect && directHlsFor(src))), [src, preferDirect]);
   const active = relay || !direct ? src : direct;
   const viaDirect = active !== src;
 
