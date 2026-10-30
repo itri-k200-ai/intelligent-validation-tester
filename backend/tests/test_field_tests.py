@@ -1076,6 +1076,56 @@ def test_the_deploy_stage_spans_install_to_the_second_phase():
     assert [round((x["end"] - x["start"]) * 11) for x in segs] == [2, 5, 4]
 
 
+def test_stages_for_a_plan_without_install():
+    """2026-10-30 的室外方案:沒有 install,app_off 在第一趟之前、reset 在優化後標記之後。
+    第一趟要算在啟動前,不能因為 app_off 是第一個 xApp 動作就把第一趟標成啟動中。"""
+    steps = [
+        {"type": "iperf", "action": "stop"},
+        {"type": "phase", "name": "優化前"},
+        {"type": "xapp_action", "action": "app_off"},
+        {"type": "iperf"},
+        {"type": "ue_control"},
+        {"type": "phase", "name": "優化後"},
+        {"type": "xapp_action", "action": "reset"},
+        {"type": "wait", "seconds": 7},
+        {"type": "ue_control"},
+        {"type": "compare"},
+        {"type": "iperf", "action": "stop"},
+    ]
+    assert [(x["from"], x["to"], x["kind"]) for x in transform.stages(steps)] == [
+        (0, 5, "before"),
+        (5, 8, "deploy"),
+        (8, 11, "after"),
+    ]
+
+
+def test_stages_ignore_moving_back_to_the_start():
+    """2026-10-30 的室內方案:兩趟之間有「移動到起點」(collect=false),不算一趟。"""
+    steps = [
+        {"type": "phase", "name": "優化前"},
+        {"type": "ue_control", "collect": False},
+        {"type": "iperf", "action": "start"},
+        {"type": "ue_control"},
+        {"type": "ue_control", "collect": False},
+        {"type": "xapp_action", "action": "install"},
+        {"type": "wait", "seconds": 5},
+        {"type": "xapp_action", "action": "stop"},
+        {"type": "wait", "seconds": 10},
+        {"type": "phase", "name": "優化後"},
+        {"type": "ue_control"},
+        {"type": "compare"},
+        {"type": "xapp_action", "action": "stop"},
+        {"type": "xapp_action", "action": "apply"},
+        {"type": "xapp_action", "action": "uninstall"},
+        {"type": "iperf", "action": "stop"},
+    ]
+    assert [(x["from"], x["to"], x["kind"]) for x in transform.stages(steps)] == [
+        (0, 5, "before"),
+        (5, 9, "deploy"),
+        (9, 16, "after"),
+    ]
+
+
 def test_progress_follows_the_steps():
     """進度跟著步驟走:完成幾步 ÷ 總步數,做到一半的那一步不算(依現場要求)。"""
     steps = [{"type": "phase"}, {"type": "ue_control"}, {"type": "xapp_action", "action": "install"}, {"type": "wait"}]

@@ -131,7 +131,7 @@ export type FieldVehicleStatus = {
  * 測試進度條用這個,不用行駛進度 —— 要看的是「整個驗測走到哪」。
  */
 export type FieldProcess = {
-  /** 方案共幾步(室內 12、室外 10) */
+  /** 方案共幾步(依平台目前的方案,2026-10-30 室內 16、室外 11) */
   total: number;
   /** 已完成幾步 */
   done: number;

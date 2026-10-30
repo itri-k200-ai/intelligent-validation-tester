@@ -285,6 +285,9 @@ _XAPP_ACTION = {
     "start": "啟動 xApp",
     "stop": "停止 xApp",
     "uninstall": "解除安裝 xApp",
+    "app_off": "關閉 xApp",
+    "reset": "重設 xApp",
+    "apply": "套用 xApp 設定",
 }
 
 
@@ -304,6 +307,8 @@ def step_label(step: dict) -> str:
         return f"等待 {seconds:g} 秒" if seconds is not None else "等待"
     if kind == "compare":
         return "前後比較"
+    if kind == "iperf" and step.get("action") in {"start", "stop"}:
+        return "開始 iperf 流量" if step["action"] == "start" else "停止 iperf 流量"
     return str(step.get("label") or kind or "步驟")
 
 
@@ -323,14 +328,17 @@ def default_step_secs(step: dict) -> float:
 
 
 def stages(steps: list[dict], secs: list[float] | None = None) -> list[dict]:
-    """進度條要分成的三段:app 部署前 / 部署中 / 部署後。
+    """進度條要分成的三段:app 啟動前 / 啟動中 / 啟動後。
 
-    切點從方案的步驟推出來,不寫死(方案改過好幾次:室內 12 → 14 步、室外 10 → 13 步):
-      部署前 = 開頭到第一個 install 之前
-      部署中 = install 到第二個階段標記之前(安裝、啟動、enable、等 app 起來,全部算這段)
-      部署後 = 第二個階段標記到最後(第二趟、比較、停用、解除安裝)
-    以前「部署中」只取最長的那個 wait,方案多了「啟動後再等 5 秒」「enable」之後,
-    那幾步被算到部署後去了。
+    切點從方案的步驟推出來,不寫死(方案改過好幾次:室內 12 → 14 → 16 步、室外 10 → 13 → 11 步),
+    以兩趟「沿測試路線移動」為骨架:
+      啟動前 = 開頭到第一趟跑完
+      啟動中 = 第一趟之後第一個 xApp 動作或階段標記,到第二個階段標記之前
+               (沒有夾在中間的階段標記就到第二趟之前)
+      啟動後 = 其餘(第二趟、比較、停用、解除安裝…)
+    以前是「第一個 install 到第二個階段標記」:2026-10-30 室外方案改成 app_off → 第一趟 →
+    優化後 → reset → 第二趟,沒有 install,退到第一個 xApp 動作(app_off,在第一趟之前),
+    第一趟整個被標成「app 啟動中」。
 
     from / to 是步驟索引([from, to) 半開);start / end 是在整條上的位置(0~1),
     每一步一樣寬,所以就是步數比例。
@@ -345,16 +353,22 @@ def stages(steps: list[dict], secs: list[float] | None = None) -> list[dict]:
     def at(i: int) -> float:
         return sum(secs[:i]) / total
 
-    xapp = [i for i, st in enumerate(steps) if st.get("type") == "xapp_action"]
-    install = next((i for i in xapp if steps[i].get("action") == "install"), xapp[0] if xapp else None)
-    phase_at = [i for i, st in enumerate(steps) if st.get("type") == "phase"]
-    second = phase_at[1] if len(phase_at) >= 2 else None
-    if install is None or second is None or not 0 < install < second < n:
+    drives = [i for i, st in enumerate(steps) if st.get("type") == "ue_control" and st.get("collect") is not False]
+    deploy = after = None
+    if len(drives) >= 2:
+        first, second = drives[0], drives[1]
+        deploy = next(
+            (i for i in range(first + 1, second) if steps[i].get("type") in {"xapp_action", "phase"}), None
+        )
+        if deploy is not None:
+            phases = [i for i in range(deploy + 1, second) if steps[i].get("type") == "phase"]
+            after = phases[-1] if phases else second
+    if deploy is None or after is None or not 0 < deploy < after < n:
         return [{"from": 0, "to": n, "kind": "all", "start": 0.0, "end": 1.0}]
     return [
-        {"from": 0, "to": install, "kind": "before", "start": 0.0, "end": at(install)},
-        {"from": install, "to": second, "kind": "deploy", "start": at(install), "end": at(second)},
-        {"from": second, "to": n, "kind": "after", "start": at(second), "end": 1.0},
+        {"from": 0, "to": deploy, "kind": "before", "start": 0.0, "end": at(deploy)},
+        {"from": deploy, "to": after, "kind": "deploy", "start": at(deploy), "end": at(after)},
+        {"from": after, "to": n, "kind": "after", "start": at(after), "end": 1.0},
     ]
 
 
