@@ -43,7 +43,10 @@ paths:
   field-b52-roof:
     # 用場域端的 720p 那一路(B52_Roof_mid,依現場要求;原本的 B52_Roof 是 4K,
     # 經這裡轉送每秒 8~13 Mbps,院外看很吃力)
-    source: rtsp://192.168.145.61:8554/B52_Roof_mid
+    # 改從場域端的 WebRTC(8889,WHEP)拉:2026-10-28 那台重開後 RTSP(8554)每個路徑都回 404,
+    # WebRTC 與 HLS(8888)照常有畫面。WebRTC 延遲接近 RTSP,比從 HLS 拉少 1~2 秒。
+    # 原本是 rtsp://192.168.145.61:8554/B52_Roof_mid(rtspTransport 只對 RTSP 來源有作用)。
+    source: whep://192.168.145.61:8889/B52_Roof_mid/whep
     sourceOnDemand: no
     rtspTransport: tcp
   all_others:

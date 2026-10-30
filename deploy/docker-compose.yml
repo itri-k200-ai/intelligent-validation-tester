@@ -45,6 +45,25 @@ services:
       - "127.0.0.1:${IVT_MEDIAMTX_HLS_PORT:-8888}:8888"
       - "127.0.0.1:${IVT_MEDIAMTX_API_PORT:-9997}:9997"
 
+  # 中牆的室外固定攝影機是直連場域端的 HLS(frontend/src/lib/fieldCameras.ts 的 DIRECT_HLS)。
+  # 對方的 mediamtx 沒人看 60 秒就把 HLS muxer 關掉,下一個開頁要多等 3~4 秒(2026-10-27 實測
+  # 閒置後 3.0~3.8 秒、有人看著 0.002 秒)。每 20 秒敲一次播放清單讓它一直掛著 ——
+  # 只是 remux、不轉碼,對方負擔很小。換來源網址時這裡跟著改。
+  field-hls-keepalive:
+    image: curlimages/curl:8.10.1
+    container_name: ivt-field-hls-keepalive
+    restart: unless-stopped
+    environment:
+      KEEPALIVE_URL: http://192.168.145.61:8888/B52_Roof_mid/index.m3u8
+    # 對方第一次會 302 到 ?cookieCheck=1 設 cookie,所以要 -L 加 cookie jar
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          curl -s -L -m 10 -c /tmp/cj -b /tmp/cj -o /dev/null "$$KEEPALIVE_URL" || echo "keepalive 失敗 $$(date)"
+          sleep 20
+        done
+
   backend-web:
     build: ../backend
     container_name: ivt-backend-web
